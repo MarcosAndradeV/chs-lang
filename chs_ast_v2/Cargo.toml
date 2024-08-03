@@ -1,0 +1,8 @@
+[package]
+name = "chs_ast_v2"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+chs_util = { path = "../chs_util" }
+chs_types = { path = "../chs_types" }

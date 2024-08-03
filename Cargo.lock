@@ -11,6 +11,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "chs_ast_v2"
+version = "0.1.0"
+dependencies = [
+ "chs_types",
+ "chs_util",
+]
+
+[[package]]
 name = "chs_types"
 version = "0.1.0"
 
