@@ -1,10 +1,22 @@
 mod lexer;
-use lexer::lex;
+use std::process::exit;
+
+use lexer::*;
 
 pub fn parse(filename: String, input: Vec<u8>) {
-    // let mut data_iter: std::iter::Peekable<std::vec::IntoIter<u8>> = input.into_iter().peekable();
-    let tokens: Vec<lexer::Token> = lex(input.into_iter().peekable());
-    
+    let mut lex: Lexer  = lexer(input.into_iter().peekable());
+    while let Some(token) = lex.peek() {
+        match token.kind {
+            TokenKind::Word if token == "fn" => {
+                // fn <name> { }
+                todo!()
+            }
+            _ => {
+                eprintln!("Parsing Error: {:?} is not imoplemeted in the top level.", token);
+                exit(-1);
+            }
+        }
+    }
 }
 
 
