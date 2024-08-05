@@ -3,14 +3,14 @@
 use std::process::exit;
 
 use lexer::{lexer_file, Lexer, Token, TokenKind};
-use nodes::{Module, TopLevel};
+use nodes::{Expr, Module, TopLevel};
 
 mod lexer;
 mod nodes;
 
 struct Parser {
     pub lex: Lexer,
-    pub filename: String
+    pub filename: String,
 }
 
 use lexer::TokenKind::*;
@@ -18,7 +18,7 @@ pub fn parse(filename: String, input: Vec<u8>) -> Module {
     let mut iter_lexer: Lexer = lexer_file(input);
     let mut parser = Parser {
         lex: iter_lexer,
-        filename
+        filename,
     };
     let mut program = vec![];
     while let Some(token) = parser.lex.next() {
@@ -27,15 +27,49 @@ pub fn parse(filename: String, input: Vec<u8>) -> Module {
             _ => todo!(), // unsuported top level
         }
     }
-    Module { filesource: parser.filename, program }
+    Module {
+        filesource: parser.filename,
+        program,
+    }
 }
 
 fn parse_fn(parser: &mut Parser) -> TopLevel {
     let name = expect_kind(parser, Word);
+    let args: Vec<String> = parse_args(parser);
     expect_punctuation(parser, "{");
     let mut body = vec![];
     expect_punctuation(parser, "}");
-    TopLevel::Fn(name.value, body.into())
+    TopLevel::Fn(name.value, args.into(), body.into())
+}
+
+fn parse_body(parser: &mut Parser) -> Vec<Expr> {
+    let mut exprs = vec![];
+    loop {
+        if let Some(arg) = parser.lex.next_if(|t| t != "}") {
+            match arg.kind {
+                KeyWord => todo!(),
+                Word => todo!(),
+                Punctuation => todo!(),
+                Number => todo!(),
+            }
+            continue;
+        }
+        break;
+    }
+
+    exprs
+}
+
+fn parse_args(parser: &mut Parser) -> Vec<String> {
+    let mut args = vec![];
+    loop {
+        if let Some(arg) = parser.lex.next_if(|t| t.kind == TokenKind::Word) {
+            args.push(arg.value);
+            continue;
+        }
+        break;
+    }
+    args
 }
 
 fn expect_kind(parser: &mut Parser, kind: TokenKind) -> Token {

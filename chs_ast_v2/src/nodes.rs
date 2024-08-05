@@ -17,7 +17,7 @@ pub enum Expr {
 }
 
 pub enum TopLevel {
-    Fn(String, Rc<[Expr]>),
+    Fn(String, Rc<[String]>, Rc<[Expr]>),
     // Def(String)
 }
 
