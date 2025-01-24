@@ -34,6 +34,12 @@ pub enum Expression {
     WhileExpression(Box<WhileExpression>),
 }
 
+impl chs_types::InferType for Expression {
+    fn infer(&self) -> CHSType {
+        todo!()
+    }
+}
+
 impl Expression {
     pub fn from_literal_token(token: Token) -> Result<Self, CHSError> {
         use chs_lexer::TokenKind::*;
