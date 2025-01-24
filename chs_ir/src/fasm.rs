@@ -2,7 +2,7 @@ use std::fmt;
 
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
-pub enum Size {
+pub enum SizeOperator {
     Byte,
     Word,
     Dword,
@@ -20,18 +20,18 @@ pub enum Size {
 }
 
 #[allow(dead_code)]
-impl Size {
+impl SizeOperator {
     pub fn byte_size(&self) -> usize {
         match self {
-            Size::Byte => 1,
-            Size::Word => 2,
-            Size::Dword => 4,
-            Size::Pword | Size::Fword => 6,
-            Size::Qword => 8,
-            Size::Tbyte | Size::Tword => 10,
-            Size::Dqword | Size::Xword => 16,
-            Size::Qqword | Size::Yword => 32,
-            Size::Dqqword | Size::Zword => 64,
+            SizeOperator::Byte => 1,
+            SizeOperator::Word => 2,
+            SizeOperator::Dword => 4,
+            SizeOperator::Pword | SizeOperator::Fword => 6,
+            SizeOperator::Qword => 8,
+            SizeOperator::Tbyte | SizeOperator::Tword => 10,
+            SizeOperator::Dqword | SizeOperator::Xword => 16,
+            SizeOperator::Qqword | SizeOperator::Yword => 32,
+            SizeOperator::Dqqword | SizeOperator::Zword => 64,
         }
     }
 
@@ -40,24 +40,24 @@ impl Size {
     }
 }
 
-impl fmt::Display for Size {
+impl fmt::Display for SizeOperator {
     #[rustfmt::skip]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Size::Byte    => write!(f, "BYTE"),
-            Size::Word    => write!(f, "WORD"),
-            Size::Dword   => write!(f, "DWORD"),
-            Size::Fword   => write!(f, "FWORD"),
-            Size::Pword   => write!(f, "PWORD"),
-            Size::Qword   => write!(f, "QWORD"),
-            Size::Tbyte   => write!(f, "TBYTE"),
-            Size::Tword   => write!(f, "TWORD"),
-            Size::Dqword  => write!(f, "DQWORD"),
-            Size::Xword   => write!(f, "XWORD"),
-            Size::Qqword  => write!(f, "QQWORD"),
-            Size::Yword   => write!(f, "YWORD"),
-            Size::Dqqword => write!(f, "DQQWORD"),
-            Size::Zword   => write!(f, "ZWORD"),
+            SizeOperator::Byte    => write!(f, "BYTE"),
+            SizeOperator::Word    => write!(f, "WORD"),
+            SizeOperator::Dword   => write!(f, "DWORD"),
+            SizeOperator::Fword   => write!(f, "FWORD"),
+            SizeOperator::Pword   => write!(f, "PWORD"),
+            SizeOperator::Qword   => write!(f, "QWORD"),
+            SizeOperator::Tbyte   => write!(f, "TBYTE"),
+            SizeOperator::Tword   => write!(f, "TWORD"),
+            SizeOperator::Dqword  => write!(f, "DQWORD"),
+            SizeOperator::Xword   => write!(f, "XWORD"),
+            SizeOperator::Qqword  => write!(f, "QQWORD"),
+            SizeOperator::Yword   => write!(f, "YWORD"),
+            SizeOperator::Dqqword => write!(f, "DQQWORD"),
+            SizeOperator::Zword   => write!(f, "ZWORD"),
         }
     }
 }
@@ -129,7 +129,7 @@ pub enum Value {
     Memory(String),
     Register(Register),
     Const(i64),
-    Label(String)
+    Label(String),
 }
 
 impl fmt::Display for Value {
@@ -290,8 +290,8 @@ impl fmt::Display for Instr {
             Self::Xor(dst, src) => write!(f, "xor {dst}, {src}"),
             Self::Cmp(dst, src) => write!(f, "cmp {dst}, {src}"),
             Self::Test(dst, src) => write!(f, "test {dst}, {src}"),
-            Instr::J(cond, label) => write!(f, "j{cond} {label}"),
-            Instr::Jmp(label) => write!(f, "jmp {label}"),
+            Instr::J(cond, label) => write!(f, "j{cond} .{label}"), // local labels
+            Instr::Jmp(label) => write!(f, "jmp .{label}"),         // local labels
             Instr::Call(label) => write!(f, "call {label}"),
             Instr::Ret => write!(f, "ret"),
         }
@@ -382,8 +382,6 @@ impl fmt::Display for Function {
 }
 
 /// Represents a single fasm file
-///
-/// `TODO: Add entry and file format`
 #[derive(Debug, Default, Clone)]
 pub struct Module {
     functions: Vec<Function>,
