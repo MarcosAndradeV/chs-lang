@@ -1,6 +1,3 @@
-use core::fmt;
-use std::collections::HashMap;
-
 use chs_lexer::Token;
 use chs_util::{chs_error, CHSError, Loc};
 
@@ -8,30 +5,9 @@ use chs_types::CHSType;
 
 #[derive(Debug, Default)]
 pub struct Module {
-    pub name: String,
-    pub funcs: Vec<Function>,
-    pub fasm_funcs: Vec<FasmFunction>,
-    pub type_decls: HashMap<String, CHSType>,
-    pub const_decl: Vec<ConstDecl>,
-}
-
-impl fmt::Display for Module {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "Module: {}", self.name)?;
-        writeln!(f, "\ntypes")?;
-        for (name, t) in &self.type_decls {
-            writeln!(f, " {name} : {t} ")?;
-        }
-        writeln!(f, "\nfasm functions")?;
-        for expr in &self.fasm_funcs {
-            writeln!(f, " {expr} ")?;
-        }
-        writeln!(f, "\nfunctions")?;
-        for expr in &self.funcs {
-            writeln!(f, " {expr} ")?;
-        }
-        Ok(())
-    }
+    pub type_decls: Vec<TypeDecl>,
+    pub function_decls: Vec<FunctionDecl>,
+    pub const_decls: Vec<ConstDecl>,
 }
 
 #[derive(Debug)]
@@ -41,18 +17,6 @@ pub enum ConstExpression {
     BooleanLiteral(bool),
     StringLiteral(String),
     Void,
-}
-
-impl fmt::Display for ConstExpression {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            ConstExpression::Symbol(v) => write!(f, "{v}"),
-            ConstExpression::IntegerLiteral(v) => write!(f, "{v}"),
-            ConstExpression::BooleanLiteral(v) => write!(f, "{v}"),
-            ConstExpression::StringLiteral(_) => write!(f, "ESCAPE THE STRINGS"),
-            ConstExpression::Void => write!(f, "()"),
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -65,31 +29,11 @@ pub enum Expression {
     VarDecl(Box<VarDecl>),
     Assign(Box<Assign>),
     Group(Box<Self>),
+    IfExpression(Box<IfExpression>),
+    IfElseExpression(Box<IfElseExpression>),
+    WhileExpression(Box<WhileExpression>),
 }
 
-impl fmt::Display for Expression {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Expression::ExpressionList(v) => {
-                write!(f, "{{")?;
-                for (i, item) in v.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{}", item)?;
-                }
-                write!(f, "}}")
-            }
-            Expression::Group(v) => write!(f, "({v})"),
-            Expression::ConstExpression(v) => write!(f, "{v}"),
-            Expression::Call(v) => write!(f, "{v}"),
-            Expression::Binop(v) => write!(f, "{v}"),
-            Expression::Unop(v) => write!(f, "{v}"),
-            Expression::VarDecl(v) => write!(f, "{v}"),
-            Expression::Assign(v) => write!(f, "{v}"),
-        }
-    }
-}
 impl Expression {
     pub fn from_literal_token(token: Token) -> Result<Self, CHSError> {
         use chs_lexer::TokenKind::*;
@@ -119,52 +63,12 @@ impl Expression {
 }
 
 #[derive(Debug)]
-pub struct FasmFunction {
-    pub loc: Loc,
-    pub name: String,
-    pub args: Vec<(String, CHSType)>,
-    pub ret_type: CHSType,
-    pub body: Vec<String>,
-}
-
-impl fmt::Display for FasmFunction {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "fasm fn {}(", self.name)?;
-        for (i, item) in self.args.iter().enumerate() {
-            if i > 0 {
-                write!(f, ", ")?;
-            }
-            write!(f, "{}: {}", item.0, item.1)?;
-        }
-        write!(f, ") -> {}", self.ret_type)?;
-        Ok(())
-    }
-}
-
-#[derive(Debug)]
-pub struct Function {
+pub struct FunctionDecl {
     pub loc: Loc,
     pub name: String,
     pub args: Vec<(String, CHSType)>,
     pub ret_type: CHSType,
     pub body: Vec<Expression>,
-}
-
-impl fmt::Display for Function {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "fn {}(", self.name)?;
-        for (i, item) in self.args.iter().enumerate() {
-            if i > 0 {
-                write!(f, ", ")?;
-            }
-            write!(f, "{}: {}", item.0, item.1)?;
-        }
-        writeln!(f, ") -> {}", self.ret_type)?;
-        for expr in self.body.iter() {
-            writeln!(f, "   {expr} ")?;
-        }
-        write!(f, " end")
-    }
 }
 
 #[derive(Debug)]
@@ -175,11 +79,8 @@ pub struct ConstDecl {
     pub ttype: CHSType,
 }
 
-impl fmt::Display for ConstDecl {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} : {} = {}", self.name, self.ttype, self.value)
-    }
-}
+#[derive(Debug)]
+pub struct TypeDecl(pub Loc, pub String, pub CHSType);
 
 #[derive(Debug)]
 pub struct Assign {
@@ -188,10 +89,26 @@ pub struct Assign {
     pub value: Expression,
 }
 
-impl fmt::Display for Assign {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} = {}", self.assined, self.value)
-    }
+#[derive(Debug)]
+pub struct IfExpression {
+    pub loc: Loc,
+    pub cond: Expression,
+    pub body: Vec<Expression>,
+}
+
+#[derive(Debug)]
+pub struct IfElseExpression {
+    pub loc: Loc,
+    pub cond: Expression,
+    pub body: Vec<Expression>,
+    pub else_body: Vec<Expression>,
+}
+
+#[derive(Debug)]
+pub struct WhileExpression {
+    pub loc: Loc,
+    pub cond: Expression,
+    pub body: Vec<Expression>,
 }
 
 #[derive(Debug)]
@@ -202,40 +119,11 @@ pub struct VarDecl {
     pub ttype: Option<CHSType>,
 }
 
-impl fmt::Display for VarDecl {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.ttype.is_some() {
-            write!(
-                f,
-                "{} : {} = {}",
-                self.name,
-                self.ttype.as_ref().unwrap(),
-                self.value
-            )
-        } else {
-            write!(f, "{} := {}", self.name, self.value)
-        }
-    }
-}
-
 #[derive(Debug)]
 pub struct Call {
     pub loc: Loc,
     pub caller: Expression,
     pub args: Vec<Expression>,
-}
-
-impl fmt::Display for Call {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}(", self.caller)?;
-        for (i, item) in self.args.iter().enumerate() {
-            if i > 0 {
-                write!(f, ", ")?;
-            }
-            write!(f, "{}", item)?;
-        }
-        write!(f, ")")
-    }
 }
 
 #[derive(Debug)]
@@ -246,23 +134,11 @@ pub struct Binop {
     pub right: Expression,
 }
 
-impl fmt::Display for Binop {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "({} {} {})", self.left, self.op, self.right)
-    }
-}
-
 #[derive(Debug)]
 pub struct Unop {
     pub loc: Loc,
     pub op: Operator,
     pub left: Expression,
-}
-
-impl fmt::Display for Unop {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "({}{})", self.op, self.left)
-    }
 }
 
 #[derive(Debug)]
@@ -281,25 +157,6 @@ pub enum Operator {
     LNot,
     Refer,
     Deref,
-}
-
-impl fmt::Display for Operator {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Operator::Plus => write!(f, "+"),
-            Operator::Minus => write!(f, "-"),
-            Operator::Mult => write!(f, "*"),
-            Operator::Div => write!(f, "/"),
-            Operator::Eq => write!(f, "=="),
-            Operator::NEq => write!(f, "!="),
-            Operator::Gt => write!(f, ">"),
-            Operator::Lt => write!(f, "<"),
-            Operator::Negate => write!(f, "-"),
-            Operator::LNot => write!(f, "!"),
-            Operator::Refer => write!(f, "&"),
-            Operator::Deref => write!(f, "*"),
-        }
-    }
 }
 
 impl Operator {
@@ -327,7 +184,7 @@ impl Operator {
             Operator::Lt | Operator::Gt => Precedence::LessGreater,
             Operator::Eq | Operator::NEq => Precedence::Equals,
             Operator::Negate | Operator::LNot => Precedence::Prefix,
-            Operator::Refer | Operator::Deref => Precedence::RefDeref,
+            Operator::Refer | Operator::Deref => Precedence::Prefix,
             // _ => Precedence::Lowest,
         }
     }
@@ -341,6 +198,5 @@ pub enum Precedence {
     Sum,
     Product,
     Prefix,
-    RefDeref,
     Call,
 }

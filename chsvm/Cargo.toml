@@ -1,9 +1,0 @@
-[package]
-name = "chsvm"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-chs_lexer = { path = "../chs_lexer/" }
-chs_ast = { path = "../chs_ast/" }
-chs_util = { path = "../chs_util/" }

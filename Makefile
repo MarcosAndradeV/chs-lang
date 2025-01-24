@@ -4,7 +4,10 @@ build:
 release:
 	cargo build --release --bin chs
 
-chsc: release
+test:
+	cargo test --all
+
+chs: release
 
 help:
-	@echo "usage: make $(prog)"
+	@echo "usage: make chs"

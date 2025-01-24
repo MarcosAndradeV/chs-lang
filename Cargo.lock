@@ -7,6 +7,7 @@ name = "chs"
 version = "0.1.0"
 dependencies = [
  "chs_ast",
+ "chs_ir",
  "chs_lexer",
  "chs_util",
 ]
@@ -21,8 +22,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "chs_compiler"
+name = "chs_ir"
 version = "0.1.0"
+dependencies = [
+ "chs_ast",
+ "chs_lexer",
+ "chs_types",
+ "chs_util",
+]
 
 [[package]]
 name = "chs_lexer"
@@ -38,12 +45,3 @@ version = "0.1.0"
 [[package]]
 name = "chs_util"
 version = "0.1.0"
-
-[[package]]
-name = "chsvm"
-version = "0.1.0"
-dependencies = [
- "chs_ast",
- "chs_lexer",
- "chs_util",
-]

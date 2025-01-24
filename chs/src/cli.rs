@@ -28,7 +28,7 @@ pub const COMMANDS: &[Command] = &[
             if let Some(file_path) = args.next() {
                 match chs_ast::parse_file(file_path) {
                     Ok(ast) => {
-                        println!("{ast}");
+                        println!("{ast:?}");
                         ExitCode::SUCCESS
                     }
                     Err(err) => {

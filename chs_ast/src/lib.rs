@@ -5,8 +5,8 @@ use chs_util::{chs_error, CHSResult};
 use parser::Parser;
 use nodes::Module;
 
-mod nodes;
-mod parser;
+pub mod nodes;
+pub mod parser;
 
 
 pub fn parse_file(file_path: String) -> CHSResult<Module> {

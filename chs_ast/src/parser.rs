@@ -1,9 +1,4 @@
-use std::collections::BTreeMap;
-
-
-use crate::nodes::{
-    self, FasmFunction, Binop, Call, ConstExpression, Expression, Function, Module, Operator, Precedence, Unop, VarDecl,
-};
+use crate::nodes::{self, *};
 use chs_lexer::{Lexer, Token, TokenKind};
 use chs_types::CHSType;
 use chs_util::{chs_error, CHSResult, Loc};
@@ -18,18 +13,8 @@ pub struct Parser {
 
 impl Parser {
     pub fn new(lexer: Lexer) -> Self {
-        let modname = lexer
-            .get_filename()
-            .with_extension("")
-            .to_string_lossy()
-            .to_string()
-            .replace("/", ".");
         Self {
             lexer,
-            module: Module {
-                name: modname,
-                ..Default::default()
-            },
             ..Default::default()
         }
     }
@@ -79,50 +64,6 @@ impl Parser {
                 chs_error!("{} Invalid token '{}'", token.loc, token.value);
             }
             match token.kind {
-                Keyword if token.val_eq("fasm") && self.peek().val_eq("fn") => {
-                    self.next();
-                    let loc = token.loc;
-                    let token = self.expect_kind(Ident)?;
-                    let name = token.value;
-                    self.expect_kind(ParenOpen)?;
-                    let (args, ret_type) = self.parse_fn_type()?;
-                    let mut body = vec![];
-                    loop {
-                        use chs_lexer::TokenKind::*;
-                        let ptoken = self.peek();
-                        match ptoken.kind {
-                            Keyword if ptoken.val_eq("end") => {
-                                self.next();
-                                break;
-                            }
-                            String => {
-                                let ptoken = self.next();
-                                body.push(ptoken.value.to_string());
-                            }
-                            _ => chs_error!("Unexpected {}", ptoken),
-                        }
-                    }
-                    let fn_type = CHSType::Func(
-                        args.clone().into_iter().map(|(_, t)| t).collect(),
-                        ret_type.clone().into(),
-                    );
-                    if self
-                        .module
-                        .type_decls
-                        .insert(name.clone(), fn_type)
-                        .is_some()
-                    {
-                        chs_error!("Redefinition of {}", name)
-                    }
-                    let expr = FasmFunction {
-                        loc,
-                        name,
-                        args,
-                        ret_type,
-                        body,
-                    };
-                    self.module.fasm_funcs.push(expr);
-                }
                 Keyword if token.val_eq("fn") => {
                     let loc = token.loc;
                     let token = self.expect_kind(Ident)?;
@@ -130,39 +71,30 @@ impl Parser {
                     self.expect_kind(ParenOpen)?;
                     let (args, ret_type) = self.parse_fn_type()?;
                     let body = self.parse_expr_list(|tk| tk.val_eq("end"))?;
-                    let fn_type = CHSType::Func(
+                    let fn_type = CHSType::Function(
                         args.clone().into_iter().map(|(_, t)| t).collect(),
                         ret_type.clone().into(),
                     );
-                    if self
-                        .module
+                    self.module
                         .type_decls
-                        .insert(name.clone(), fn_type)
-                        .is_some()
-                    {
-                        chs_error!("Redefinition of {}", name)
-                    }
-                    let expr = Function {
-                        loc,
-                        name,
-                        args,
-                        ret_type,
-                        body,
-                    };
-                    self.module.funcs.push(expr);
+                        .push(TypeDecl(loc.clone(), name.clone(), fn_type));
+                    self.module
+                        .function_decls
+                        .push(FunctionDecl {
+                            loc,
+                            name,
+                            args,
+                            ret_type,
+                            body,
+                        });
                 }
                 Keyword if token.val_eq("type") => {
                     let token = self.expect_kind(Ident)?;
                     let name = token.value;
                     let chs_type = self.parse_type()?;
-                    if self
-                        .module
+                    self.module
                         .type_decls
-                        .insert(name.clone(), chs_type)
-                        .is_some()
-                    {
-                        chs_error!("Redefinition of {}", name)
-                    }
+                        .push(TypeDecl(token.loc, name, chs_type));
                 }
                 _ => {
                     chs_error!(
@@ -211,12 +143,27 @@ impl Parser {
                     value,
                 }))
             }
+            Keyword if token.val_eq("if") => {
+                let loc = token.loc;
+                self.expect_kind(ParenOpen)?;
+                let cond = self.parse_expression(Precedence::Lowest)?;
+                self.expect_kind(ParenClose)?;
+                self.parse_if_expression(loc, cond)?
+            }
+            Keyword if token.val_eq("while") => {
+                let loc = token.loc;
+                self.expect_kind(ParenOpen)?;
+                let cond = self.parse_expression(Precedence::Lowest)?;
+                self.expect_kind(ParenClose)?;
+                let body = self.parse_expr_list(|t| t.val_eq("end"))?;
+                Expression::WhileExpression(Box::new(WhileExpression { loc, cond, body }))
+            }
             String | Ident | Interger => Expression::from_literal_token(token)?,
             Keyword if token.val_eq("true") || token.val_eq("false") => {
                 Expression::from_literal_token(token)?
             }
             Ampersand | Asterisk => {
-                let expr = self.parse_expression(Precedence::RefDeref)?;
+                let expr = self.parse_expression(Precedence::Prefix)?;
                 Expression::Unop(
                     Unop {
                         op: Operator::from_token(&token, true)?,
@@ -343,6 +290,42 @@ impl Parser {
         }
     }
 
+    fn parse_if_expression(&mut self, loc: Loc, cond: Expression) -> CHSResult<Expression> {
+        use chs_lexer::TokenKind::*;
+        let mut body = vec![];
+        loop {
+            let ptoken = self.peek();
+            match ptoken.kind {
+                Keyword if ptoken.val_eq("else") => {
+                    self.next();
+                    return Ok(Expression::IfElseExpression(Box::new(IfElseExpression {
+                        loc,
+                        cond,
+                        body,
+                        else_body: self.parse_expr_list(|t| t.val_eq("end"))?,
+                    })));
+                }
+                Keyword if ptoken.val_eq("end") => {
+                    self.next();
+                    return Ok(Expression::IfExpression(Box::new(IfExpression {
+                        loc,
+                        cond,
+                        body,
+                    })));
+                }
+                Comma | Semicolon => {
+                    self.next();
+                    continue;
+                }
+                EOF => chs_error!("Expect closing token found `EOF`"),
+                _ => {
+                    let value = self.parse_expression(Precedence::Lowest)?;
+                    body.push(value);
+                }
+            }
+        }
+    }
+
     fn parse_expr_list<F>(&mut self, pred: F) -> CHSResult<Vec<Expression>>
     where
         F: Fn(&Token) -> bool,
@@ -356,10 +339,11 @@ impl Parser {
                     self.next();
                     return Ok(args);
                 }
-                Comma => {
+                Comma | Semicolon => {
                     self.next();
                     continue;
                 }
+                EOF => chs_error!("Expect closing token found `EOF`"),
                 _ => {
                     let value = self.parse_expression(Precedence::Lowest)?;
                     args.push(value);
@@ -371,7 +355,7 @@ impl Parser {
     fn parse_fn_type(&mut self) -> CHSResult<(Vec<(String, CHSType)>, CHSType)> {
         use chs_lexer::TokenKind::*;
         let mut list = vec![];
-        let mut ret_type = CHSType::void();
+        let mut ret_type = CHSType::Void;
         loop {
             let ptoken = self.peek();
             match ptoken.kind {
@@ -400,35 +384,108 @@ impl Parser {
         }
     }
 
+    fn parse_fn_type_no_args(&mut self) -> CHSResult<(Vec<CHSType>, CHSType)> {
+        use chs_lexer::TokenKind::*;
+        let mut list = vec![];
+        let mut ret_type = CHSType::Void;
+        loop {
+            let ptoken = self.peek();
+            match ptoken.kind {
+                ParenClose => {
+                    self.next();
+                    let ptoken = self.peek();
+                    if ptoken.kind == Arrow {
+                        self.next();
+                        let value = self.parse_type()?;
+                        ret_type = value;
+                    }
+                    return Ok((list, ret_type));
+                }
+                Comma => {
+                    self.next();
+                    continue;
+                }
+                _ => {
+                    list.push(self.parse_type()?);
+                }
+            }
+        }
+    }
+
     fn parse_type(&mut self) -> CHSResult<CHSType> {
         use chs_lexer::TokenKind::*;
         let ttoken = self.next();
         let ttype = match ttoken.kind {
-            Ident if ttoken.val_eq("int") => CHSType::int(),
-            Ident if ttoken.val_eq("bool") => CHSType::bool(),
-            Ident if ttoken.val_eq("char") => CHSType::char(),
-            Ident if ttoken.val_eq("void") => CHSType::void(),
-            Ident => CHSType::custom(ttoken.value),
+            Ident if ttoken.val_eq("int")  => CHSType::Int,
+            Ident if ttoken.val_eq("uint") => CHSType::UInt,
+            Ident => CHSType::Alias(ttoken.value),
             Asterisk => {
                 let ttp = self.parse_type()?;
                 CHSType::Pointer(ttp.into())
             }
-            Keyword if ttoken.val_eq("record") => {
-                self.expect_kind(CurlyOpen)?;
-                let mut map = BTreeMap::new();
-                loop {
-                    let field = self.expect_kind(Ident)?;
-                    self.expect_kind(Colon)?;
-                    let field_type = self.parse_type()?;
-                    map.insert(field.value, field_type);
-                    if self.next().kind == CurlyClose {
-                        break;
-                    }
-                }
-                CHSType::Record(map)
+            Keyword if ttoken.val_eq("fn") => {
+                self.next();
+                let (args, ret) = self.parse_fn_type_no_args()?;
+                CHSType::Function(args, Box::new(ret))
             }
             _ => chs_error!("Type not implemnted {}", ttoken),
         };
         Ok(ttype)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn simple_parse_file() {
+        match Parser::new(Lexer::new(
+            file!().into(),
+            r#"
+                fn main()
+                    print("Hello, world!")
+                end
+            "#
+            .into(),
+        ))
+        .parse()
+        {
+            Ok(ast) => {
+                let main_fn = ast.function_decls.get(0);
+                assert!(main_fn.is_some_and(|f| &f.name == "main"));
+                assert!(main_fn.is_some_and(|f| f.body.len() == 1));
+            }
+            Err(err) => {
+                assert!(false, "{err}");
+            }
+        }
+    }
+
+    #[test]
+    fn parse_if_expression() {
+        match Parser::new(Lexer::new(
+            file!().into(),
+            r#"
+                fn main()
+                    x := 1
+                    if(x == 1)
+                        print("Hello, world!")
+                    end
+                end
+            "#
+            .into(),
+        ))
+        .parse()
+        {
+            Ok(ast) => {
+                let main_fn = ast.function_decls.get(0);
+                assert!(main_fn.is_some_and(|f| &f.name == "main"));
+                assert!(main_fn.is_some_and(|f| f.body.len() == 2));
+            }
+            Err(err) => {
+                assert!(false, "{err}");
+            }
+        }
     }
 }

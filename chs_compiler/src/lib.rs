@@ -1,3 +1,0 @@
-#![allow(unused)]
-
-mod fasm;
