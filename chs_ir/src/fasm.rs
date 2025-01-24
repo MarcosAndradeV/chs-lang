@@ -119,6 +119,13 @@ impl Register {
 
 #[derive(Debug, Clone)]
 pub enum Value {
+    /// Scale: A 2-bit constant factor that is either 1, 2, 4, or 8.
+    ///
+    /// Index: Any general purpose register.
+    ///
+    /// Base: Any general purpose register.
+    ///
+    /// Displacement: An integral offset. (normally limited to 32 bits even in 64-bit mode but can be 64-bits with a few select encodings)
     Memory(String),
     Register(Register),
     Const(i64),
