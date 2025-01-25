@@ -1,7 +1,7 @@
 use chs_lexer::Token;
 use chs_util::{chs_error, CHSError, CHSResult, Loc};
 
-use chs_types::{CHSType, InferType, TypeEnv};
+use chs_types::{CHSType, InferType, TypeEnv, TypeMap};
 
 #[derive(Debug, Default)]
 pub struct Module {
@@ -13,6 +13,7 @@ pub struct Module {
 #[derive(Debug)]
 pub struct TypedModule {
     pub function_decls: Vec<FunctionDecl>,
+    pub type_defs: TypeMap,
 }
 
 impl TypedModule {
@@ -22,6 +23,7 @@ impl TypedModule {
             mut function_decls,
             const_decls: _,
         } = m;
+        // TODO: Look for type redefinition
         let mut env = TypeEnv::new(type_decls.iter().map(|t: &TypeDecl| (&t.1, &t.2)));
 
         for f in &mut function_decls {
@@ -69,7 +71,8 @@ impl TypedModule {
             env.locals_pop();
         }
 
-        Ok(TypedModule { function_decls })
+        let type_defs = env.into_type_defs();
+        Ok(TypedModule { function_decls, type_defs })
     }
 }
 

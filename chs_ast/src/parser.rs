@@ -431,6 +431,10 @@ impl Parser {
                 let (args, ret) = self.parse_fn_type_no_args()?;
                 CHSType::Function(args, Box::new(ret))
             }
+            Keyword if ttoken.val_eq("distinct") => {
+                let ttype = self.parse_type()?;
+                CHSType::Distinct(Box::new(ttype))
+            }
             _ => chs_error!("Type not implemnted {}", ttoken),
         };
         Ok(ttype)
