@@ -41,6 +41,9 @@ dependencies = [
 [[package]]
 name = "chs_types"
 version = "0.1.0"
+dependencies = [
+ "chs_util",
+]
 
 [[package]]
 name = "chs_util"
