@@ -132,6 +132,16 @@ pub enum Value {
     Label(String),
 }
 
+impl Value {
+    /// Returns `true` if the value is [`Memory`].
+    ///
+    /// [`Memory`]: Value::Memory
+    #[must_use]
+    pub fn is_memory(&self) -> bool {
+        matches!(self, Self::Memory(..))
+    }
+}
+
 impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -253,6 +263,7 @@ pub enum Instr {
     Neg(Value),
 
     Mov(Value, Value),
+    MovS(SizeOperator, Value, Value),
 
     Add(Value, Value),
     Sub(Value, Value),
@@ -281,6 +292,15 @@ impl fmt::Display for Instr {
             Self::Dec(val) => write!(f, "dec {val}"),
             Self::Neg(val) => write!(f, "neg {val}"),
             Self::Mov(dst, src) => write!(f, "mov {dst}, {src}"),
+            Self::MovS(size, dst, src) => {
+                if dst.is_memory() {
+                    write!(f, "mov {size} {dst}, {src}")
+                } else if src.is_memory() {
+                    write!(f, "mov {dst}, {size} {src}")
+                } else {
+                    write!(f, "mov {dst}, {src}")
+                }
+            },
             Self::Add(dst, src) => write!(f, "add {dst}, {src}"),
             Self::Sub(dst, src) => write!(f, "sub {dst}, {src}"),
             Self::Mul(dst, src) => write!(f, "mul {dst}, {src}"),
@@ -337,13 +357,15 @@ impl fmt::Display for Block {
 #[derive(Debug, Clone)]
 pub struct Function {
     pub name: String,
+    pub stack_alloacted_size: usize,
     pub blocks: Vec<Block>,
 }
 
 impl Function {
-    pub fn new(name: impl Into<String>) -> Self {
+    pub fn new(name: impl Into<String>, stack_alloacted_size: usize) -> Self {
         Function {
             name: name.into(),
+            stack_alloacted_size,
             blocks: Vec::new(),
         }
     }
@@ -373,11 +395,24 @@ impl fmt::Display for Function {
         writeln!(f, ";; function",)?;
         writeln!(f, "{}:", self.name)?;
 
+        writeln!(f, "\tpush rbp")?;
+        writeln!(f, "\tmov rbp, rsp")?;
+        if self.stack_alloacted_size > 0 {
+            writeln!(f, "\tsub rsp, {}", self.stack_alloacted_size)?;
+        }
+
         for blk in self.blocks.iter() {
             writeln!(f, "{}", blk)?;
         }
 
-        write!(f, ";; end")
+        if self.stack_alloacted_size > 0 {
+            writeln!(f, "\tadd rsp, {}", self.stack_alloacted_size)?;
+        }
+
+        writeln!(f, "\tpop rbp")?;
+        writeln!(f, "\tret")?;
+
+        writeln!(f, ";; end")
     }
 }
 
@@ -407,11 +442,15 @@ impl Module {
 impl fmt::Display for Module {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         writeln!(f, "format ELF64 executable")?;
-        writeln!(f, "entry main")?;
+        writeln!(f, "entry _start")?;
 
-        if self.functions.len() > 0 {
-            writeln!(f, "segment executable")?;
-        }
+        writeln!(f, "segment executable")?;
+        writeln!(f, "_start:")?;
+        writeln!(f, "\tcall main")?;
+        writeln!(f, "\tmov rax, 60")?;
+        writeln!(f, "\tmov rdi, 0")?;
+        writeln!(f, "\tsyscall")?;
+
         for func in self.functions.iter() {
             writeln!(f, "{}", func)?;
         }
