@@ -62,7 +62,7 @@ impl fmt::Display for SizeOperator {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum Register {
     Rax,
     Rcx,
@@ -113,7 +113,7 @@ impl Register {
     /// Exculding `rsp` and `rbp`
     pub const fn get_callee_saved() -> [Self; 5] {
         use Register::*;
-        [R12, R13, R14, R15, Rbx]
+        [Rbx, R12, R13, R14, R15]
     }
 }
 
@@ -126,7 +126,7 @@ pub enum Value {
     /// Base: Any general purpose register.
     ///
     /// Displacement: An integral offset. (normally limited to 32 bits even in 64-bit mode but can be 64-bits with a few select encodings)
-    Memory(String),
+    Memory((SizeOperator, String)),
     Register(Register),
     Const(i64),
     Label(String),
@@ -145,7 +145,7 @@ impl Value {
 impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::Memory(addrs) => write!(f, "[{}]", addrs),
+            Self::Memory((size, addrs)) => write!(f, "{} [{}]", size, addrs),
             Self::Label(label) => write!(f, "{}", label),
             Self::Register(name) => write!(f, "{}", name),
             Self::Const(value) => write!(f, "{}", value),
@@ -263,7 +263,6 @@ pub enum Instr {
     Neg(Value),
 
     Mov(Value, Value),
-    MovS(SizeOperator, Value, Value),
 
     Add(Value, Value),
     Sub(Value, Value),
@@ -292,15 +291,6 @@ impl fmt::Display for Instr {
             Self::Dec(val) => write!(f, "dec {val}"),
             Self::Neg(val) => write!(f, "neg {val}"),
             Self::Mov(dst, src) => write!(f, "mov {dst}, {src}"),
-            Self::MovS(size, dst, src) => {
-                if dst.is_memory() {
-                    write!(f, "mov {size} {dst}, {src}")
-                } else if src.is_memory() {
-                    write!(f, "mov {dst}, {size} {src}")
-                } else {
-                    write!(f, "mov {dst}, {src}")
-                }
-            },
             Self::Add(dst, src) => write!(f, "add {dst}, {src}"),
             Self::Sub(dst, src) => write!(f, "sub {dst}, {src}"),
             Self::Mul(dst, src) => write!(f, "mul {dst}, {src}"),
@@ -340,34 +330,38 @@ impl Block {
 
 impl fmt::Display for Block {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        writeln!(f, ".{}:", self.label)?;
+        write!(f, ".{}:", self.label)?;
 
-        write!(
-            f,
-            "{}",
-            self.instrs
-                .iter()
-                .map(|instr| format!("\t{}", instr))
-                .collect::<Vec<String>>()
-                .join("\n")
-        )
+        for (i, instr) in self.instrs.iter().enumerate() {
+            if i > 0 {
+                writeln!(f)?;
+            }
+            write!(f, "\t{}\n", instr)?;
+        }
+        Ok(())
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct Function {
     pub name: String,
-    pub stack_alloacted_size: usize,
+    stack_allocated: usize,
     pub blocks: Vec<Block>,
 }
 
 impl Function {
-    pub fn new(name: impl Into<String>, stack_alloacted_size: usize) -> Self {
+    pub fn new(name: impl Into<String>) -> Self {
         Function {
             name: name.into(),
-            stack_alloacted_size,
+            stack_allocated: 0,
             blocks: Vec::new(),
         }
+    }
+    pub fn allocate_stack(&mut self, size: usize) -> usize {
+        // self.push_raw_instr("sub rsp, 8");
+        let res = self.stack_allocated;
+        self.stack_allocated += size;
+        return res;
     }
 
     pub fn push_block(&mut self, label: impl Into<String>) -> &mut Block {
@@ -380,6 +374,15 @@ impl Function {
             .last_mut()
             .expect("Last block must be present")
             .push_instr(instr);
+    }
+
+    pub fn last_instr(&mut self) -> &Instr {
+        self.blocks
+            .last()
+            .expect("Last block must be present")
+            .instrs
+            .last()
+            .expect("Expect at least one expression")
     }
 
     pub fn push_raw_instr(&mut self, instr: impl Into<String>) {
@@ -397,16 +400,16 @@ impl fmt::Display for Function {
 
         writeln!(f, "\tpush rbp")?;
         writeln!(f, "\tmov rbp, rsp")?;
-        if self.stack_alloacted_size > 0 {
-            writeln!(f, "\tsub rsp, {}", self.stack_alloacted_size)?;
+        if self.stack_allocated > 0 {
+            writeln!(f, "\tsub rsp, {}", self.stack_allocated)?;
         }
 
         for blk in self.blocks.iter() {
             writeln!(f, "{}", blk)?;
         }
 
-        if self.stack_alloacted_size > 0 {
-            writeln!(f, "\tadd rsp, {}", self.stack_alloacted_size)?;
+        if self.stack_allocated > 0 {
+            writeln!(f, "\tadd rsp, {}", self.stack_allocated)?;
         }
 
         writeln!(f, "\tpop rbp")?;

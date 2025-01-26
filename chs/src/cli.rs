@@ -1,6 +1,7 @@
 use std::{env::Args, process::ExitCode};
 
 use chs_ast::nodes::TypedModule;
+use chs_ir::FasmGenerator;
 
 pub const COMMANDS: &[Command] = &[
     Command {
@@ -16,7 +17,19 @@ pub const COMMANDS: &[Command] = &[
         descripition: "Compile a program: chs compile <file.chs>",
         run: |program, args| {
             if let Some(file_path) = args.next() {
-                ExitCode::SUCCESS
+                match chs_ast::parse_file(file_path)
+                    .and_then(|m| TypedModule::from_module(m))
+                    .and_then(|m| FasmGenerator::generate(m))
+                {
+                    Ok(asm) => {
+                        println!("{asm}");
+                        ExitCode::SUCCESS
+                    }
+                    Err(err) => {
+                        eprintln!("{err}");
+                        ExitCode::FAILURE
+                    }
+                }
             } else {
                 eprintln!("Expect file path.");
                 ExitCode::FAILURE
