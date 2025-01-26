@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use chs_ast::nodes::{self, Binop, Expression, TypedModule};
 use chs_types::TypeMap;
-use chs_util::{chs_error, CHSError, CHSResult};
+use chs_util::{CHSError, CHSResult};
 use fasm::{Instr, Register, SizeOperator, Value};
 
 pub struct FasmGenerator {
@@ -53,26 +53,31 @@ impl FasmGenerator {
             self.generate_expression(&mut func, expr)?;
         }
 
-        // TODO: Handle the return
+        match func_decl.ret_type {
+            chs_types::CHSType::Void => {}
+            chs_types::CHSType::Int | chs_types::CHSType::UInt => {
+                let cs = Register::get_callee_saved();
+                let reg = cs[self.tmp_reg - 1];
+                func.push_raw_instr(format!("mov rax, {reg}"));
+            }
+            _ => todo!("return other types"),
+        }
 
         self.scopes.pop();
         Ok(func)
     }
 
-    fn generate_expression<'a>(
+    fn generate_expression(
         &mut self,
-        func: &'a mut fasm::Function,
+        func: &mut fasm::Function,
         expr: &Expression,
     ) -> CHSResult<Option<Value>> {
         use nodes::ConstExpression::*;
         let cs = Register::get_callee_saved();
+        let cc = Register::get_syscall_call_convention();
         match expr {
             Expression::ConstExpression(IntegerLiteral(v)) => {
-                assert!(self.tmp_reg < cs.len());
-                let register = Value::Register(cs[self.tmp_reg]);
-                func.push_instr(Instr::Mov(register.clone(), Value::Const(*v)));
-                self.tmp_reg += 1;
-                Ok(Some(register))
+                Ok(Some(Value::Const(*v)))
             }
             Expression::ConstExpression(BooleanLiteral(v)) => {
                 assert!(self.tmp_reg < cs.len());
@@ -84,7 +89,11 @@ impl FasmGenerator {
             Expression::ConstExpression(Symbol(v)) => {
                 assert!(self.tmp_reg < cs.len());
                 let register = Value::Register(cs[self.tmp_reg]);
-                func.push_instr(Instr::Mov(register.clone(), self.get_var(v)?.clone()));
+                let value = match self.type_map.get(v) {
+                    Some(chs_types::CHSType::Function(..)) => Value::Label(v.clone()),
+                    _ => self.get_var(v)?.clone(),
+                };
+                func.push_instr(Instr::Mov(register.clone(), value));
                 self.tmp_reg += 1;
                 Ok(Some(register))
             }
@@ -92,16 +101,31 @@ impl FasmGenerator {
                 let stack_pos = func.allocate_stack(8);
                 let src = self.generate_expression(func, &v.value)?.unwrap();
                 let dst = Value::Memory((SizeOperator::Qword, format!("rbp-{}", stack_pos)));
+                if src.is_register() { self.tmp_reg -= 1; }
                 func.push_instr(Instr::Mov(dst.clone(), src));
-                self.tmp_reg -= 1;
-                if let Some(s) = self.scopes.last_mut() {
-                    s.insert(v.name.clone(), dst);
-                } else {
-                    chs_error!("");
-                }
-
+                let s = self.scopes.last_mut().expect("Expected scope");
+                s.insert(v.name.clone(), dst);
                 Ok(None)
             }
+            Expression::Call(c) => {
+                // TODO: Make the expression contain the return type. For now it will always return on rax
+                let f = self.generate_expression(func, &c.caller)?.unwrap();
+                for (i, arg) in c.args.iter().enumerate() {
+                    let src = self.generate_expression(func, arg)?.unwrap();
+                    if i >= cc.len() {
+                        let dst = Value::Register(cc[i]);
+                        func.push_instr(Instr::Mov(dst, src));
+                    } else {
+                        func.push_instr(Instr::Push(src));
+                    }
+                    self.tmp_reg -= 1;
+                }
+
+                func.push_instr(Instr::Call(f));
+
+                Ok(Some(Value::Register(Register::Rax)))
+            }
+            Expression::Binop(binop) => self.generate_binop(func, binop),
             _ => todo!("generation for expression {:?}", expr),
         }
     }
@@ -115,7 +139,7 @@ impl FasmGenerator {
             .ok_or_else(|| CHSError(format!("Undefined variable '{}'", name)))
     }
 
-    fn generate_binop(&mut self, func: &mut fasm::Function, binop: &Binop) -> CHSResult<()> {
+    fn generate_binop(&mut self, func: &mut fasm::Function, binop: &Binop) -> CHSResult<Option<Value>> {
         _ = func;
         _ = binop;
         todo!()

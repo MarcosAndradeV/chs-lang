@@ -133,12 +133,8 @@ pub enum Value {
 }
 
 impl Value {
-    /// Returns `true` if the value is [`Memory`].
-    ///
-    /// [`Memory`]: Value::Memory
-    #[must_use]
-    pub fn is_memory(&self) -> bool {
-        matches!(self, Self::Memory(..))
+    pub fn is_register(&self) -> bool {
+        matches!(self, Self::Register(..))
     }
 }
 
@@ -263,6 +259,8 @@ pub enum Instr {
     Neg(Value),
 
     Mov(Value, Value),
+    Push(Value),
+    Pop(Value),
 
     Add(Value, Value),
     Sub(Value, Value),
@@ -291,6 +289,8 @@ impl fmt::Display for Instr {
             Self::Dec(val) => write!(f, "dec {val}"),
             Self::Neg(val) => write!(f, "neg {val}"),
             Self::Mov(dst, src) => write!(f, "mov {dst}, {src}"),
+            Self::Push(src) => write!(f, "push {src}"),
+            Self::Pop(dst) => write!(f, "pop {dst}"),
             Self::Add(dst, src) => write!(f, "add {dst}, {src}"),
             Self::Sub(dst, src) => write!(f, "sub {dst}, {src}"),
             Self::Mul(dst, src) => write!(f, "mul {dst}, {src}"),
@@ -330,13 +330,10 @@ impl Block {
 
 impl fmt::Display for Block {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, ".{}:", self.label)?;
+        writeln!(f, ".{}:", self.label)?;
 
-        for (i, instr) in self.instrs.iter().enumerate() {
-            if i > 0 {
-                writeln!(f)?;
-            }
-            write!(f, "\t{}\n", instr)?;
+        for instr in self.instrs.iter() {
+            writeln!(f, "\t{}", instr)?;
         }
         Ok(())
     }
@@ -405,7 +402,7 @@ impl fmt::Display for Function {
         }
 
         for blk in self.blocks.iter() {
-            writeln!(f, "{}", blk)?;
+            write!(f, "{}", blk)?;
         }
 
         if self.stack_allocated > 0 {
