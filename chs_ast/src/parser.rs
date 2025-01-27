@@ -217,7 +217,7 @@ impl Parser {
                     left = call;
                     return Ok(left);
                 }
-                Plus | Asterisk | Slash | Minus | Eq | NotEq => {
+                Plus | Asterisk | Slash | Minus | Eq | NotEq | Lt | Gt => {
                     let operator = Operator::from_token(&ptoken, false)?;
                     if precedence < operator.precedence() {
                         let loc = self.next().loc;

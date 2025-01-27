@@ -62,7 +62,7 @@ impl fmt::Display for SizeOperator {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Register {
     Rax,
     Rcx,
@@ -126,7 +126,7 @@ pub enum Value {
     /// Base: Any general purpose register.
     ///
     /// Displacement: An integral offset. (normally limited to 32 bits even in 64-bit mode but can be 64-bits with a few select encodings)
-    Memory((SizeOperator, String)),
+    Memory(SizeOperator, String),
     Register(Register),
     Const(i64),
     Label(String),
@@ -141,7 +141,7 @@ impl Value {
 impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::Memory((size, addrs)) => write!(f, "{} [{}]", size, addrs),
+            Self::Memory(size, addrs) => write!(f, "{} [{}]", size, addrs),
             Self::Label(label) => write!(f, "{}", label),
             Self::Register(name) => write!(f, "{}", name),
             Self::Const(value) => write!(f, "{}", value),
@@ -257,8 +257,10 @@ pub enum Instr {
     Inc(Value),
     Dec(Value),
     Neg(Value),
+    Not(Value),
 
     Mov(Value, Value),
+    Lea(Value, Value),
     Push(Value),
     Pop(Value),
 
@@ -272,6 +274,8 @@ pub enum Instr {
     Xor(Value, Value),
 
     Cmp(Value, Value),
+    Cmove(Cond, Value, Value),
+
     Test(Value, Value),
     J(Cond, Value),
     Jmp(Value),
@@ -288,7 +292,9 @@ impl fmt::Display for Instr {
             Self::Inc(val) => write!(f, "inc {val}"),
             Self::Dec(val) => write!(f, "dec {val}"),
             Self::Neg(val) => write!(f, "neg {val}"),
+            Self::Not(val) => write!(f, "not {val}"),
             Self::Mov(dst, src) => write!(f, "mov {dst}, {src}"),
+            Self::Lea(dst, src) => write!(f, "lea {dst}, {src}"),
             Self::Push(src) => write!(f, "push {src}"),
             Self::Pop(dst) => write!(f, "pop {dst}"),
             Self::Add(dst, src) => write!(f, "add {dst}, {src}"),
@@ -299,6 +305,7 @@ impl fmt::Display for Instr {
             Self::Or(dst, src) => write!(f, "or {dst}, {src}"),
             Self::Xor(dst, src) => write!(f, "xor {dst}, {src}"),
             Self::Cmp(dst, src) => write!(f, "cmp {dst}, {src}"),
+            Self::Cmove(cond, dst, src) => write!(f, "cmov{cond} {dst}, {src}"),
             Self::Test(dst, src) => write!(f, "test {dst}, {src}"),
             Instr::J(cond, label) => write!(f, "j{cond} .{label}"), // local labels
             Instr::Jmp(label) => write!(f, "jmp .{label}"),         // local labels

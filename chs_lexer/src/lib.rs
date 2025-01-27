@@ -26,7 +26,12 @@ pub enum TokenKind {
     Minus,
     Eq,
     NotEq,
+    Gt,
+    Lt,
     Bang,
+    Or,
+    And,
+    Mod,
 
     ParenOpen,
     ParenClose,
@@ -86,6 +91,11 @@ impl fmt::Display for TokenKind {
             TokenKind::Slash => write!(f, "Slash"),
             TokenKind::Eq => write!(f, "Eq"),
             TokenKind::Comment => write!(f, "Comment"),
+            TokenKind::Or  => write!(f, "Or"),
+            TokenKind::And => write!(f, "And"),
+            TokenKind::Mod => write!(f, "Mod"),
+            TokenKind::Gt => write!(f, "Gt"),
+            TokenKind::Lt => write!(f, "Lt"),
         }
     }
 }
@@ -177,6 +187,22 @@ impl Lexer {
                     self.make_token(Bang, "!")
                 }
             }
+            b'<' => {
+                if self.peek_char() == b'=' {
+                    self.read_char();
+                    self.make_token(Invalid, "<=")
+                } else {
+                    self.make_token(Lt, "<")
+                }
+            }
+            b'>' => {
+                if self.peek_char() == b'=' {
+                    self.read_char();
+                    self.make_token(Invalid, ">=")
+                } else {
+                    self.make_token(Gt, ">")
+                }
+            }
             b':' => self.make_token(Colon, ":"),
             b'.' => self.make_token(Dot, "."),
             b'=' => {
@@ -189,8 +215,24 @@ impl Lexer {
             }
             b'*' => self.make_token(Asterisk, "*"),
             b'/' => self.make_token(Slash, "/"),
+            b'%' => self.make_token(Mod, "%"),
             b'+' => self.make_token(Plus, "+"),
-            b'&' => self.make_token(Ampersand, "&"),
+            b'&' => {
+                if self.peek_char() == b'&' {
+                    self.read_char();
+                    self.make_token(And, "&&")
+                } else {
+                    self.make_token(Ampersand, "&")
+                }
+            }
+            b'|' => {
+                if self.peek_char() == b'|' {
+                    self.read_char();
+                    self.make_token(Or, "||")
+                } else {
+                    self.make_token(Invalid, "|")
+                }
+            }
             b',' => self.make_token(Comma, ","),
             b';' => self.make_token(Semicolon, ";"),
             b'(' => self.make_token(ParenOpen, "("),
@@ -203,7 +245,7 @@ impl Lexer {
             b'"' => self.string(),
             b'0'..=b'9' => self.number(),
             0 => self.make_token(EOF, "\0"),
-            _ => self.make_token(Invalid, ""),
+            ch => self.make_token(Invalid, &format!("{}", ch as char)),
         }
     }
 

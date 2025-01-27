@@ -34,7 +34,7 @@ impl TypedModule {
                 let actual = CHSType::Void;
                 if !expect.equivalent(&actual, &env) {
                     chs_error!(
-                        "Argument type mismatch. Expect: {:?}  Actual: {:?}",
+                        "Return type mismatch. Expect: {:?}  Actual: {:?}",
                         expect,
                         actual
                     );
@@ -47,7 +47,7 @@ impl TypedModule {
                 match expr {
                     Expression::VarDecl(v) => {
                         if v.ttype.is_none() {
-                            v.ttype = Some(t);
+                            v.ttype = Some(v.value.infer(&env)?);
                         }
                         env.locals_insert(&v.name, &v.ttype.as_ref().unwrap());
                     }
@@ -58,7 +58,7 @@ impl TypedModule {
                             let actual = t;
                             if !expect.equivalent(&actual, &env) {
                                 chs_error!(
-                                    "Argument type mismatch. Expect: {:?}  Actual: {:?}",
+                                    "Return type mismatch. Expect: {:?}  Actual: {:?}",
                                     expect,
                                     actual
                                 );
@@ -132,11 +132,10 @@ impl chs_types::InferType for Expression {
                             actual
                         );
                     }
-                    Ok(CHSType::Void)
                 } else {
-                    let infered = e.value.infer(env)?;
-                    Ok(infered)
+                    _ = e.value.infer(env)?;
                 }
+                Ok(CHSType::Void)
             }
             Expression::Assign(e) => {
                 let expect = e.assined.infer(env)?;
@@ -357,6 +356,9 @@ pub enum Operator {
     Minus,
     Div,
     Mult,
+    Mod,
+    Or,
+    And,
     Eq,
     NEq,
     Gt,
@@ -382,6 +384,11 @@ impl Operator {
             Slash => Ok(Self::Div),
             Eq => Ok(Self::Eq),
             NotEq => Ok(Self::NEq),
+            Gt => Ok(Self::Gt),
+            Lt => Ok(Self::Lt),
+            Mod => Ok(Self::Mod),
+            And => Ok(Self::And),
+            Or => Ok(Self::Or),
             _ => chs_error!("{} Unsuported operator", token.loc),
         }
     }
@@ -389,9 +396,9 @@ impl Operator {
     pub fn precedence(&self) -> Precedence {
         match self {
             Operator::Plus | Operator::Minus => Precedence::Sum,
-            Operator::Mult | Operator::Div => Precedence::Product,
+            Operator::Mult | Operator::Div | Operator::Mod => Precedence::Product,
             Operator::Lt | Operator::Gt => Precedence::LessGreater,
-            Operator::Eq | Operator::NEq => Precedence::Equals,
+            Operator::Eq | Operator::NEq | Operator::Or | Operator::And => Precedence::Equals,
             Operator::Negate | Operator::LNot => Precedence::Prefix,
             Operator::Refer | Operator::Deref => Precedence::Prefix,
             // _ => Precedence::Lowest,
