@@ -44,16 +44,26 @@ impl TypeMap {
 
 #[derive(Debug)]
 pub struct TypeEnv<'a> {
+    type_decls: HashMap<&'a String, &'a CHSType>,
     globals: HashMap<&'a String, &'a CHSType>,
     locals: Vec<HashMap<&'a String, &'a CHSType>>,
 }
 
 impl<'a> TypeEnv<'a> {
-    pub fn new(globals: impl Iterator<Item = (&'a String, &'a CHSType)>) -> Self {
+    pub fn new() -> Self {
         Self {
-            globals: HashMap::from_iter(globals),
+            type_decls: HashMap::new(),
+            globals: HashMap::new(),
             locals: vec![],
         }
+    }
+    pub fn type_decls_insert(&mut self, k: &'a String, v: &'a CHSType) -> Option<&CHSType> {
+        self.type_decls
+            .insert(k, v)
+    }
+    pub fn globals_insert(&mut self, k: &'a String, v: &'a CHSType) -> Option<&CHSType> {
+        self.globals
+            .insert(k, v)
     }
     pub fn get(&self, k: &String) -> Option<&&CHSType> {
         match self.locals

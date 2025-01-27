@@ -185,6 +185,7 @@ impl FasmGenerator {
                 ));
                 Ok(Some(Value::Register(Register::Rax)))
             },
+            Expression::Group(e) => self.generate_expression(func, e),
             _ => todo!("generation for expression {:?}", expr),
         }
     }

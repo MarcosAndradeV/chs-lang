@@ -6,6 +6,7 @@ use chs_types::{CHSType, InferType, TypeEnv, TypeMap};
 #[derive(Debug, Default)]
 pub struct Module {
     pub type_decls: Vec<TypeDecl>,
+    pub global_decls: Vec<GlobalDecl>,
     pub function_decls: Vec<FunctionDecl>,
     pub const_decls: Vec<ConstDecl>, // WTF?
 }
@@ -20,11 +21,23 @@ impl TypedModule {
     pub fn from_module(m: Module) -> CHSResult<TypedModule> {
         let Module {
             type_decls,
+            global_decls,
             mut function_decls,
             const_decls: _,
         } = m;
         // TODO: Look for type redefinition
-        let mut env = TypeEnv::new(type_decls.iter().map(|t: &TypeDecl| (&t.1, &t.2)));
+        let mut env = TypeEnv::new();
+        for decl in &type_decls {
+            if env.type_decls_insert(&decl.name, &decl.ttype).is_some() {
+                chs_error!("{} Redefinition of {}", decl.loc, decl.name)
+            }
+        }
+
+        for decl in &global_decls {
+            if env.globals_insert(&decl.name, &decl.ttype).is_some() {
+                chs_error!("{} Redefinition of {}", decl.loc, decl.name)
+            }
+        }
 
         for f in &mut function_decls {
             env.locals_new();
@@ -86,7 +99,7 @@ impl chs_types::InferType for ConstExpression {
         match self {
             ConstExpression::Symbol(sym) => match env.get(sym) {
                 Some(t) => Ok((*t).clone()),
-                None => chs_error!("Symbol not found {}", sym),
+                None => chs_error!("variable not found {}", sym),
             },
             ConstExpression::IntegerLiteral(_) => Ok(CHSType::Int),
             ConstExpression::BooleanLiteral(_) => Ok(CHSType::Boolean),
@@ -135,13 +148,13 @@ impl chs_types::InferType for Expression {
                     }
                     Ok(*ret_type.clone())
                 }
-                c => chs_error!("Cannot call {:?}", c)
+                c => chs_error!("Cannot call {:?}", c),
             },
             Expression::Len(e) => {
                 let arg = e.infer(env)?;
                 match arg {
                     CHSType::String => {}
-                    arg => chs_error!("Cannot get the len of {:?}", arg)
+                    arg => chs_error!("Cannot get the len of {:?}", arg),
                 }
                 Ok(CHSType::Int)
             }
@@ -158,7 +171,7 @@ impl chs_types::InferType for Expression {
                 } else {
                     e.ttype = Some(e.value.infer(env)?);
                 }
-                env.locals_insert(&e.name, &e.ttype.as_ref().unwrap());
+                env.locals_insert(&e.name, e.ttype.as_ref().unwrap());
                 Ok(CHSType::Void)
             }
             Expression::Assign(e) => {
@@ -327,14 +340,25 @@ pub struct ConstDecl {
 }
 
 #[derive(Debug)]
-pub struct TypeDecl(pub Loc, pub String, pub CHSType);
+pub struct TypeDecl {
+    pub loc: Loc,
+    pub name: String,
+    pub ttype: CHSType,
+}
+
+#[derive(Debug)]
+pub struct GlobalDecl {
+    pub loc: Loc,
+    pub name: String,
+    pub ttype: CHSType,
+}
 
 #[derive(Debug)]
 pub struct Assign {
     pub loc: Loc,
     pub assined: Expression,
     pub value: Expression,
-    pub ttype: Option<CHSType>
+    pub ttype: Option<CHSType>,
 }
 
 #[derive(Debug)]

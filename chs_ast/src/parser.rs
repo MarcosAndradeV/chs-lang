@@ -76,8 +76,8 @@ impl Parser {
                         ret_type.clone().into(),
                     );
                     self.module
-                        .type_decls
-                        .push(TypeDecl(loc.clone(), name.clone(), fn_type));
+                        .global_decls
+                        .push(GlobalDecl { loc: loc.clone(), name: name.clone(), ttype: fn_type });
                     self.module
                         .function_decls
                         .push(FunctionDecl {
@@ -94,7 +94,7 @@ impl Parser {
                     let chs_type = self.parse_type()?;
                     self.module
                         .type_decls
-                        .push(TypeDecl(token.loc, name, chs_type));
+                        .push(TypeDecl { loc: token.loc, name, ttype: chs_type });
                 }
                 _ => {
                     chs_error!(
