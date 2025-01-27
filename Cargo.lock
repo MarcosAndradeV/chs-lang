@@ -7,7 +7,7 @@ name = "chs"
 version = "0.1.0"
 dependencies = [
  "chs_ast",
- "chs_ir",
+ "chs_codegen",
  "chs_lexer",
  "chs_util",
 ]
@@ -22,7 +22,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "chs_ir"
+name = "chs_codegen"
 version = "0.1.0"
 dependencies = [
  "chs_ast",

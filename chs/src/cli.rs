@@ -1,7 +1,7 @@
 use std::{env::Args, process::ExitCode};
 
 use chs_ast::nodes::TypedModule;
-use chs_ir::FasmGenerator;
+use chs_codegen::FasmGenerator;
 
 pub const COMMANDS: &[Command] = &[
     Command {
