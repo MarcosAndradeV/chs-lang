@@ -1,5 +1,5 @@
-use chs_util::{chs_error, CHSResult};
-use std::{collections::HashMap, slice::Iter};
+use chs_util::CHSResult;
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CHSType {
@@ -8,6 +8,7 @@ pub enum CHSType {
     Void,
     Char,
     Boolean,
+    String,
     Alias(String),
     Distinct(Box<Self>),
     Pointer(Box<Self>),
@@ -25,28 +26,6 @@ impl CHSType {
             (CHSType::Alias(a), b) => env.get(a).is_some_and(|a| a.equivalent(b, env)),
             (a, CHSType::Alias(b)) => env.get(b).is_some_and(|b| b.equivalent(a, env)),
             (a, b) => a == b,
-        }
-    }
-    pub fn call(&self, env: &TypeEnv, args: Iter<impl InferType>) -> CHSResult<CHSType> {
-        use CHSType::*;
-        match self {
-            Function(fn_args, ret_type) => {
-                if fn_args.len() != args.len() {
-                    chs_error!("Arity mismatch");
-                }
-                for (expect, actual) in fn_args.iter().zip(args) {
-                    let actual = actual.infer(env)?;
-                    if !expect.equivalent(&actual, &env) {
-                        chs_error!(
-                            "Argument type mismatch. Expect: {:?}  Actual: {:?}",
-                            expect,
-                            actual
-                        );
-                    }
-                }
-                Ok(*ret_type.clone())
-            }
-            _ => chs_error!("Cannot call `{:?}`", self),
         }
     }
 }
@@ -80,7 +59,7 @@ impl<'a> TypeEnv<'a> {
         match self.locals
             .last()
             .and_then(|s| s.get(k)) {
-                Some(CHSType::Alias(sym)) => self.get(sym),
+                Some(CHSType::Alias(ref sym)) => self.get(sym),
                 None => self.globals.get(k),
                 other => other
             }
@@ -114,5 +93,5 @@ impl<'a> TypeEnv<'a> {
 }
 
 pub trait InferType {
-    fn infer(&self, env: &TypeEnv) -> CHSResult<CHSType>;
+    fn infer<'a>(&'a mut self, env: &mut TypeEnv<'a>) -> CHSResult<CHSType>;
 }

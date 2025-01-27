@@ -141,6 +141,7 @@ impl Parser {
                     loc,
                     assined,
                     value,
+                    ttype: None
                 }))
             }
             Keyword if token.val_eq("if") => {
@@ -161,6 +162,9 @@ impl Parser {
             String | Ident | Interger => Expression::from_literal_token(token)?,
             Keyword if token.val_eq("true") || token.val_eq("false") => {
                 Expression::from_literal_token(token)?
+            }
+            Keyword if token.val_eq("len") => {
+                Expression::Len(Box::new(self.parse_expression(Precedence::Prefix)?))
             }
             Ampersand | Asterisk => {
                 let expr = self.parse_expression(Precedence::Prefix)?;
@@ -271,6 +275,7 @@ impl Parser {
                                     token.value,
                                 )),
                                 value: self.parse_expression(Precedence::Lowest)?,
+                                ttype: None
                             }
                             .into(),
                         ));

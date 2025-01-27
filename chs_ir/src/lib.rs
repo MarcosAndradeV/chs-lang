@@ -2,14 +2,17 @@
 pub mod fasm;
 use std::collections::HashMap;
 
-use chs_ast::nodes::{self, Binop, ConstExpression, Expression, IfElseExpression, IfExpression, Operator, TypedModule, Unop, WhileExpression};
+use chs_ast::nodes::{
+    self, Binop, ConstExpression, Expression, IfElseExpression, IfExpression, Operator,
+    TypedModule, Unop, WhileExpression,
+};
 use chs_types::TypeMap;
 use chs_util::{CHSError, CHSResult};
-use fasm::{Cond, Instr, Register, SizeOperator, Value};
+use fasm::{Cond, DataDef, DataDirective, DataExpr, Instr, Register, SizeOperator, Value};
 
 pub struct FasmGenerator {
-    tmp_reg: usize,
     label_count: usize,
+    str_count: usize,
     scopes: Vec<HashMap<String, fasm::Value>>,
     datadefs: Vec<fasm::DataDef>,
     type_map: TypeMap,
@@ -22,8 +25,8 @@ impl FasmGenerator {
             type_defs,
         } = tm;
         let mut gen = Self {
-            tmp_reg: 0,
             label_count: 0,
+            str_count: 0,
             scopes: vec![],
             datadefs: vec![],
             type_map: type_defs,
@@ -33,6 +36,10 @@ impl FasmGenerator {
         for func_decl in function_decls {
             let func = gen.generate_function(func_decl)?;
             out.push_function(func);
+        }
+
+        for data in gen.datadefs {
+            out.push_data(data);
         }
 
         Ok(out)
@@ -82,15 +89,36 @@ impl FasmGenerator {
         let cc = Register::get_syscall_call_convention();
         match expr {
             Expression::ConstExpression(IntegerLiteral(v)) => Ok(Some(Value::Const(*v))),
-            Expression::ConstExpression(BooleanLiteral(_)) => {
-                todo!()
-            }
+            Expression::ConstExpression(BooleanLiteral(v)) => Ok(Some(Value::Const(*v as i64))),
             Expression::ConstExpression(Symbol(v)) => Ok(Some(self.get_var(v)?.clone())),
+            Expression::ConstExpression(StringLiteral(v)) => {
+                self.str_count += 1;
+                let name = format!("str{}", self.str_count);
+                self.datadefs.push(DataDef {
+                    name: format!("{}_len", name.clone()),
+                    directive: DataDirective::Dq,
+                    items: vec![
+                        DataExpr::Const(v.len() as u64),
+                    ],
+                });
+                self.datadefs.push(DataDef {
+                    name: name.clone(),
+                    directive: DataDirective::Db,
+                    items: vec![
+                        DataExpr::Str(v.clone()),
+                    ],
+                });
+                Ok(Some(Value::Label(name)))
+            }
             Expression::VarDecl(v) => {
-                let stack_pos = func.allocate_stack(8);
+                let size = SizeOperator::from_chstype(
+                    v.ttype.as_ref().expect("Expected type"),
+                    &self.type_map,
+                )?;
+                let stack_pos = func.allocate_stack(size.byte_size());
 
                 let src = self.generate_expression(func, &v.value)?.unwrap();
-                let dst = Value::Memory(SizeOperator::Qword, format!("rbp-{}", stack_pos));
+                let dst = Value::Memory(size, format!("rbp-{}", stack_pos));
 
                 let s = self.scopes.last_mut().expect("Expected scope");
                 s.insert(v.name.clone(), dst.clone());
@@ -99,8 +127,18 @@ impl FasmGenerator {
                 Ok(None)
             }
             Expression::Assign(v) => {
-                let dst = self.generate_expression(func, &v.assined)?.unwrap();
-                let src = self.generate_expression(func, &v.value)?.unwrap();
+                let size = SizeOperator::from_chstype(
+                    v.ttype.as_ref().expect("Expected type"),
+                    &self.type_map,
+                )?;
+                let dst = match self.generate_expression(func, &v.assined)?.unwrap() {
+                    Value::Memory(_, a) => Value::Memory(size, a),
+                    dst => dst,
+                };
+                let src = match self.generate_expression(func, &v.value)?.unwrap() {
+                    Value::Memory(_, a) => Value::Memory(size, a),
+                    src => src,
+                };
                 func.push_instr(Instr::Mov(dst, src));
                 Ok(None)
             }
@@ -113,9 +151,6 @@ impl FasmGenerator {
                 };
                 for (i, arg) in c.args.iter().enumerate() {
                     let src = self.generate_expression(func, arg)?.unwrap();
-                    if src.is_register() {
-                        self.tmp_reg -= 1;
-                    }
                     if i <= cc.len() {
                         let dst = Value::Register(cc[i]);
                         func.push_instr(Instr::Mov(dst, src));
@@ -134,6 +169,22 @@ impl FasmGenerator {
             Expression::IfExpression(e) => self.generate_if(func, e),
             Expression::IfElseExpression(e) => self.generate_if_else(func, e),
             Expression::WhileExpression(e) => self.generate_while(func, e),
+            Expression::Len(e) => {
+                let src = self.generate_expression(func, e)?.unwrap();
+                let src = match src {
+                    Value::Register(_) => src,
+                    Value::Label(_) => src,
+                    _ => {
+                        func.push_instr(Instr::Mov(Value::Register(Register::Rbx), src));
+                        Value::Register(Register::Rbx)
+                    }
+                };
+                func.push_instr(Instr::Mov(
+                    Value::Register(Register::Rax),
+                    Value::Memory(SizeOperator::Qword, format!("{}-8", src))
+                ));
+                Ok(Some(Value::Register(Register::Rax)))
+            },
             _ => todo!("generation for expression {:?}", expr),
         }
     }
@@ -236,6 +287,17 @@ impl FasmGenerator {
                 func.push_instr(Instr::Not(lhs));
             }
             Operator::Refer => {
+                let lhs = match lhs {
+                    Value::Const(_) => {
+                        let size = func.allocate_stack(8);
+                        let memory = Value::Memory(SizeOperator::Qword, format!("rbp-{}", size));
+                        func.push_instr(Instr::Mov(
+                            memory.clone(), lhs
+                        ));
+                        memory
+                    },
+                    _ => lhs
+                };
                 func.push_instr(Instr::Lea(Value::Register(Register::Rax), lhs));
             }
             Operator::Deref => {
@@ -251,12 +313,30 @@ impl FasmGenerator {
                     Value::Memory(SizeOperator::Qword, lhs.to_string()),
                 ));
             }
+            Operator::DerefByte => {
+                let lhs = match lhs {
+                    Value::Register(_) => lhs,
+                    _ => {
+                        func.push_instr(Instr::Mov(Value::Register(Register::Rbx), lhs));
+                        Value::Register(Register::Rbx)
+                    }
+                };
+                func.push_instr(Instr::Xor(lhs.clone(), lhs.clone()));
+                func.push_instr(Instr::Mov(
+                    Value::Register(Register::Al),
+                    Value::Memory(SizeOperator::Byte, lhs.to_string()),
+                ));
+            }
             _ => unreachable!(),
         }
         Ok(Some(Value::Register(Register::Rax)))
     }
 
-    fn generate_if(&mut self, func: &mut fasm::Function, e: &IfExpression) -> Result<Option<Value>, CHSError> {
+    fn generate_if(
+        &mut self,
+        func: &mut fasm::Function,
+        e: &IfExpression,
+    ) -> Result<Option<Value>, CHSError> {
         let IfExpression { loc: _, cond, body } = e;
         self.label_count += 1;
         let l = format!("L{}", self.label_count);
@@ -265,11 +345,10 @@ impl FasmGenerator {
             func.push_instr(Instr::Mov(Value::Register(Register::Rax), cond));
         }
         func.push_instr(Instr::Test(
-            Value::Register(Register::Rax), Value::Register(Register::Rax)
+            Value::Register(Register::Rax),
+            Value::Register(Register::Rax),
         ));
-        func.push_instr(Instr::J(Cond::Z,
-            Value::Label(l.clone())
-        ));
+        func.push_instr(Instr::J(Cond::Z, Value::Label(l.clone())));
         self.scopes.push(HashMap::new());
         for expr in body {
             self.generate_expression(func, expr)?;
@@ -279,8 +358,17 @@ impl FasmGenerator {
         Ok(None)
     }
 
-    fn generate_if_else(&mut self, func: &mut fasm::Function, e: &IfElseExpression) -> Result<Option<Value>, CHSError> {
-        let IfElseExpression { loc: _, cond, body, else_body } = e;
+    fn generate_if_else(
+        &mut self,
+        func: &mut fasm::Function,
+        e: &IfElseExpression,
+    ) -> Result<Option<Value>, CHSError> {
+        let IfElseExpression {
+            loc: _,
+            cond,
+            body,
+            else_body,
+        } = e;
         self.label_count += 1;
         let l1 = format!("L{}", self.label_count);
         self.label_count += 1;
@@ -290,19 +378,16 @@ impl FasmGenerator {
             func.push_instr(Instr::Mov(Value::Register(Register::Rax), cond));
         }
         func.push_instr(Instr::Test(
-            Value::Register(Register::Rax), Value::Register(Register::Rax)
+            Value::Register(Register::Rax),
+            Value::Register(Register::Rax),
         ));
-        func.push_instr(Instr::J(Cond::Z,
-            Value::Label(l1.clone())
-        ));
+        func.push_instr(Instr::J(Cond::Z, Value::Label(l1.clone())));
         self.scopes.push(HashMap::new());
         for expr in body {
             self.generate_expression(func, expr)?;
         }
         self.scopes.pop();
-        func.push_instr(Instr::Jmp(
-            Value::Label(l2.clone())
-        ));
+        func.push_instr(Instr::Jmp(Value::Label(l2.clone())));
         func.push_block(l1);
         self.scopes.push(HashMap::new());
         for expr in else_body {
@@ -313,7 +398,11 @@ impl FasmGenerator {
         Ok(None) // TODO: Make the if-else return
     }
 
-    fn generate_while(&mut self, func: &mut fasm::Function, e: &WhileExpression) -> Result<Option<Value>, CHSError> {
+    fn generate_while(
+        &mut self,
+        func: &mut fasm::Function,
+        e: &WhileExpression,
+    ) -> Result<Option<Value>, CHSError> {
         let WhileExpression { loc: _, cond, body } = e;
         self.label_count += 1;
         let lcond = format!("L{}", self.label_count);
@@ -325,19 +414,16 @@ impl FasmGenerator {
             func.push_instr(Instr::Mov(Value::Register(Register::Rax), cond));
         }
         func.push_instr(Instr::Test(
-            Value::Register(Register::Rax), Value::Register(Register::Rax)
+            Value::Register(Register::Rax),
+            Value::Register(Register::Rax),
         ));
-        func.push_instr(Instr::J(Cond::NZ,
-            Value::Label(after.clone())
-        ));
+        func.push_instr(Instr::J(Cond::NZ, Value::Label(after.clone())));
         self.scopes.push(HashMap::new());
         for expr in body {
             self.generate_expression(func, expr)?;
         }
         self.scopes.pop();
-        func.push_instr(Instr::Jmp(
-            Value::Label(lcond)
-        ));
+        func.push_instr(Instr::Jmp(Value::Label(lcond)));
         func.push_block(after);
         Ok(None)
     }

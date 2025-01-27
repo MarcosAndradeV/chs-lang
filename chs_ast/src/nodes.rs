@@ -43,14 +43,8 @@ impl TypedModule {
             }
             let len = f.body.len() - 1;
             for (i, expr) in f.body.iter_mut().enumerate() {
-                let t = expr.infer(&env)?;
+                let t = expr.infer(&mut env)?;
                 match expr {
-                    Expression::VarDecl(v) => {
-                        if v.ttype.is_none() {
-                            v.ttype = Some(v.value.infer(&env)?);
-                        }
-                        env.locals_insert(&v.name, &v.ttype.as_ref().unwrap());
-                    }
                     // TODO: Return() should be handle here like VarDecl.
                     _ => {
                         if i >= len {
@@ -67,12 +61,14 @@ impl TypedModule {
                     }
                 }
             }
-
             env.locals_pop();
         }
 
         let type_defs = env.into_type_defs();
-        Ok(TypedModule { function_decls, type_defs })
+        Ok(TypedModule {
+            function_decls,
+            type_defs,
+        })
     }
 }
 
@@ -86,7 +82,7 @@ pub enum ConstExpression {
 }
 
 impl chs_types::InferType for ConstExpression {
-    fn infer(&self, env: &chs_types::TypeEnv) -> CHSResult<CHSType> {
+    fn infer(&mut self, env: &mut chs_types::TypeEnv) -> CHSResult<CHSType> {
         match self {
             ConstExpression::Symbol(sym) => match env.get(sym) {
                 Some(t) => Ok((*t).clone()),
@@ -94,7 +90,7 @@ impl chs_types::InferType for ConstExpression {
             },
             ConstExpression::IntegerLiteral(_) => Ok(CHSType::Int),
             ConstExpression::BooleanLiteral(_) => Ok(CHSType::Boolean),
-            ConstExpression::StringLiteral(_) => todo!("string buildin type"),
+            ConstExpression::StringLiteral(_) => Ok(CHSType::String),
             ConstExpression::Void => Ok(CHSType::Void),
         }
     }
@@ -107,6 +103,7 @@ pub enum Expression {
     Binop(Box<Binop>),
     Unop(Box<Unop>),
     Call(Box<Call>),
+    Len(Box<Expression>),
     VarDecl(Box<VarDecl>),
     Assign(Box<Assign>),
     Group(Box<Self>),
@@ -116,12 +113,38 @@ pub enum Expression {
 }
 
 impl chs_types::InferType for Expression {
-    fn infer(&self, env: &chs_types::TypeEnv) -> CHSResult<CHSType> {
+    fn infer<'a>(&'a mut self, env: &mut chs_types::TypeEnv<'a>) -> CHSResult<CHSType> {
         match self {
             Expression::ExpressionList(_) => todo!("type infer for expression lists"),
             Expression::ConstExpression(e) => e.infer(env),
             Expression::Group(e) => e.infer(env),
-            Expression::Call(call) => call.caller.infer(env)?.call(env, call.args.iter()),
+            Expression::Call(call) => match call.caller.infer(env)? {
+                CHSType::Function(ref mut fn_args, ret_type) => {
+                    if fn_args.len() != call.args.len() {
+                        chs_error!("Arity mismatch");
+                    }
+                    for (expect, actual) in fn_args.iter_mut().zip(call.args.iter_mut()) {
+                        let actual = actual.infer(env)?;
+                        if !expect.equivalent(&actual, &env) {
+                            chs_error!(
+                                "Argument type mismatch. Expect: {:?}  Actual: {:?}",
+                                expect,
+                                actual
+                            );
+                        }
+                    }
+                    Ok(*ret_type.clone())
+                }
+                c => chs_error!("Cannot call {:?}", c)
+            },
+            Expression::Len(e) => {
+                let arg = e.infer(env)?;
+                match arg {
+                    CHSType::String => {}
+                    arg => chs_error!("Cannot get the len of {:?}", arg)
+                }
+                Ok(CHSType::Int)
+            }
             Expression::VarDecl(e) => {
                 if let Some(ref expect) = e.ttype {
                     let actual = e.value.infer(env)?;
@@ -133,8 +156,9 @@ impl chs_types::InferType for Expression {
                         );
                     }
                 } else {
-                    _ = e.value.infer(env)?;
+                    e.ttype = Some(e.value.infer(env)?);
                 }
+                env.locals_insert(&e.name, &e.ttype.as_ref().unwrap());
                 Ok(CHSType::Void)
             }
             Expression::Assign(e) => {
@@ -147,6 +171,7 @@ impl chs_types::InferType for Expression {
                         actual
                     );
                 }
+                e.ttype = Some(expect);
                 Ok(CHSType::Void)
             }
             Expression::IfExpression(e) => {
@@ -159,7 +184,12 @@ impl chs_types::InferType for Expression {
                         actual
                     );
                 }
-                e.body.last().map_or(Ok(CHSType::Void), |t| t.infer(env))
+                env.locals_new();
+                for expr in &mut e.body {
+                    expr.infer(env)?;
+                }
+                env.locals_pop();
+                Ok(CHSType::Void)
             }
             Expression::IfElseExpression(e) => {
                 let expect = e.cond.infer(env)?;
@@ -171,16 +201,17 @@ impl chs_types::InferType for Expression {
                         actual
                     );
                 }
-                let expect = e.body.last().map_or(Ok(CHSType::Void), |t| t.infer(env))?;
-                let actual = e.body.last().map_or(Ok(CHSType::Void), |t| t.infer(env))?;
-                if !expect.equivalent(&actual, env) {
-                    chs_error!(
-                        "Argument type mismatch. Expect: {:?}  Actual: {:?}",
-                        expect,
-                        actual
-                    );
+                env.locals_new();
+                for expr in &mut e.body {
+                    expr.infer(env)?;
                 }
-                Ok(expect)
+                env.locals_pop();
+                env.locals_new();
+                for expr in &mut e.else_body {
+                    expr.infer(env)?;
+                }
+                env.locals_pop();
+                Ok(CHSType::Void)
             }
             Expression::WhileExpression(e) => {
                 let expect = e.cond.infer(env)?;
@@ -192,6 +223,11 @@ impl chs_types::InferType for Expression {
                         actual
                     );
                 }
+                env.locals_new();
+                for expr in &mut e.body {
+                    expr.infer(env)?;
+                }
+                env.locals_pop();
                 Ok(CHSType::Void)
             }
             Expression::Binop(e) => {
@@ -229,6 +265,9 @@ impl chs_types::InferType for Expression {
                     Operator::Negate => return Ok(expect),
                     Operator::Deref => {
                         if let CHSType::Pointer(ptr) = expect {
+                            if *ptr == CHSType::Char {
+                                e.op = Operator::DerefByte;
+                            }
                             return Ok(*ptr);
                         } else {
                             chs_error!("Cannot deref `{:?}` type", expect)
@@ -295,6 +334,7 @@ pub struct Assign {
     pub loc: Loc,
     pub assined: Expression,
     pub value: Expression,
+    pub ttype: Option<CHSType>
 }
 
 #[derive(Debug)]
@@ -368,6 +408,7 @@ pub enum Operator {
     LNot,
     Refer,
     Deref,
+    DerefByte,
 }
 
 impl Operator {
@@ -400,7 +441,7 @@ impl Operator {
             Operator::Lt | Operator::Gt => Precedence::LessGreater,
             Operator::Eq | Operator::NEq | Operator::Or | Operator::And => Precedence::Equals,
             Operator::Negate | Operator::LNot => Precedence::Prefix,
-            Operator::Refer | Operator::Deref => Precedence::Prefix,
+            Operator::Refer | Operator::Deref | Operator::DerefByte => Precedence::Prefix,
             // _ => Precedence::Lowest,
         }
     }

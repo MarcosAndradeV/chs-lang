@@ -1,7 +1,9 @@
 use std::fmt;
 
+use chs_util::{chs_error, CHSResult};
+
 #[allow(dead_code)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum SizeOperator {
     Byte,
     Word,
@@ -37,6 +39,30 @@ impl SizeOperator {
 
     pub fn bit_size(&self) -> usize {
         self.byte_size() * 8
+    }
+
+    pub fn from_chstype(
+        ttype: &chs_types::CHSType,
+        type_map: &chs_types::TypeMap,
+    ) -> CHSResult<Self> {
+        match ttype {
+            chs_types::CHSType::Pointer(_)
+            | chs_types::CHSType::Function(_, _)
+            | chs_types::CHSType::Boolean
+            | chs_types::CHSType::String
+            | chs_types::CHSType::Int
+            | chs_types::CHSType::UInt => Ok(Self::Qword),
+            chs_types::CHSType::Alias(k) => {
+                if let Some(ttype) = type_map.get(k) {
+                    Self::from_chstype(ttype, type_map)
+                } else {
+                    chs_error!("Type not found")
+                }
+            }
+            chs_types::CHSType::Distinct(chstype) => Self::from_chstype(chstype, type_map),
+            chs_types::CHSType::Char => Ok(Self::Byte),
+            chs_types::CHSType::Void => chs_error!("TODO"),
+        }
     }
 }
 
@@ -80,6 +106,7 @@ pub enum Register {
     R13,
     R14,
     R15,
+    Al,
 }
 
 impl fmt::Display for Register {
@@ -101,6 +128,7 @@ impl fmt::Display for Register {
             Self::R13 => write!(f, "r13"),
             Self::R14 => write!(f, "r14"),
             Self::R15 => write!(f, "r15"),
+            Self::Al => write!(f, "al"),
         }
     }
 }
@@ -190,6 +218,8 @@ pub enum DataDirective {
     Rw,
     Dd,
     Rd,
+    Dq,
+    Rq,
     // TODO: do te others
 }
 
@@ -202,6 +232,8 @@ impl fmt::Display for DataDirective {
             Self::Rw => write!(f, "rw"),
             Self::Dd => write!(f, "dd"),
             Self::Rd => write!(f, "rd"),
+            Self::Dq => write!(f, "dq"),
+            Self::Rq => write!(f, "rq"),
         }
     }
 }
@@ -463,7 +495,7 @@ impl fmt::Display for Module {
         }
 
         if self.data.len() > 0 {
-            writeln!(f, "segment readble writable")?;
+            writeln!(f, "segment readable writable")?;
         }
         for data in self.data.iter() {
             writeln!(f, "{}", data)?;
