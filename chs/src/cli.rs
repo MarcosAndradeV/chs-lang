@@ -1,89 +1,74 @@
-use std::{env::Args, process::ExitCode};
+use std::{env::Args, fs::File, io::Write, os::unix::process::CommandExt, process::{self, exit, ExitCode}};
 
 use chs_ast::nodes::TypedModule;
 use chs_codegen::FasmGenerator;
+use chs_util::{chs_error, CHSError, CHSResult};
+
+fn help(program: &str, _: &mut Args) -> CHSResult<()> {
+    usage(program);
+    Ok(())
+}
+
+fn compile(program: &str, args: &mut Args) -> CHSResult<()> {
+    // 1. Get file path from arguments
+    let file_path = args.next().expect("Expected file path for compile command.");
+
+    // 2. Parse the file using chs_ast
+    let module = match chs_ast::parse_file(file_path) {
+        Ok(module) => module,
+        Err(err) => chs_error!(err),
+    };
+
+    // 3. Convert parsed module to TypedModule
+    let typed_module = match TypedModule::from_module(module) {
+        Ok(typed_module) => typed_module,
+        Err(err) => chs_error!(err),
+    };
+
+    // 4. Generate Fasm code
+    let fasm_code = match FasmGenerator::generate(typed_module) {
+        Ok(code) => code,
+        Err(err) => chs_error!(err),
+    };
+
+    // 5. Write Fasm code to output file
+    let output_path = fasm_code.out_path();
+    let mut out_file = File::create(output_path).map_err(|err| CHSError(err.to_string()))?;
+    write!(out_file, "{}", fasm_code).map_err(|err| CHSError(err.to_string()))?;
+    println!("[INFO] Generating {}", output_path.display());
+
+    // 6. Call Fasm assembler
+    let mut fasm_process = process::Command::new("fasm")
+        .arg(output_path)
+        .arg(output_path.with_extension(""))
+        .spawn()
+        .expect("Failed to spawn fasm process");
+
+    let fasm_result = fasm_process.wait_with_output().expect("Failed to wait for fasm");
+    if !fasm_result.status.success() {
+        chs_error!(String::from_utf8_lossy(&fasm_result.stderr));
+    }
+
+    Ok(())
+}
 
 pub const COMMANDS: &[Command] = &[
     Command {
         name: "help",
         descripition: "Print this message",
-        run: |program, _| {
-            usage(program);
-            ExitCode::SUCCESS
-        },
+        run: help,
     },
     Command {
         name: "compile",
         descripition: "Compile a program: chs compile <file.chs>",
-        run: |program, args| {
-            if let Some(file_path) = args.next() {
-                match chs_ast::parse_file(file_path)
-                    .and_then(|m| TypedModule::from_module(m))
-                    .and_then(|m| FasmGenerator::generate(m))
-                {
-                    Ok(asm) => {
-                        println!("{asm}");
-                        ExitCode::SUCCESS
-                    }
-                    Err(err) => {
-                        eprintln!("{err}");
-                        ExitCode::FAILURE
-                    }
-                }
-            } else {
-                eprintln!("Expect file path.");
-                ExitCode::FAILURE
-            }
-        },
-    },
-    Command {
-        name: "parse",
-        descripition: "Parse a program and dump it's AST: chs parse <file.chs>",
-        run: |program, args| {
-            if let Some(file_path) = args.next() {
-                match chs_ast::parse_file(file_path) {
-                    Ok(ast) => {
-                        println!("{ast:?}");
-                        ExitCode::SUCCESS
-                    }
-                    Err(err) => {
-                        eprintln!("{err}");
-                        ExitCode::FAILURE
-                    }
-                }
-            } else {
-                eprintln!("Expect file path.");
-                ExitCode::FAILURE
-            }
-        },
-    },
-    Command {
-        name: "check",
-        descripition: "Parse a program and dump it's AST: chs check <file.chs>",
-        run: |program, args| {
-            if let Some(file_path) = args.next() {
-                match chs_ast::parse_file(file_path).and_then(|m| TypedModule::from_module(m)) {
-                    Ok(ast) => {
-                        println!("{ast:?}");
-                        ExitCode::SUCCESS
-                    }
-                    Err(err) => {
-                        eprintln!("{err}");
-                        ExitCode::FAILURE
-                    }
-                }
-            } else {
-                eprintln!("Expect file path.");
-                ExitCode::FAILURE
-            }
-        },
+        run: compile,
     },
 ];
 
 pub struct Command {
     pub name: &'static str,
     pub descripition: &'static str,
-    pub run: fn(&str, &mut Args) -> ExitCode,
+    pub run: fn(&str, &mut Args) -> CHSResult<()>,
 }
 
 pub fn usage(program: &str) {

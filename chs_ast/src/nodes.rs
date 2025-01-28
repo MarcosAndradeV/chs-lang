@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use chs_lexer::Token;
 use chs_util::{chs_error, CHSError, CHSResult, Loc};
 
@@ -5,6 +7,7 @@ use chs_types::{CHSType, InferType, TypeEnv, TypeMap};
 
 #[derive(Debug, Default)]
 pub struct Module {
+    pub file_path: PathBuf,
     pub type_decls: Vec<TypeDecl>,
     pub global_decls: Vec<GlobalDecl>,
     pub function_decls: Vec<FunctionDecl>,
@@ -13,6 +16,7 @@ pub struct Module {
 
 #[derive(Debug)]
 pub struct TypedModule {
+    pub file_path: PathBuf,
     pub function_decls: Vec<FunctionDecl>,
     pub type_defs: TypeMap,
 }
@@ -20,6 +24,7 @@ pub struct TypedModule {
 impl TypedModule {
     pub fn from_module(m: Module) -> CHSResult<TypedModule> {
         let Module {
+            file_path,
             type_decls,
             global_decls,
             mut function_decls,
@@ -79,6 +84,7 @@ impl TypedModule {
 
         let type_defs = env.into_type_defs();
         Ok(TypedModule {
+            file_path,
             function_decls,
             type_defs,
         })

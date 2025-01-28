@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{fmt, path::PathBuf};
 
 use chs_util::{chs_error, CHSResult};
 
@@ -480,13 +480,17 @@ impl fmt::Display for Function {
 /// Represents a single fasm file
 #[derive(Debug, Default, Clone)]
 pub struct Module {
+    out_path: PathBuf,
     functions: Vec<Function>,
     data: Vec<DataDef>,
 }
 
 impl Module {
-    pub fn new() -> Module {
-        Module::default()
+    pub fn new(out_path: PathBuf) -> Module {
+        Module {
+            out_path,
+            ..Default::default()
+        }
     }
 
     pub fn push_function(&mut self, func: Function) -> &mut Function {
@@ -497,6 +501,10 @@ impl Module {
     pub fn push_data(&mut self, data: DataDef) -> &mut DataDef {
         self.data.push(data);
         self.data.last_mut().unwrap()
+    }
+
+    pub fn out_path(&self) -> &PathBuf {
+        &self.out_path
     }
 }
 

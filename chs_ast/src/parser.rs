@@ -14,6 +14,7 @@ pub struct Parser {
 impl Parser {
     pub fn new(lexer: Lexer) -> Self {
         Self {
+            module: Module {file_path: lexer.get_filename(), ..Default::default()},
             lexer,
             ..Default::default()
         }

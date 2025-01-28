@@ -21,6 +21,7 @@ pub struct FasmGenerator {
 impl FasmGenerator {
     pub fn generate(tm: TypedModule) -> CHSResult<fasm::Module> {
         let TypedModule {
+            file_path,
             function_decls,
             type_defs,
         } = tm;
@@ -31,7 +32,7 @@ impl FasmGenerator {
             datadefs: vec![],
             type_map: type_defs,
         };
-        let mut out = fasm::Module::new();
+        let mut out = fasm::Module::new(file_path.with_extension("asm"));
 
         for func_decl in function_decls {
             let func = gen.generate_function(func_decl)?;
@@ -210,13 +211,13 @@ impl FasmGenerator {
             op,
             left,
             right,
-            ttype
+            ttype: _
         } = binop;
         let lhs = self.generate_expression(func, left)?.unwrap();
         if !matches!(lhs, Value::Register(Register::Rax)) {
             func.push_instr(Instr::Mov(Value::Register(Register::Rax), lhs));
         }
-        let _size = dbg!(SizeOperator::from_chstype(ttype.as_ref().unwrap(), &self.type_map)?);
+        // let _size = SizeOperator::from_chstype(ttype.as_ref().unwrap(), &self.type_map)?;
         let rhs = self.generate_expression(func, right)?.unwrap();
         match op {
             Operator::Plus => {
