@@ -1,27 +1,39 @@
-# **CHS programing language**
+# CHS Programming Language
 
-CHS is a statically type, native programming language.
+CHS is a statically typed, native programming language for experimentation.
 
-## Development Milestones
+## Current Status
 
-- [x] Compiled to native code (x86_64-linux)
-- [x] Statically typed
-- [x] [Fasm](https://flatassembler.net/) as compiler backend
+The CHS compiler is currently functional, allowing for basic program compilation and execution. However, the language is still under active development.
 
-## Examples
+## Design Goals
 
-- Hello, World:
+- **Simplicity:** CHS aims to be easy to learn and use.
+- **Explicitness:** The language promotes clear and explicit programming practices, making code more readable and maintainable.
+- **Extensibility:** CHS provides a foundation for experimentation and allows for the development of domain-specific extensions.
 
-```chs
-fn main()
-  msg := "Hello, World\n"
-  syscall(1, 1, msg, len(msg))
-end
-```
+## Key Features
 
-## Quick Start
+- **Statically Typed:** CHS incorporates a robust static type system with type inference, inspired by the ML family of languages, enhancing code safety and reliability.
+- **Metaprogramming (Planned):** CHS aims to support metaprogramming capabilities, allowing developers to generate code at compile time, enabling powerful code generation and optimization techniques.
+- **Compile-Time Memory Management (Planned):** CHS plans to integrate a compile-time memory management system, similar to Rust, to improve memory safety and performance.
 
-### Building from source
+## Limitations
+
+- **Limited Practicality:** The current version lacks a module system and a standard library, which limits its practical usability.
+- **Metaprogramming:** The metaprogramming system is currently planned and not yet implemented.
+
+## Roadmap
+
+- [x] Native code compiler (x86_64-linux)
+- [x] Statically typed and type inference
+- [ ] Module System: Implement a robust module system to support code organization and reusability.
+- [ ] Standard Library: Develop a comprehensive standard library providing essential functions and data structures.
+- [ ] Metaprogramming System: Implement the planned metaprogramming capabilities, enabling code generation and optimization.
+
+## Getting Started
+
+### Building from Source:
 
 Install [Rust](https://www.rust-lang.org/) and [fasm](https://flatassembler.net/) make sure it's available in `$PATH`.
 
@@ -30,27 +42,40 @@ $ make release
 $ cp -v target/release/chs .
 ```
 
-### Testing
+### Testing:
 
-- TODO
+- No support yet
+        
+### Usage:
 
-### Usage
+```console
+$ ./chs
+USAGE: target/debug/chs <COMMAND> [OPTIONS]
+COMMANDS:
+      help         Print this message
+      compile      Compile a program: chs compile <file.chs>
+```
 
-- TODO
+### Editor Support:
 
-### Editor Support
-
-- TODO
+- No support yet
 
 ## Language Reference
 
-What the language supports?
+### Examples
 
-TODO
-
-### Type Checking and Inference
-
-TODO
+- Hello, World:
+    
+```chs
+fn main()
+  msg := "Hello, World\n"
+  syscall(1, 1, msg, len(msg))
+end
+```
+### Description    
+  TODO 
+### Type system overview 
+  TODO
 
 ## License
 
