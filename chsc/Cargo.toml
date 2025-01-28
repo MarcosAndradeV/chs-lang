@@ -1,5 +1,5 @@
 [package]
-name = "chs"
+name = "chsc"
 version = "0.1.0"
 edition = "2021"
 
@@ -8,3 +8,7 @@ chs_lexer = { path = "../chs_lexer/" }
 chs_ast = { path = "../chs_ast/" }
 chs_util = { path = "../chs_util/" }
 chs_codegen = {path = "../chs_codegen"}
+
+[[bin]]
+name = "chs"
+path = "bin/chs.rs"

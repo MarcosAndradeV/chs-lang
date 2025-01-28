@@ -1,6 +1,6 @@
 [workspace]
 members = [
-    "chs",
+    "chsc",
     "chs_lexer",
     "chs_ast",
     "chs_types",
