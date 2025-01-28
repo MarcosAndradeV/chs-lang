@@ -187,6 +187,7 @@ impl Parser {
                         op: Operator::from_token(&token, true)?,
                         loc: token.loc,
                         left: expr,
+                        ttype: None,
                     }
                     .into(),
                 )
@@ -198,6 +199,7 @@ impl Parser {
                         op: Operator::from_token(&token, true)?,
                         loc: token.loc,
                         left: expr,
+                        ttype: None
                     }
                     .into(),
                 )
@@ -263,6 +265,7 @@ impl Parser {
                 op,
                 right,
                 left,
+                ttype: None
             }
             .into(),
         ))

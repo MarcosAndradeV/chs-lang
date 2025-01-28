@@ -20,13 +20,22 @@ impl CHSType {
         if self == other {return true;}
         match (self, other) {
             (CHSType::Pointer(a), CHSType::Pointer(b)) => {
-                matches!(**a, CHSType::Void) || matches!(**b, CHSType::Void)
+                a.is_void_pointer() || b.is_void_pointer()
             }
+            (CHSType::Pointer(a), CHSType::String) if **a == CHSType::Char => true,
             (CHSType::Alias(a), CHSType::Alias(b)) => a == b,
             (CHSType::Alias(a), b) => env.get(a).is_some_and(|a| a.equivalent(b, env)),
             (a, CHSType::Alias(b)) => env.get(b).is_some_and(|b| b.equivalent(a, env)),
             (a, b) => a == b,
         }
+    }
+
+    pub fn is_pointer(&self) -> bool {
+        matches!(self, Self::Pointer(..))
+    }
+
+    pub fn is_void_pointer(&self) -> bool {
+        matches!(self, Self::Pointer(a) if **a == Self::Void)
     }
 }
 
@@ -103,5 +112,6 @@ impl<'a> TypeEnv<'a> {
 }
 
 pub trait InferType {
+    // TODO: add `hint: Option<CHSType>`
     fn infer<'a>(&'a mut self, env: &mut TypeEnv<'a>) -> CHSResult<CHSType>;
 }

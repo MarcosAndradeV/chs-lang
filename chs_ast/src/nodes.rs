@@ -264,20 +264,74 @@ impl chs_types::InferType for Expression {
                 Ok(CHSType::Void)
             }
             Expression::Binop(e) => {
-                let expect = e.left.infer(env)?;
-                let actual = e.right.infer(env)?;
-                if !expect.equivalent(&actual, env) {
-                    chs_error!(
-                        "Argument type mismatch. Expect: {:?}  Actual: {:?}",
-                        expect,
-                        actual
-                    );
-                }
                 match e.op {
                     Operator::Eq | Operator::NEq | Operator::Gt | Operator::Lt => {
+                        let left = e.left.infer(env)?;
+                        let rigth = e.right.infer(env)?;
+                        if !left.equivalent(&rigth, env) {
+                            chs_error!(
+                                "Argument type mismatch. Expect: {:?}  Actual: {:?}",
+                                left,
+                                rigth
+                            );
+                        }
+                        e.ttype = Some(CHSType::Boolean);
                         Ok(CHSType::Boolean)
                     }
-                    Operator::Plus | Operator::Minus | Operator::Div | Operator::Mult => Ok(expect),
+                    Operator::Plus | Operator::Minus => {
+                        let left = e.left.infer(env)?;
+                        let rigth = e.right.infer(env)?;
+                        match (left.is_pointer(), rigth.is_pointer()) {
+                            (true, true) => {
+                                chs_error!(
+                                    "Not defined for {:?} {:?} {:?}",
+                                    left,
+                                    e.op,
+                                    rigth
+                                );
+                            }
+                            (true, false) => {
+                                e.ttype = Some(left.clone());
+                                Ok(left)
+                            }
+                            (false, true) => {
+                                e.ttype = Some(rigth.clone());
+                                Ok(rigth)
+                            }
+                            (false, false) => {
+                                if !left.equivalent(&rigth, env) {
+                                    chs_error!(
+                                        "Argument type mismatch. Expect: {:?}  Actual: {:?}",
+                                        left,
+                                        rigth
+                                    );
+                                }
+                                e.ttype = Some(left.clone());
+                                Ok(left)
+                            }
+                        }
+                    }
+                    Operator::Div | Operator::Mult => {
+                        let left = e.left.infer(env)?;
+                        let rigth = e.right.infer(env)?;
+                        if left.is_pointer() && rigth.is_pointer() {
+                            chs_error!(
+                                "Not defined for {:?} {:?} {:?}",
+                                left,
+                                e.op,
+                                rigth
+                            );
+                        }
+                        if !left.equivalent(&rigth, env) {
+                            chs_error!(
+                                "Argument type mismatch. Expect: {:?}  Actual: {:?}",
+                                left,
+                                rigth
+                            );
+                        }
+                        e.ttype = Some(left.clone());
+                        Ok(left)
+                    },
                     _ => unreachable!("Not a binary operator"),
                 }
             }
@@ -298,9 +352,7 @@ impl chs_types::InferType for Expression {
                     Operator::Negate => return Ok(expect),
                     Operator::Deref => {
                         if let CHSType::Pointer(ptr) = expect {
-                            if *ptr == CHSType::Char {
-                                e.op = Operator::DerefByte;
-                            }
+                            e.ttype = Some(*ptr.clone());
                             return Ok(*ptr);
                         } else {
                             chs_error!("Cannot deref `{:?}` type", expect)
@@ -431,6 +483,7 @@ pub struct Binop {
     pub op: Operator,
     pub left: Expression,
     pub right: Expression,
+    pub ttype: Option<CHSType>,
 }
 
 #[derive(Debug)]
@@ -438,6 +491,7 @@ pub struct Unop {
     pub loc: Loc,
     pub op: Operator,
     pub left: Expression,
+    pub ttype: Option<CHSType>
 }
 
 #[derive(Debug)]
@@ -459,7 +513,6 @@ pub enum Operator {
     LNot,
     Refer,
     Deref,
-    DerefByte,
 }
 
 impl Operator {
@@ -492,7 +545,7 @@ impl Operator {
             Operator::Lt | Operator::Gt => Precedence::LessGreater,
             Operator::Eq | Operator::NEq | Operator::Or | Operator::And => Precedence::Equals,
             Operator::Negate | Operator::LNot => Precedence::Prefix,
-            Operator::Refer | Operator::Deref | Operator::DerefByte => Precedence::Prefix,
+            Operator::Refer | Operator::Deref => Precedence::Prefix,
             // _ => Precedence::Lowest,
         }
     }

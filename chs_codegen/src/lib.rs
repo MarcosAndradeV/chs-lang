@@ -7,7 +7,7 @@ use chs_ast::nodes::{
     TypedModule, Unop, WhileExpression,
 };
 use chs_types::TypeMap;
-use chs_util::{CHSError, CHSResult};
+use chs_util::{chs_error, CHSError, CHSResult};
 use fasm::{Cond, DataDef, DataDirective, DataExpr, Instr, Register, SizeOperator, Value};
 
 pub struct FasmGenerator {
@@ -210,11 +210,13 @@ impl FasmGenerator {
             op,
             left,
             right,
+            ttype
         } = binop;
         let lhs = self.generate_expression(func, left)?.unwrap();
         if !matches!(lhs, Value::Register(Register::Rax)) {
             func.push_instr(Instr::Mov(Value::Register(Register::Rax), lhs));
         }
+        let _size = dbg!(SizeOperator::from_chstype(ttype.as_ref().unwrap(), &self.type_map)?);
         let rhs = self.generate_expression(func, right)?.unwrap();
         match op {
             Operator::Plus => {
@@ -279,7 +281,7 @@ impl FasmGenerator {
         func: &mut fasm::Function,
         unop: &Unop,
     ) -> Result<Option<Value>, CHSError> {
-        let Unop { loc: _, op, left } = unop;
+        let Unop { loc: _, op, left, ttype} = unop;
         let lhs = self.generate_expression(func, left)?.unwrap();
         match op {
             Operator::Negate => {
@@ -291,16 +293,14 @@ impl FasmGenerator {
             Operator::Refer => {
                 let lhs = match lhs {
                     Value::Const(_) => {
-                        let size = func.allocate_stack(8);
-                        let memory = Value::Memory(SizeOperator::Qword, format!("rbp-{}", size));
-                        func.push_instr(Instr::Mov(memory.clone(), lhs));
-                        memory
+                        chs_error!("Cannot take a reference to a literal")
                     }
                     _ => lhs,
                 };
                 func.push_instr(Instr::Lea(Value::Register(Register::Rax), lhs));
             }
             Operator::Deref => {
+                let size = SizeOperator::from_chstype(ttype.as_ref().unwrap(), &self.type_map)?;
                 let lhs = match lhs {
                     Value::Register(_) => lhs,
                     _ => {
@@ -310,21 +310,7 @@ impl FasmGenerator {
                 };
                 func.push_instr(Instr::Mov(
                     Value::Register(Register::Rax),
-                    Value::Memory(SizeOperator::Qword, lhs.to_string()),
-                ));
-            }
-            Operator::DerefByte => {
-                let lhs = match lhs {
-                    Value::Register(_) => lhs,
-                    _ => {
-                        func.push_instr(Instr::Mov(Value::Register(Register::Rbx), lhs));
-                        Value::Register(Register::Rbx)
-                    }
-                };
-                func.push_instr(Instr::Xor(lhs.clone(), lhs.clone()));
-                func.push_instr(Instr::Mov(
-                    Value::Register(Register::Al),
-                    Value::Memory(SizeOperator::Byte, lhs.to_string()),
+                    Value::Memory(size, lhs.to_string()),
                 ));
             }
             _ => unreachable!(),
