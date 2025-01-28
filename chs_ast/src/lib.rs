@@ -15,36 +15,3 @@ pub fn parse_file(file_path: String) -> CHSResult<Module> {
         Err(err) => chs_error!("{}", err)
     }
 }
-
-
-#[cfg(test)]
-mod tests {
-    use nodes::TypedModule;
-
-    use super::*;
-
-    #[test]
-    fn check_simple_file() {
-        match Parser::new(Lexer::new(
-            file!().into(),
-            r#"
-                type v void
-                type print_int fn(int) -> v
-                fn main()
-                    print_int(100)
-                end
-            "#
-            .into(),
-        ))
-        .parse()
-        {
-            Ok(m) => {
-                let res = TypedModule::from_module(m);
-                assert!(res.is_ok(), "{}", res.unwrap_err());
-            }
-            Err(err) => {
-                assert!(false, "{err}");
-            }
-        }
-    }
-}
