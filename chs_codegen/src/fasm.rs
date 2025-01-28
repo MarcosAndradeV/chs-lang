@@ -363,7 +363,13 @@ impl fmt::Display for Instr {
             Self::Test(dst, src) => write!(f, "test {dst}, {src}"),
             Instr::J(cond, label) => write!(f, "j{cond} .{label}"), // local labels
             Instr::Jmp(label) => write!(f, "jmp .{label}"),         // local labels
-            Instr::Call(label) => write!(f, "call {label}"),
+            Instr::Call(label) => {
+                if let Value::Label(..) = label {
+                    write!(f, "call _{label}")
+                } else {
+                    write!(f, "call {label}")
+                }
+            }
             Instr::Ret => write!(f, "ret"),
         }
     }
@@ -454,7 +460,7 @@ impl Function {
 impl fmt::Display for Function {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         writeln!(f, ";; function",)?;
-        writeln!(f, "{}:", self.name)?;
+        writeln!(f, "_{}:", self.name)?;
 
         writeln!(f, "\tpush rbp")?;
         writeln!(f, "\tmov rbp, rsp")?;
@@ -515,7 +521,7 @@ impl fmt::Display for Module {
 
         writeln!(f, "segment executable")?;
         writeln!(f, "_start:")?;
-        writeln!(f, "\tcall main")?;
+        writeln!(f, "\tcall _main")?;
         writeln!(f, "\tmov rax, 60")?;
         writeln!(f, "\tmov rdi, 0")?;
         writeln!(f, "\tsyscall")?;
