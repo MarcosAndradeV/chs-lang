@@ -196,17 +196,29 @@ impl DataDef {
 
 impl fmt::Display for DataDef {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{}: {} {}",
-            self.name,
-            self.directive,
-            self.items
-                .iter()
-                .map(|expr| format!("{}", expr))
-                .collect::<Vec<String>>()
-                .join(", ")
-        )
+        write!(f, "{}:", self.name)?;
+        write!(f, " {} ", self.directive)?;
+        let mut line = self
+            .items
+            .iter()
+            .map(|expr| format!("{}", expr))
+            .collect::<Vec<String>>()
+            .join(", ");
+        let mut limit = 0;
+        for i in 0..line.len() {
+            if limit < 100 {
+                limit += 1;
+            } else {
+                if line.as_bytes()[i] != b' ' {
+                    limit += 1;
+                    continue;
+                }
+                line.insert_str(i, "\\\n");
+                limit = 0;
+            }
+        }
+        write!(f, "{}", line)?;
+        Ok(())
     }
 }
 
@@ -247,7 +259,17 @@ pub enum DataExpr {
 impl fmt::Display for DataExpr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::Str(string) => write!(f, "\"{}\"", string),
+            Self::Str(string) => {
+                write!(
+                    f,
+                    "{}",
+                    string
+                        .bytes()
+                        .map(|expr| format!("{}", expr))
+                        .collect::<Vec<String>>()
+                        .join(", ")
+                )
+            }
             Self::Const(val) => write!(f, "{}", val),
         }
     }

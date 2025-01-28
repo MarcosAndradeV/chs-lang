@@ -50,9 +50,8 @@ impl Default for TokenKind {
 impl TokenKind {
     fn from_word_or_keyword(value: &String) -> Self {
         match value.as_str() {
-            "fn" | "if" | "else" | "while" | "true" | "false" | "return" | "distinct" | "set" | "type" | "end" | "len" => {
-                Self::Keyword
-            }
+            "fn" | "if" | "else" | "while" | "true" | "false" | "return" | "distinct" | "set"
+            | "type" | "end" | "len" | "syscall" => Self::Keyword,
             _ => Self::Ident,
         }
     }
@@ -91,7 +90,7 @@ impl fmt::Display for TokenKind {
             TokenKind::Slash => write!(f, "Slash"),
             TokenKind::Eq => write!(f, "Eq"),
             TokenKind::Comment => write!(f, "Comment"),
-            TokenKind::Or  => write!(f, "Or"),
+            TokenKind::Or => write!(f, "Or"),
             TokenKind::And => write!(f, "And"),
             TokenKind::Mod => write!(f, "Mod"),
             TokenKind::Gt => write!(f, "Gt"),

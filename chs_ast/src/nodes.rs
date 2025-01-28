@@ -116,6 +116,7 @@ pub enum Expression {
     Binop(Box<Binop>),
     Unop(Box<Unop>),
     Call(Box<Call>),
+    Syscall(Box<Syscall>),
     Len(Box<Expression>),
     VarDecl(Box<VarDecl>),
     Assign(Box<Assign>),
@@ -131,6 +132,25 @@ impl chs_types::InferType for Expression {
             Expression::ExpressionList(_) => todo!("type infer for expression lists"),
             Expression::ConstExpression(e) => e.infer(env),
             Expression::Group(e) => e.infer(env),
+            Expression::Syscall(e) => {
+                if e.arity > 7 && e.arity == 0 {
+                    chs_error!("Syscall arity mismatch");
+                }
+                for (i, actual) in e.args.iter_mut().enumerate() {
+                    let actual  = actual.infer(env)?;
+                    if i == 0 {
+                        let expect = CHSType::Int;
+                        if !expect.equivalent(&actual, env) {
+                            chs_error!(
+                                "Argument type mismatch. Expect: {:?}  Actual: {:?}",
+                                expect,
+                                actual
+                            );
+                        }
+                    }
+                }
+                Ok(CHSType::Int)
+            }
             Expression::Call(call) => match call.caller.infer(env)? {
                 CHSType::Function(ref mut fn_args, ret_type) => {
                     if fn_args.len() != call.args.len() {
@@ -395,6 +415,13 @@ pub struct VarDecl {
 pub struct Call {
     pub loc: Loc,
     pub caller: Expression,
+    pub args: Vec<Expression>,
+}
+
+#[derive(Debug)]
+pub struct Syscall {
+    pub loc: Loc,
+    pub arity: usize,
     pub args: Vec<Expression>,
 }
 

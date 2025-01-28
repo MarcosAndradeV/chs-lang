@@ -75,26 +75,28 @@ impl Parser {
                         args.clone().into_iter().map(|(_, t)| t).collect(),
                         ret_type.clone().into(),
                     );
-                    self.module
-                        .global_decls
-                        .push(GlobalDecl { loc: loc.clone(), name: name.clone(), ttype: fn_type });
-                    self.module
-                        .function_decls
-                        .push(FunctionDecl {
-                            loc,
-                            name,
-                            args,
-                            ret_type,
-                            body,
-                        });
+                    self.module.global_decls.push(GlobalDecl {
+                        loc: loc.clone(),
+                        name: name.clone(),
+                        ttype: fn_type,
+                    });
+                    self.module.function_decls.push(FunctionDecl {
+                        loc,
+                        name,
+                        args,
+                        ret_type,
+                        body,
+                    });
                 }
                 Keyword if token.val_eq("type") => {
                     let token = self.expect_kind(Ident)?;
                     let name = token.value;
                     let chs_type = self.parse_type()?;
-                    self.module
-                        .type_decls
-                        .push(TypeDecl { loc: token.loc, name, ttype: chs_type });
+                    self.module.type_decls.push(TypeDecl {
+                        loc: token.loc,
+                        name,
+                        ttype: chs_type,
+                    });
                 }
                 _ => {
                     chs_error!(
@@ -141,7 +143,7 @@ impl Parser {
                     loc,
                     assined,
                     value,
-                    ttype: None
+                    ttype: None,
                 }))
             }
             Keyword if token.val_eq("if") => {
@@ -165,6 +167,18 @@ impl Parser {
             }
             Keyword if token.val_eq("len") => {
                 Expression::Len(Box::new(self.parse_expression(Precedence::Prefix)?))
+            }
+            Keyword if token.val_eq("syscall") => {
+                let ptoken = self.next();
+                let args = self.parse_expr_list(|tk| tk.kind == ParenClose)?;
+                Expression::Syscall(
+                    Syscall {
+                        loc: ptoken.loc,
+                        arity: args.len(),
+                        args,
+                    }
+                    .into(),
+                )
             }
             Ampersand | Asterisk => {
                 let expr = self.parse_expression(Precedence::Prefix)?;
@@ -275,7 +289,7 @@ impl Parser {
                                     token.value,
                                 )),
                                 value: self.parse_expression(Precedence::Lowest)?,
-                                ttype: None
+                                ttype: None,
                             }
                             .into(),
                         ));
@@ -421,7 +435,7 @@ impl Parser {
         use chs_lexer::TokenKind::*;
         let ttoken = self.next();
         let ttype = match ttoken.kind {
-            Ident if ttoken.val_eq("int")  => CHSType::Int,
+            Ident if ttoken.val_eq("int") => CHSType::Int,
             Ident if ttoken.val_eq("uint") => CHSType::UInt,
             Ident if ttoken.val_eq("void") => CHSType::Void,
             Ident if ttoken.val_eq("bool") => CHSType::Boolean,

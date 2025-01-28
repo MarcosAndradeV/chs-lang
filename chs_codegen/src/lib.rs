@@ -3,7 +3,7 @@ pub mod fasm;
 use std::collections::HashMap;
 
 use chs_ast::nodes::{
-    self, Binop, ConstExpression, Expression, IfElseExpression, IfExpression, Operator,
+    self, Binop, ConstExpression, Expression, IfElseExpression, IfExpression, Operator, Syscall,
     TypedModule, Unop, WhileExpression,
 };
 use chs_types::TypeMap;
@@ -97,20 +97,20 @@ impl FasmGenerator {
                 self.datadefs.push(DataDef {
                     name: format!("{}_len", name.clone()),
                     directive: DataDirective::Dq,
-                    items: vec![
-                        DataExpr::Const(v.len() as u64),
-                    ],
+                    items: vec![DataExpr::Const(v.len() as u64)],
                 });
                 self.datadefs.push(DataDef {
                     name: name.clone(),
                     directive: DataDirective::Db,
-                    items: vec![
-                        DataExpr::Str(v.clone()),
-                    ],
+                    items: vec![DataExpr::Str(v.clone())],
                 });
                 Ok(Some(Value::Label(name)))
             }
             Expression::VarDecl(v) => {
+                if v.name == "_" {
+                    self.generate_expression(func, &v.value)?.unwrap();
+                    return Ok(None);
+                }
                 let size = SizeOperator::from_chstype(
                     v.ttype.as_ref().expect("Expected type"),
                     &self.type_map,
@@ -181,11 +181,12 @@ impl FasmGenerator {
                 };
                 func.push_instr(Instr::Mov(
                     Value::Register(Register::Rax),
-                    Value::Memory(SizeOperator::Qword, format!("{}-8", src))
+                    Value::Memory(SizeOperator::Qword, format!("{}-8", src)),
                 ));
                 Ok(Some(Value::Register(Register::Rax)))
-            },
+            }
             Expression::Group(e) => self.generate_expression(func, e),
+            Expression::Syscall(e) => self.generate_syscall(func, e),
             _ => todo!("generation for expression {:?}", expr),
         }
     }
@@ -292,12 +293,10 @@ impl FasmGenerator {
                     Value::Const(_) => {
                         let size = func.allocate_stack(8);
                         let memory = Value::Memory(SizeOperator::Qword, format!("rbp-{}", size));
-                        func.push_instr(Instr::Mov(
-                            memory.clone(), lhs
-                        ));
+                        func.push_instr(Instr::Mov(memory.clone(), lhs));
                         memory
-                    },
-                    _ => lhs
+                    }
+                    _ => lhs,
                 };
                 func.push_instr(Instr::Lea(Value::Register(Register::Rax), lhs));
             }
@@ -427,5 +426,28 @@ impl FasmGenerator {
         func.push_instr(Instr::Jmp(Value::Label(lcond)));
         func.push_block(after);
         Ok(None)
+    }
+
+    fn generate_syscall(
+        &mut self,
+        func: &mut fasm::Function,
+        e: &Syscall,
+    ) -> CHSResult<Option<Value>> {
+        let mut args = e.args.iter();
+        let n = args.next().unwrap();
+        let cc = Register::get_syscall_call_convention();
+        for (i, arg) in args.enumerate().rev() {
+            let reg = cc[i];
+            let src = self.generate_expression(func, arg)?.unwrap();
+            func.push_instr(Instr::Mov(Value::Register(reg.clone()), src));
+        }
+        match self.generate_expression(func, n)?.unwrap() {
+            Value::Register(Register::Rax) => {}
+            n => {
+                func.push_instr(Instr::Mov(Value::Register(Register::Rax), n));
+            }
+        }
+        func.push_instr(Instr::Syscall);
+        Ok(Some(Value::Register(Register::Rax)))
     }
 }
