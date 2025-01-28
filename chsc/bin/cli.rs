@@ -10,34 +10,28 @@ fn help(program: &str, _: &mut Args) -> CHSResult<()> {
 }
 
 fn compile(program: &str, args: &mut Args) -> CHSResult<()> {
-    // 1. Get file path from arguments
     let file_path = args.next().expect("Expected file path for compile command.");
 
-    // 2. Parse the file using chs_ast
     let module = match chs_ast::parse_file(file_path) {
         Ok(module) => module,
-        Err(err) => chs_error!(err),
+        Err(err) => return Err(err),
     };
 
-    // 3. Convert parsed module to TypedModule
     let typed_module = match TypedModule::from_module(module) {
         Ok(typed_module) => typed_module,
-        Err(err) => chs_error!(err),
+        Err(err) => return Err(err),
     };
 
-    // 4. Generate Fasm code
     let fasm_code = match FasmGenerator::generate(typed_module) {
         Ok(code) => code,
-        Err(err) => chs_error!(err),
+        Err(err) => return Err(err),
     };
 
-    // 5. Write Fasm code to output file
     let output_path = fasm_code.out_path();
     let mut out_file = File::create(output_path).map_err(|err| CHSError(err.to_string()))?;
     write!(out_file, "{}", fasm_code).map_err(|err| CHSError(err.to_string()))?;
     println!("[INFO] Generating {}", output_path.display());
 
-    // 6. Call Fasm assembler
     let mut fasm_process = process::Command::new("fasm")
         .arg(output_path)
         .arg(output_path.with_extension(""))
