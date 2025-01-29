@@ -153,7 +153,8 @@ impl chs_types::InferType for Expression {
                         let expect = CHSType::Int;
                         if !expect.equivalent(&actual, env) {
                             chs_error!(
-                                "Argument type mismatch. Expect: {:?}  Actual: {:?}",
+                                "{} Argument type mismatch. Expect: {:?}  Actual: {:?}",
+                                e.loc,
                                 expect,
                                 actual
                             );
@@ -171,7 +172,8 @@ impl chs_types::InferType for Expression {
                         let actual = actual.infer(env)?;
                         if !expect.equivalent(&actual, &env) {
                             chs_error!(
-                                "Argument type mismatch. Expect: {:?}  Actual: {:?}",
+                                "{} Argument type mismatch. Expect: {:?}  Actual: {:?}",
+                                call.loc,
                                 expect,
                                 actual
                             );
@@ -194,7 +196,8 @@ impl chs_types::InferType for Expression {
                     let actual = e.value.infer(env)?;
                     if !expect.equivalent(&actual, env) {
                         chs_error!(
-                            "Argument type mismatch. Expect: {:?}  Actual: {:?}",
+                            "{} Argument type mismatch. Expect: {:?}  Actual: {:?}",
+                            e.loc,
                             expect,
                             actual
                         );
@@ -210,7 +213,8 @@ impl chs_types::InferType for Expression {
                 let actual = e.value.infer(env)?;
                 if !expect.equivalent(&actual, env) {
                     chs_error!(
-                        "Argument type mismatch. Expect: {:?}  Actual: {:?}",
+                        "{} Argument type mismatch. Expect: {:?}  Actual: {:?}",
+                        e.loc,
                         expect,
                         actual
                     );
@@ -223,7 +227,8 @@ impl chs_types::InferType for Expression {
                 let actual = CHSType::Boolean;
                 if !expect.equivalent(&actual, env) {
                     chs_error!(
-                        "Argument type mismatch. Expect: {:?}  Actual: {:?}",
+                        "{} Argument type mismatch. Expect: {:?}  Actual: {:?}",
+                        e.loc,
                         expect,
                         actual
                     );
@@ -240,7 +245,8 @@ impl chs_types::InferType for Expression {
                 let actual = CHSType::Boolean;
                 if !expect.equivalent(&actual, env) {
                     chs_error!(
-                        "Argument type mismatch. Expect: {:?}  Actual: {:?}",
+                        "{} Argument type mismatch. Expect: {:?}  Actual: {:?}",
+                        e.loc,
                         expect,
                         actual
                     );
@@ -262,7 +268,8 @@ impl chs_types::InferType for Expression {
                 let actual = CHSType::Boolean;
                 if !expect.equivalent(&actual, env) {
                     chs_error!(
-                        "Argument type mismatch. Expect: {:?}  Actual: {:?}",
+                        "{} Argument type mismatch. Expect: {:?}  Actual: {:?}",
+                        e.loc,
                         expect,
                         actual
                     );
@@ -280,7 +287,8 @@ impl chs_types::InferType for Expression {
                     let rigth = e.right.infer(env)?;
                     if !left.equivalent(&rigth, env) {
                         chs_error!(
-                            "Argument type mismatch. Expect: {:?}  Actual: {:?}",
+                            "{} Argument type mismatch. Expect: {:?}  Actual: {:?}",
+                            e.loc,
                             left,
                             rigth
                         );
@@ -341,7 +349,8 @@ impl chs_types::InferType for Expression {
                         let actual = CHSType::Boolean;
                         if !expect.equivalent(&actual, env) {
                             chs_error!(
-                                "Argument type mismatch. Expect: {:?}  Actual: {:?}",
+                                "{} Argument type mismatch. Expect: {:?}  Actual: {:?}",
+                                e.loc,
                                 expect,
                                 actual
                             );

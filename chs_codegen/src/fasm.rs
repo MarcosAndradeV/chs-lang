@@ -68,7 +68,8 @@ impl SizeOperator {
     pub fn register_from_size(&self, reg: Register) -> Register {
         match (self, reg) {
             (SizeOperator::Byte, Register::Rax) => Register::Al,
-            _ => todo!(),
+            (SizeOperator::Qword, Register::Rax) => reg,
+            _ => todo!("{self}, {reg}"),
         }
     }
 }
@@ -355,7 +356,7 @@ impl fmt::Display for Instr {
             Self::Neg(val) => write!(f, "neg {val}"),
             Self::Not(val) => write!(f, "not {val}"),
             Self::Mov(dst, src) => match (dst, src) {
-                (dst, Value::Const(size, src)) => write!(f, "mov {dst}, {size} {src}"),
+                (dst, Value::Const(SizeOperator::Byte, src)) => write!(f, "mov {dst}, BYTE {src}"),
                 _ => write!(f, "mov {dst}, {src}"),
             },
             Self::Lea(dst, src) => write!(f, "lea {dst}, {src}"),

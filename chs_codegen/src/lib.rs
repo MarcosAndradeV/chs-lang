@@ -117,6 +117,7 @@ impl FasmGenerator {
                     match self.generate_expression(func, &v.casted)?.unwrap() {
                         Value::Memory(_, addr) => Value::Memory(size, addr),
                         Value::Const(_, v) => Value::Const(size, v),
+                        Value::Register(reg) => Value::Register(size.register_from_size(reg)),
                         val => val,
                     },
                 ))
@@ -275,9 +276,9 @@ impl FasmGenerator {
                 func.push_instr(Instr::Mul(Value::Register(Register::Rax), rhs));
             }
             Operator::Eq => {
-                func.push_instr(Instr::Mov(
+                func.push_instr(Instr::Xor(
                     Value::Register(Register::Rbx),
-                    Value::Const(SizeOperator::Qword, 0),
+                    Value::Register(Register::Rbx),
                 ));
                 func.push_instr(Instr::Cmp(Value::Register(Register::Rax), rhs));
                 func.push_instr(Instr::Cmove(
@@ -287,9 +288,9 @@ impl FasmGenerator {
                 ));
             }
             Operator::NEq => {
-                func.push_instr(Instr::Mov(
+                func.push_instr(Instr::Xor(
                     Value::Register(Register::Rbx),
-                    Value::Const(SizeOperator::Qword, 0),
+                    Value::Register(Register::Rbx),
                 ));
                 func.push_instr(Instr::Cmp(Value::Register(Register::Rax), rhs));
                 func.push_instr(Instr::Cmove(
@@ -299,9 +300,9 @@ impl FasmGenerator {
                 ));
             }
             Operator::Gt => {
-                func.push_instr(Instr::Mov(
+                func.push_instr(Instr::Xor(
                     Value::Register(Register::Rbx),
-                    Value::Const(SizeOperator::Qword, 0),
+                    Value::Register(Register::Rbx),
                 ));
                 func.push_instr(Instr::Cmp(Value::Register(Register::Rax), rhs));
                 func.push_instr(Instr::Cmove(
@@ -311,9 +312,9 @@ impl FasmGenerator {
                 ));
             }
             Operator::Lt => {
-                func.push_instr(Instr::Mov(
+                func.push_instr(Instr::Xor(
                     Value::Register(Register::Rbx),
-                    Value::Const(SizeOperator::Qword, 0),
+                    Value::Register(Register::Rbx),
                 ));
                 func.push_instr(Instr::Cmp(Value::Register(Register::Rax), rhs));
                 func.push_instr(Instr::Cmove(
@@ -388,7 +389,7 @@ impl FasmGenerator {
             Value::Register(Register::Rax),
             Value::Register(Register::Rax),
         ));
-        func.push_instr(Instr::J(Cond::Z, Value::Label(l.clone())));
+        func.push_instr(Instr::J(Cond::NZ, Value::Label(l.clone())));
         self.scopes.push(HashMap::new());
         for expr in body {
             self.generate_expression(func, expr)?;
@@ -421,7 +422,7 @@ impl FasmGenerator {
             Value::Register(Register::Rax),
             Value::Register(Register::Rax),
         ));
-        func.push_instr(Instr::J(Cond::Z, Value::Label(l1.clone())));
+        func.push_instr(Instr::J(Cond::NZ, Value::Label(l1.clone())));
         self.scopes.push(HashMap::new());
         for expr in body {
             self.generate_expression(func, expr)?;

@@ -77,13 +77,15 @@ impl<'a> TypeEnv<'a> {
             .insert(k, v)
     }
     pub fn get(&self, k: &String) -> Option<&&CHSType> {
-        match self.locals
-            .last()
-            .and_then(|s| s.get(k)) {
-                Some(CHSType::Alias(ref sym)) => self.get(sym),
-                None => self.globals.get(k),
-                other => other
+        for scope in self.locals.iter().rev() {
+            let get = scope.get(k);
+            match get {
+                Some(CHSType::Alias(_)) => todo!("Get alias type"), // return self.get(sym),
+                Some(_) => return get,
+                _ => ()
             }
+        }
+        self.globals.get(k)
     }
     pub fn locals_insert(&mut self, k: &'a String, v: &'a CHSType) -> Option<&CHSType> {
         self.locals
