@@ -64,6 +64,13 @@ impl SizeOperator {
             chs_types::CHSType::Void => chs_error!("TODO"),
         }
     }
+
+    pub fn register_from_size(&self, reg: Register) -> Register {
+        match (self, reg) {
+            (SizeOperator::Byte, Register::Rax) => Register::Al,
+            _ => todo!(),
+        }
+    }
 }
 
 impl fmt::Display for SizeOperator {
@@ -156,7 +163,7 @@ pub enum Value {
     /// Displacement: An integral offset. (normally limited to 32 bits even in 64-bit mode but can be 64-bits with a few select encodings)
     Memory(SizeOperator, String),
     Register(Register),
-    Const(i64),
+    Const(SizeOperator, i64),
     Label(String),
 }
 
@@ -172,7 +179,7 @@ impl fmt::Display for Value {
             Self::Memory(size, addrs) => write!(f, "{} [{}]", size, addrs),
             Self::Label(label) => write!(f, "{}", label),
             Self::Register(name) => write!(f, "{}", name),
-            Self::Const(value) => write!(f, "{}", value),
+            Self::Const(_, value) => write!(f, "{}", value),
         }
     }
 }
@@ -347,7 +354,10 @@ impl fmt::Display for Instr {
             Self::Dec(val) => write!(f, "dec {val}"),
             Self::Neg(val) => write!(f, "neg {val}"),
             Self::Not(val) => write!(f, "not {val}"),
-            Self::Mov(dst, src) => write!(f, "mov {dst}, {src}"),
+            Self::Mov(dst, src) => match (dst, src) {
+                (dst, Value::Const(size, src)) => write!(f, "mov {dst}, {size} {src}"),
+                _ => write!(f, "mov {dst}, {src}"),
+            },
             Self::Lea(dst, src) => write!(f, "lea {dst}, {src}"),
             Self::Push(src) => write!(f, "push {src}"),
             Self::Pop(dst) => write!(f, "pop {dst}"),

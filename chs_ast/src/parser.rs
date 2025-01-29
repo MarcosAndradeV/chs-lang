@@ -169,6 +169,14 @@ impl Parser {
             Keyword if token.val_eq("len") => {
                 Expression::Len(Box::new(self.parse_expression(Precedence::Prefix)?))
             }
+            Keyword if token.val_eq("type") => {
+                let loc = token.loc;
+                self.expect_kind(ParenOpen)?;
+                let ttype = self.parse_type()?;
+                self.expect_kind(ParenClose)?;
+                let casted = self.parse_expression(Precedence::Lowest)?;
+                Expression::Cast(Box::new(Cast { loc, ttype, casted }))
+            }
             Keyword if token.val_eq("syscall") => {
                 let ptoken = self.next();
                 let args = self.parse_expr_list(|tk| tk.kind == ParenClose)?;

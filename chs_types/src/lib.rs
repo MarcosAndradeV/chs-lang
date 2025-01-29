@@ -17,25 +17,27 @@ pub enum CHSType {
 
 impl CHSType {
     pub fn equivalent(&self, other: &Self, env: &TypeEnv) -> bool {
-        if self == other {return true;}
         match (self, other) {
-            (CHSType::Pointer(a), CHSType::Pointer(b)) => {
-                a.is_void_pointer() || b.is_void_pointer()
-            }
-            (CHSType::Pointer(a), CHSType::String) if **a == CHSType::Char => true,
+            (a, b) if a == b => true,
             (CHSType::Alias(a), CHSType::Alias(b)) => a == b,
+            (CHSType::Pointer(a), CHSType::Pointer(b)) => a.is_void() || b.is_void(),
+            (CHSType::Pointer(a), CHSType::String) if **a == CHSType::Char => true,
             (CHSType::Alias(a), b) => env.get(a).is_some_and(|a| a.equivalent(b, env)),
             (a, CHSType::Alias(b)) => env.get(b).is_some_and(|b| b.equivalent(a, env)),
-            (a, b) => a == b,
+            _ => false
         }
     }
 
     pub fn is_pointer(&self) -> bool {
-        matches!(self, Self::Pointer(..))
+        matches!(self, Self::Pointer(..) | Self::String)
     }
 
     pub fn is_void_pointer(&self) -> bool {
         matches!(self, Self::Pointer(a) if **a == Self::Void)
+    }
+
+    pub fn is_void(&self) -> bool {
+        matches!(self, Self::Void)
     }
 }
 

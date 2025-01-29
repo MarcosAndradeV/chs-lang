@@ -122,6 +122,7 @@ pub enum Expression {
     Binop(Box<Binop>),
     Unop(Box<Unop>),
     Call(Box<Call>),
+    Cast(Box<Cast>),
     Syscall(Box<Syscall>),
     Len(Box<Expression>),
     VarDecl(Box<VarDecl>),
@@ -138,12 +139,16 @@ impl chs_types::InferType for Expression {
             Expression::ExpressionList(_) => todo!("type infer for expression lists"),
             Expression::ConstExpression(e) => e.infer(env),
             Expression::Group(e) => e.infer(env),
+            Expression::Cast(e) => {
+                e.casted.infer(env)?;
+                Ok(e.ttype.clone())
+            }
             Expression::Syscall(e) => {
                 if e.arity > 7 && e.arity == 0 {
                     chs_error!("Syscall arity mismatch");
                 }
                 for (i, actual) in e.args.iter_mut().enumerate() {
-                    let actual  = actual.infer(env)?;
+                    let actual = actual.infer(env)?;
                     if i == 0 {
                         let expect = CHSType::Int;
                         if !expect.equivalent(&actual, env) {
@@ -269,78 +274,66 @@ impl chs_types::InferType for Expression {
                 env.locals_pop();
                 Ok(CHSType::Void)
             }
-            Expression::Binop(e) => {
-                match e.op {
-                    Operator::Eq | Operator::NEq | Operator::Gt | Operator::Lt => {
-                        let left = e.left.infer(env)?;
-                        let rigth = e.right.infer(env)?;
-                        if !left.equivalent(&rigth, env) {
-                            chs_error!(
-                                "Argument type mismatch. Expect: {:?}  Actual: {:?}",
-                                left,
-                                rigth
-                            );
-                        }
-                        e.ttype = Some(CHSType::Boolean);
-                        Ok(CHSType::Boolean)
+            Expression::Binop(e) => match e.op {
+                Operator::Eq | Operator::NEq | Operator::Gt | Operator::Lt => {
+                    let left = e.left.infer(env)?;
+                    let rigth = e.right.infer(env)?;
+                    if !left.equivalent(&rigth, env) {
+                        chs_error!(
+                            "Argument type mismatch. Expect: {:?}  Actual: {:?}",
+                            left,
+                            rigth
+                        );
                     }
-                    Operator::Plus | Operator::Minus => {
-                        let left = e.left.infer(env)?;
-                        let rigth = e.right.infer(env)?;
-                        match (left.is_pointer(), rigth.is_pointer()) {
-                            (true, true) => {
-                                chs_error!(
-                                    "Not defined for {:?} {:?} {:?}",
-                                    left,
-                                    e.op,
-                                    rigth
-                                );
-                            }
-                            (true, false) => {
-                                e.ttype = Some(left.clone());
-                                Ok(left)
-                            }
-                            (false, true) => {
-                                e.ttype = Some(rigth.clone());
-                                Ok(rigth)
-                            }
-                            (false, false) => {
-                                if !left.equivalent(&rigth, env) {
-                                    chs_error!(
-                                        "Argument type mismatch. Expect: {:?}  Actual: {:?}",
-                                        left,
-                                        rigth
-                                    );
-                                }
-                                e.ttype = Some(left.clone());
-                                Ok(left)
-                            }
-                        }
-                    }
-                    Operator::Div | Operator::Mult => {
-                        let left = e.left.infer(env)?;
-                        let rigth = e.right.infer(env)?;
-                        if left.is_pointer() && rigth.is_pointer() {
-                            chs_error!(
-                                "Not defined for {:?} {:?} {:?}",
-                                left,
-                                e.op,
-                                rigth
-                            );
-                        }
-                        if !left.equivalent(&rigth, env) {
-                            chs_error!(
-                                "Argument type mismatch. Expect: {:?}  Actual: {:?}",
-                                left,
-                                rigth
-                            );
-                        }
-                        e.ttype = Some(left.clone());
-                        Ok(left)
-                    },
-                    _ => unreachable!("Not a binary operator"),
+                    e.ttype = Some(CHSType::Boolean);
+                    Ok(CHSType::Boolean)
                 }
-            }
+                Operator::Plus | Operator::Minus => {
+                    let left = e.left.infer(env)?;
+                    let rigth = e.right.infer(env)?;
+                    match (&left, &rigth) {
+                        (CHSType::Pointer(..), CHSType::Pointer(..)) => {
+                            chs_error!("")
+                        }
+                        (CHSType::Int, CHSType::Pointer(..)) => {
+                            e.ttype = Some(rigth.clone());
+                            Ok(rigth)
+                        }
+                        (CHSType::Pointer(..), CHSType::Int) => {
+                            e.ttype = Some(left.clone());
+                            Ok(left)
+                        }
+                        (CHSType::String, CHSType::Int) => {
+                            e.ttype = Some(CHSType::Pointer(Box::new(CHSType::Char)));
+                            Ok(CHSType::Pointer(Box::new(CHSType::Char)))
+                        }
+                        (CHSType::Int, CHSType::String) => {
+                            e.ttype = Some(CHSType::Pointer(Box::new(CHSType::Char)));
+                            Ok(CHSType::Pointer(Box::new(CHSType::Char)))
+                        }
+                        (CHSType::Int, CHSType::Int) => {
+                            e.ttype = Some(left.clone());
+                            Ok(left)
+                        }
+                        _ => chs_error!(""),
+                    }
+                }
+                Operator::Div | Operator::Mult => {
+                    let left = e.left.infer(env)?;
+                    let rigth = e.right.infer(env)?;
+                    match (&left, &rigth) {
+                        (a, b) if a.is_pointer() || b.is_pointer() => {
+                            chs_error!("")
+                        }
+                        (CHSType::Int, CHSType::Int) => {
+                            e.ttype = Some(left.clone());
+                            Ok(left)
+                        }
+                        _ => chs_error!(""),
+                    }
+                }
+                _ => unreachable!("Not a binary operator"),
+            },
             Expression::Unop(e) => {
                 let expect = e.left.infer(env)?;
                 match e.op {
@@ -470,6 +463,13 @@ pub struct VarDecl {
 }
 
 #[derive(Debug)]
+pub struct Cast {
+    pub loc: Loc,
+    pub ttype: CHSType,
+    pub casted: Expression,
+}
+
+#[derive(Debug)]
 pub struct Call {
     pub loc: Loc,
     pub caller: Expression,
@@ -497,10 +497,10 @@ pub struct Unop {
     pub loc: Loc,
     pub op: Operator,
     pub left: Expression,
-    pub ttype: Option<CHSType>
+    pub ttype: Option<CHSType>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Operator {
     // Binary
     Plus,

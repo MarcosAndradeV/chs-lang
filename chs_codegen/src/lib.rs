@@ -89,8 +89,12 @@ impl FasmGenerator {
         use nodes::ConstExpression::*;
         let cc = Register::get_syscall_call_convention();
         match expr {
-            Expression::ConstExpression(IntegerLiteral(v)) => Ok(Some(Value::Const(*v))),
-            Expression::ConstExpression(BooleanLiteral(v)) => Ok(Some(Value::Const(*v as i64))),
+            Expression::ConstExpression(IntegerLiteral(v)) => {
+                Ok(Some(Value::Const(SizeOperator::Qword, *v)))
+            }
+            Expression::ConstExpression(BooleanLiteral(v)) => {
+                Ok(Some(Value::Const(SizeOperator::Byte, *v as i64)))
+            }
             Expression::ConstExpression(Symbol(v)) => Ok(Some(self.get_var(v)?.clone())),
             Expression::ConstExpression(StringLiteral(v)) => {
                 self.str_count += 1;
@@ -107,6 +111,16 @@ impl FasmGenerator {
                 });
                 Ok(Some(Value::Label(name)))
             }
+            Expression::Cast(v) => {
+                let size = SizeOperator::from_chstype(&v.ttype, &self.type_map)?;
+                Ok(Some(
+                    match self.generate_expression(func, &v.casted)?.unwrap() {
+                        Value::Memory(_, addr) => Value::Memory(size, addr),
+                        Value::Const(_, v) => Value::Const(size, v),
+                        val => val,
+                    },
+                ))
+            }
             Expression::VarDecl(v) => {
                 if v.name == "_" {
                     self.generate_expression(func, &v.value)?.unwrap();
@@ -118,7 +132,10 @@ impl FasmGenerator {
                 )?;
                 let stack_pos = func.allocate_stack(size.byte_size());
 
-                let src = self.generate_expression(func, &v.value)?.unwrap();
+                let src = match self.generate_expression(func, &v.value)?.unwrap() {
+                    Value::Register(reg) => Value::Register(size.register_from_size(reg)),
+                    src => src,
+                };
                 let dst = Value::Memory(size, format!("rbp-{}", stack_pos));
 
                 let s = self.scopes.last_mut().expect("Expected scope");
@@ -132,12 +149,19 @@ impl FasmGenerator {
                     v.ttype.as_ref().expect("Expected type"),
                     &self.type_map,
                 )?;
-                let dst = match self.generate_expression(func, &v.assined)?.unwrap() {
-                    Value::Memory(_, a) => Value::Memory(size, a),
-                    dst => dst,
+                let dst = match &v.assined {
+                    Expression::Unop(u) if u.op == Operator::Deref => {
+                        self.generate_assign_deref(func, &u.left, &u.ttype)?
+                    }
+                    _ => match self.generate_expression(func, &v.assined)?.unwrap() {
+                        Value::Memory(_, a) => Value::Memory(size, a),
+                        Value::Register(reg) => Value::Register(size.register_from_size(reg)),
+                        dst => dst,
+                    }
                 };
                 let src = match self.generate_expression(func, &v.value)?.unwrap() {
                     Value::Memory(_, a) => Value::Memory(size, a),
+                    Value::Register(reg) => Value::Register(size.register_from_size(reg)),
                     src => src,
                 };
                 func.push_instr(Instr::Mov(dst, src));
@@ -192,6 +216,20 @@ impl FasmGenerator {
         }
     }
 
+    fn generate_assign_deref(&mut self, func: &mut fasm::Function, left: &Expression, ttype: &Option<chs_types::CHSType>) -> Result<Value, CHSError> {
+        let size = SizeOperator::from_chstype(ttype.as_ref().unwrap(), &self.type_map)?;
+        let lhs = self.generate_expression(func, left)?.unwrap();
+        let lhs = match lhs {
+            Value::Register(_) => lhs,
+            _ => {
+                let reg = size.register_from_size(Register::Rbx) ;
+                func.push_instr(Instr::Mov(Value::Register(reg.clone()), lhs));
+                Value::Register(reg)
+            }
+        };
+        Ok(Value::Memory(size, lhs.to_string()))
+    }
+
     fn get_var(&self, name: &str) -> CHSResult<&Value> {
         self.scopes
             .iter()
@@ -211,7 +249,7 @@ impl FasmGenerator {
             op,
             left,
             right,
-            ttype: _
+            ttype: _,
         } = binop;
         let lhs = self.generate_expression(func, left)?.unwrap();
         if !matches!(lhs, Value::Register(Register::Rax)) {
@@ -237,7 +275,10 @@ impl FasmGenerator {
                 func.push_instr(Instr::Mul(Value::Register(Register::Rax), rhs));
             }
             Operator::Eq => {
-                func.push_instr(Instr::Mov(Value::Register(Register::Rbx), Value::Const(0)));
+                func.push_instr(Instr::Mov(
+                    Value::Register(Register::Rbx),
+                    Value::Const(SizeOperator::Qword, 0),
+                ));
                 func.push_instr(Instr::Cmp(Value::Register(Register::Rax), rhs));
                 func.push_instr(Instr::Cmove(
                     Cond::E,
@@ -246,7 +287,10 @@ impl FasmGenerator {
                 ));
             }
             Operator::NEq => {
-                func.push_instr(Instr::Mov(Value::Register(Register::Rbx), Value::Const(0)));
+                func.push_instr(Instr::Mov(
+                    Value::Register(Register::Rbx),
+                    Value::Const(SizeOperator::Qword, 0),
+                ));
                 func.push_instr(Instr::Cmp(Value::Register(Register::Rax), rhs));
                 func.push_instr(Instr::Cmove(
                     Cond::NE,
@@ -255,7 +299,10 @@ impl FasmGenerator {
                 ));
             }
             Operator::Gt => {
-                func.push_instr(Instr::Mov(Value::Register(Register::Rbx), Value::Const(0)));
+                func.push_instr(Instr::Mov(
+                    Value::Register(Register::Rbx),
+                    Value::Const(SizeOperator::Qword, 0),
+                ));
                 func.push_instr(Instr::Cmp(Value::Register(Register::Rax), rhs));
                 func.push_instr(Instr::Cmove(
                     Cond::G,
@@ -264,7 +311,10 @@ impl FasmGenerator {
                 ));
             }
             Operator::Lt => {
-                func.push_instr(Instr::Mov(Value::Register(Register::Rbx), Value::Const(0)));
+                func.push_instr(Instr::Mov(
+                    Value::Register(Register::Rbx),
+                    Value::Const(SizeOperator::Qword, 0),
+                ));
                 func.push_instr(Instr::Cmp(Value::Register(Register::Rax), rhs));
                 func.push_instr(Instr::Cmove(
                     Cond::L,
@@ -282,7 +332,12 @@ impl FasmGenerator {
         func: &mut fasm::Function,
         unop: &Unop,
     ) -> Result<Option<Value>, CHSError> {
-        let Unop { loc: _, op, left, ttype} = unop;
+        let Unop {
+            loc: _,
+            op,
+            left,
+            ttype,
+        } = unop;
         let lhs = self.generate_expression(func, left)?.unwrap();
         match op {
             Operator::Negate => {
@@ -293,7 +348,7 @@ impl FasmGenerator {
             }
             Operator::Refer => {
                 let lhs = match lhs {
-                    Value::Const(_) => {
+                    Value::Const(..) => {
                         chs_error!("Cannot take a reference to a literal")
                     }
                     _ => lhs,
@@ -309,10 +364,8 @@ impl FasmGenerator {
                         Value::Register(Register::Rbx)
                     }
                 };
-                func.push_instr(Instr::Mov(
-                    Value::Register(Register::Rax),
-                    Value::Memory(size, lhs.to_string()),
-                ));
+                let dst = Value::Register(size.register_from_size(Register::Rax));
+                func.push_instr(Instr::Mov(dst, Value::Memory(size, lhs.to_string())));
             }
             _ => unreachable!(),
         }
