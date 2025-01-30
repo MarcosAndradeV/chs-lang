@@ -14,7 +14,10 @@ pub struct Parser {
 impl Parser {
     pub fn new(lexer: Lexer) -> Self {
         Self {
-            module: Module {file_path: lexer.get_filename(), ..Default::default()},
+            module: Module {
+                file_path: lexer.get_filename(),
+                ..Default::default()
+            },
             lexer,
             ..Default::default()
         }
@@ -37,7 +40,7 @@ impl Parser {
         let token = self.next();
         if token.kind != kind {
             chs_error!(
-                "{} Unexpected token '{}' of '{}', Expect: {}",
+                "{} Unexpected token {}('{}'), Expect: {}",
                 token.loc,
                 token.kind,
                 token.value,
@@ -208,7 +211,7 @@ impl Parser {
                         op: Operator::from_token(&token, true)?,
                         loc: token.loc,
                         left: expr,
-                        ttype: None
+                        ttype: None,
                     }
                     .into(),
                 )
@@ -274,7 +277,7 @@ impl Parser {
                 op,
                 right,
                 left,
-                ttype: None
+                ttype: None,
             }
             .into(),
         ))
