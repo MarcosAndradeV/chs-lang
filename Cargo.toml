@@ -8,6 +8,8 @@ members = [
 ]
 resolver = "2"
 
+package.version = "0.1.0"
+
 [profile.release]
 panic = "abort"
 

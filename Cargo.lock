@@ -47,4 +47,11 @@ dependencies = [
  "chs_codegen",
  "chs_lexer",
  "chs_util",
+ "my_cli",
 ]
+
+[[package]]
+name = "my_cli"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "edde7abf9a9f0f06931b4a4f0c47da9ffceeb827413544de7bc32cef22219c29"
