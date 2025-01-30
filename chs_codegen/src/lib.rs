@@ -8,7 +8,7 @@ use chs_ast::nodes::{
 };
 use chs_types::TypeMap;
 use chs_util::{chs_error, CHSError, CHSResult};
-use fasm::{Cond, DataDef, DataDirective, DataExpr, Instr, Register, SizeOperator, Value};
+use fasm::{Cond, DataDef, DataDirective, DataExpr, Function, Instr, Register, SizeOperator, Value};
 
 pub struct FasmGenerator {
     label_count: usize,
@@ -33,6 +33,43 @@ impl FasmGenerator {
             type_map: type_defs,
         };
         let mut out = fasm::Module::new(file_path.with_extension("asm"));
+        out.push_data(DataDef::new("heap_pos", DataDirective::Dq, vec![DataExpr::Const(0)]));
+        out.push_data(DataDef::new("heap_end", DataDirective::Dq, vec![DataExpr::Const(0)]));
+        let mut func = Function::new("allocator_init");
+        func.push_block("");
+        func.push_raw_instr("mov rax, 12");
+        func.push_raw_instr("mov rdi, 0");
+        func.push_raw_instr("syscall");
+        func.push_raw_instr("mov [heap_pos], rax");
+        func.push_raw_instr("mov [heap_end], rax");
+        out.push_function(func);
+
+        let mut func = Function::new("allocate");
+        func.allocate_stack(16);
+        func.push_block("");
+        func.push_raw_instr("mov rax, qword [heap_pos]");
+        func.push_raw_instr("mov qword [rbp-0], rax");
+
+        func.push_raw_instr("mov rax, qword [rbp-0]");
+        func.push_raw_instr("add rax, rdi");
+        func.push_raw_instr("mov qword [rbp-8], rax");
+
+        func.push_raw_instr("mov rax, qword [rbp-8]");
+        func.push_raw_instr("cmp rax, qword [heap_end]");
+        func.push_raw_instr("jle .ok");
+
+        func.push_raw_instr("mov rax, 12");
+        func.push_raw_instr("mov rdi, 0x10000");
+        func.push_raw_instr("add rdi, [heap_end]");
+        func.push_raw_instr("syscall");
+        func.push_raw_instr("mov [heap_end], rax");
+        func.push_block("ok");
+        func.push_raw_instr("mov rax, qword [rbp-8]");
+        func.push_raw_instr("mov qword [heap_pos], rax");
+        func.push_raw_instr("mov rax, qword [rbp-0]");
+        out.push_function(func);
+
+        out.push_raw_instr_to_start("call _allocator_init");
 
         for func_decl in function_decls {
             let func = gen.generate_function(func_decl)?;
@@ -68,7 +105,7 @@ impl FasmGenerator {
 
         match func_decl.ret_type {
             chs_types::CHSType::Void => {}
-            chs_types::CHSType::Int | chs_types::CHSType::UInt => {
+            chs_types::CHSType::Int | chs_types::CHSType::UInt | chs_types::CHSType::Pointer(_) => {
                 func.push_instr(Instr::Mov(
                     Value::Register(Register::Rax),
                     last.expect("Expect last value"),
@@ -266,14 +303,17 @@ impl FasmGenerator {
                 func.push_instr(Instr::Sub(Value::Register(Register::Rax), rhs));
             }
             Operator::Div => {
-                func.push_instr(Instr::Div(Value::Register(Register::Rax), rhs));
+                func.push_instr(Instr::Mov(Value::Register(Register::Rbx), rhs));
+                func.push_instr(Instr::Div(Value::Register(Register::Rbx)));
             }
             Operator::Mod => {
-                func.push_instr(Instr::Div(Value::Register(Register::Rax), rhs));
+                func.push_instr(Instr::Mov(Value::Register(Register::Rbx), rhs));
+                func.push_instr(Instr::Div(Value::Register(Register::Rbx)));
                 return Ok(Some(Value::Register(Register::Rdx)));
             }
             Operator::Mult => {
-                func.push_instr(Instr::Mul(Value::Register(Register::Rax), rhs));
+                func.push_instr(Instr::Mov(Value::Register(Register::Rbx), rhs));
+                func.push_instr(Instr::Mul(Value::Register(Register::Rax)));
             }
             Operator::Eq => {
                 func.push_instr(Instr::Xor(
@@ -342,9 +382,23 @@ impl FasmGenerator {
         let lhs = self.generate_expression(func, left)?.unwrap();
         match op {
             Operator::Negate => {
+                let lhs = match lhs {
+                    Value::Register(_) => lhs,
+                    _ => {
+                        func.push_instr(Instr::Mov(Value::Register(Register::Rbx), lhs));
+                        Value::Register(Register::Rbx)
+                    }
+                };
                 func.push_instr(Instr::Neg(lhs));
             }
             Operator::LNot => {
+                let lhs = match lhs {
+                    Value::Register(_) => lhs,
+                    _ => {
+                        func.push_instr(Instr::Mov(Value::Register(Register::Rbx), lhs));
+                        Value::Register(Register::Rbx)
+                    }
+                };
                 func.push_instr(Instr::Not(lhs));
             }
             Operator::Refer => {

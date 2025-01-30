@@ -68,7 +68,8 @@ impl SizeOperator {
     pub fn register_from_size(&self, reg: Register) -> Register {
         match (self, reg) {
             (SizeOperator::Byte, Register::Rax) => Register::Al,
-            (SizeOperator::Qword, Register::Rax) => reg,
+            (SizeOperator::Qword, Register::Rax|Register::Rbx) => reg,
+            (SizeOperator::Byte, Register::Rbx) => Register::Bl,
             _ => todo!("{self}, {reg}"),
         }
     }
@@ -115,6 +116,7 @@ pub enum Register {
     R14,
     R15,
     Al,
+    Bl,
 }
 
 impl fmt::Display for Register {
@@ -137,6 +139,7 @@ impl fmt::Display for Register {
             Self::R14 => write!(f, "r14"),
             Self::R15 => write!(f, "r15"),
             Self::Al => write!(f, "al"),
+            Self::Bl => write!(f, "bl"),
         }
     }
 }
@@ -328,8 +331,8 @@ pub enum Instr {
 
     Add(Value, Value),
     Sub(Value, Value),
-    Mul(Value, Value),
-    Div(Value, Value),
+    Mul(Value),
+    Div(Value),
 
     And(Value, Value),
     Or(Value, Value),
@@ -364,8 +367,8 @@ impl fmt::Display for Instr {
             Self::Pop(dst) => write!(f, "pop {dst}"),
             Self::Add(dst, src) => write!(f, "add {dst}, {src}"),
             Self::Sub(dst, src) => write!(f, "sub {dst}, {src}"),
-            Self::Mul(dst, src) => write!(f, "mul {dst}, {src}"),
-            Self::Div(dst, src) => write!(f, "div {dst}, {src}"),
+            Self::Mul(src) => write!(f, "mul {src}"),
+            Self::Div(src) => write!(f, "div {src}"),
             Self::And(dst, src) => write!(f, "and {dst}, {src}"),
             Self::Or(dst, src) => write!(f, "or {dst}, {src}"),
             Self::Xor(dst, src) => write!(f, "xor {dst}, {src}"),
@@ -386,7 +389,7 @@ impl fmt::Display for Instr {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 /// Blocks are labels + instructions
 pub struct Block {
     pub label: String,
@@ -408,7 +411,9 @@ impl Block {
 
 impl fmt::Display for Block {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        writeln!(f, ".{}:", self.label)?;
+        if !self.label.is_empty() {
+            writeln!(f, ".{}:", self.label)?;
+        }
 
         for instr in self.instrs.iter() {
             writeln!(f, "\t{}", instr)?;
@@ -417,11 +422,11 @@ impl fmt::Display for Block {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct Function {
-    pub name: String,
+    name: String,
     stack_allocated: usize,
-    pub blocks: Vec<Block>,
+    blocks: Vec<Block>,
 }
 
 impl Function {
@@ -470,6 +475,9 @@ impl Function {
 
 impl fmt::Display for Function {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if self.name.is_empty() {
+            return Ok(());
+        }
         writeln!(f, ";; function",)?;
         writeln!(f, "_{}:", self.name)?;
 
@@ -498,14 +506,17 @@ impl fmt::Display for Function {
 #[derive(Debug, Default, Clone)]
 pub struct Module {
     out_path: PathBuf,
+    start: Block,
     functions: Vec<Function>,
     data: Vec<DataDef>,
 }
 
 impl Module {
     pub fn new(out_path: PathBuf) -> Module {
+        let start = Block::new("");
         Module {
             out_path,
+            start,
             ..Default::default()
         }
     }
@@ -520,6 +531,11 @@ impl Module {
         self.data.last_mut().unwrap()
     }
 
+    pub fn push_raw_instr_to_start(&mut self, instr: impl Into<String>) {
+        self.start
+            .push_instr(Instr::Raw(instr.into()));
+    }
+
     pub fn out_path(&self) -> &PathBuf {
         &self.out_path
     }
@@ -532,6 +548,9 @@ impl fmt::Display for Module {
 
         writeln!(f, "segment executable")?;
         writeln!(f, "_start:")?;
+        for instr in self.start.instrs.iter() {
+            writeln!(f, "{}", instr)?;
+        }
         writeln!(f, "\tcall _main")?;
         writeln!(f, "\tmov rax, 60")?;
         writeln!(f, "\tmov rdi, 0")?;

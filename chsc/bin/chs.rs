@@ -3,7 +3,7 @@
 use std::{
     env::Args,
     fs::File,
-    io::Write,
+    io::{Empty, Write},
     os::unix::process::CommandExt,
     path::PathBuf,
     process::{self, exit, ExitCode},
@@ -24,7 +24,8 @@ fn main() {
                 .help("Compiles the program.")
                 .arg("INPUT", 1)
                 .flag("-o", "OUTPUT")
-                .flag_bool("-r"),
+                .flag_bool("-r")
+                .flag_bool("--emit-asm"),
         )
         .add_cmd(
             "check",
@@ -36,15 +37,8 @@ fn main() {
         Some(("help", ..)) => cl.usage(),
         Some(("compile", flags, args)) => {
             if let Some(file_path) = args.get("INPUT").cloned() {
-                match flags.get("-o").cloned() {
-                    Some(out_path) => {
-                        if let Err(err) = compile(file_path, Some(out_path), flags.is_present("-r")) {
-                            eprintln!("{err}");
-                        }
-                    }
-                    None => {
-                        eprintln!("No file provided for `-o`");
-                    }
+                if let Err(err) = compile(file_path, flags.get("-o").cloned(), flags.is_present("-r"), flags.is_present("--emit-asm")) {
+                    eprintln!("{err}");
                 }
             } else {
                 eprintln!("No file provided")
@@ -63,7 +57,7 @@ fn main() {
     }
 }
 
-fn compile(file_path: String, outpath: Option<String>, run: bool) -> CHSResult<()> {
+fn compile(file_path: String, outpath: Option<String>, run: bool, emit_asm: bool) -> CHSResult<()> {
     let module = match chs_ast::parse_file(file_path) {
         Ok(module) => module,
         Err(err) => return Err(err),
@@ -100,7 +94,7 @@ fn compile(file_path: String, outpath: Option<String>, run: bool) -> CHSResult<(
         chs_error!(String::from_utf8_lossy(&result.stderr));
     }
 
-    let mut rm_proc = process::Command::new("rm")
+if !emit_asm {    let mut rm_proc = process::Command::new("rm")
         .arg(fasm_path)
         .spawn()
         .expect("Failed to spawn rm process");
@@ -108,7 +102,7 @@ fn compile(file_path: String, outpath: Option<String>, run: bool) -> CHSResult<(
     let result = rm_proc.wait_with_output().expect("Failed to wait for fasm");
     if !result.status.success() {
         chs_error!("Failed {}", String::from_utf8_lossy(&result.stderr));
-    }
+    }}
 
     if run {
         let mut run_proc = process::Command::new(format!("./{}", output_path.display()))

@@ -37,6 +37,9 @@ impl TypedModule {
                 chs_error!("{} Redefinition of {}", decl.loc, decl.name)
             }
         }
+        let var_name = "allocate".to_string();
+        let function = CHSType::Function(vec![CHSType::Int], Box::new(CHSType::Pointer(Box::new(CHSType::Void))));
+        env.globals_insert(&var_name, &function);
 
         for decl in &global_decls {
             if env.globals_insert(&decl.name, &decl.ttype).is_some() {
