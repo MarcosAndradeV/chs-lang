@@ -8,11 +8,12 @@ use chs_ast::nodes::{
 };
 use chs_types::TypeMap;
 use chs_util::{chs_error, CHSError, CHSResult};
-use fasm::{Cond, DataDef, DataDirective, DataExpr, Function, Instr, Register, SizeOperator, Value};
+use fasm::{Cond, DataDef, DataDirective, DataExpr, Instr, Register, SizeOperator, Value};
 
 pub struct FasmGenerator {
     label_count: usize,
     str_count: usize,
+    bf: bool,
     scopes: Vec<HashMap<String, fasm::Value>>,
     datadefs: Vec<fasm::DataDef>,
     type_map: TypeMap,
@@ -26,50 +27,54 @@ impl FasmGenerator {
             type_defs,
         } = tm;
         let mut gen = Self {
+            type_map: type_defs,
             label_count: 0,
             str_count: 0,
+            bf: false,
             scopes: vec![],
             datadefs: vec![],
-            type_map: type_defs,
         };
         let mut out = fasm::Module::new(file_path.with_extension("asm"));
-        out.push_data(DataDef::new("heap_pos", DataDirective::Dq, vec![DataExpr::Const(0)]));
-        out.push_data(DataDef::new("heap_end", DataDirective::Dq, vec![DataExpr::Const(0)]));
-        let mut func = Function::new("allocator_init");
+
+        out.push_raw_instr_to_start("pop rdi");
+        out.push_raw_instr_to_start("pop rsi");
+
+        let func = out.push_function(fasm::Function::new("print_int"));
+        func.set_prelude(false);
+        func.set_epiloge(false);
         func.push_block("");
-        func.push_raw_instr("mov rax, 12");
-        func.push_raw_instr("mov rdi, 0");
+        func.push_raw_instr("mov r9, -3689348814741910323");
+        func.push_raw_instr("sub rsp, 40");
+        func.push_raw_instr("mov BYTE [rsp+31], 10");
+        func.push_raw_instr("lea rcx, [rsp+30]");
+        func.push_block("L2");
+        func.push_raw_instr("mov rax, rdi");
+        func.push_raw_instr("lea r8, [rsp+32]");
+        func.push_raw_instr("mul r9");
+        func.push_raw_instr("mov rax, rdi");
+        func.push_raw_instr("sub r8, rcx");
+        func.push_raw_instr("shr rdx, 3");
+        func.push_raw_instr("lea rsi, [rdx+rdx*4]");
+        func.push_raw_instr("add rsi, rsi");
+        func.push_raw_instr("sub rax, rsi");
+        func.push_raw_instr("add eax, 48");
+        func.push_raw_instr("mov BYTE [rcx], al");
+        func.push_raw_instr("mov rax, rdi");
+        func.push_raw_instr("mov rdi, rdx");
+        func.push_raw_instr("mov rdx, rcx");
+        func.push_raw_instr("sub rcx, 1");
+        func.push_raw_instr("cmp rax, 9");
+        func.push_raw_instr("ja  .L2");
+        func.push_raw_instr("lea rax, [rsp+32]");
+        func.push_raw_instr("mov edi, 1");
+        func.push_raw_instr("sub rdx, rax");
+        func.push_raw_instr("xor eax, eax");
+        func.push_raw_instr("lea rsi, [rsp+32+rdx]");
+        func.push_raw_instr("mov rdx, r8");
+        func.push_raw_instr("mov rax, 1");
         func.push_raw_instr("syscall");
-        func.push_raw_instr("mov [heap_pos], rax");
-        func.push_raw_instr("mov [heap_end], rax");
-        out.push_function(func);
-
-        let mut func = Function::new("allocate");
-        func.allocate_stack(16);
-        func.push_block("");
-        func.push_raw_instr("mov rax, qword [heap_pos]");
-        func.push_raw_instr("mov qword [rbp-0], rax");
-
-        func.push_raw_instr("mov rax, qword [rbp-0]");
-        func.push_raw_instr("add rax, rdi");
-        func.push_raw_instr("mov qword [rbp-8], rax");
-
-        func.push_raw_instr("mov rax, qword [rbp-8]");
-        func.push_raw_instr("cmp rax, qword [heap_end]");
-        func.push_raw_instr("jle .ok");
-
-        func.push_raw_instr("mov rax, 12");
-        func.push_raw_instr("mov rdi, 0x10000");
-        func.push_raw_instr("add rdi, [heap_end]");
-        func.push_raw_instr("syscall");
-        func.push_raw_instr("mov [heap_end], rax");
-        func.push_block("ok");
-        func.push_raw_instr("mov rax, qword [rbp-8]");
-        func.push_raw_instr("mov qword [heap_pos], rax");
-        func.push_raw_instr("mov rax, qword [rbp-0]");
-        out.push_function(func);
-
-        out.push_raw_instr_to_start("call _allocator_init");
+        func.push_raw_instr("add rsp, 40");
+        func.push_raw_instr("ret");
 
         for func_decl in function_decls {
             let func = gen.generate_function(func_decl)?;
@@ -87,13 +92,19 @@ impl FasmGenerator {
         let mut func = fasm::Function::new(func_decl.name);
         self.label_count = 0;
         let mut scope: HashMap<String, fasm::Value> = HashMap::new();
+        func.push_block("");
         let cc = Register::get_syscall_call_convention();
-        for (i, (name, _)) in func_decl.args.into_iter().enumerate() {
+        for (i, (name, v)) in func_decl.args.into_iter().enumerate() {
             assert!(i < cc.len());
-            scope.insert(name, fasm::Value::Register(cc[i]));
+            let size = SizeOperator::from_chstype(&v, &self.type_map)?;
+            let stack_pos = func.allocate_stack(size.byte_size());
+
+            let src = fasm::Value::Register(cc[i]);
+            let dst = Value::Memory(size, format!("rbp-{}", stack_pos));
+            func.push_instr(Instr::Mov(dst.clone(), src));
+            scope.insert(name, dst);
         }
         self.scopes.push(scope);
-        func.push_block("start");
         let len = func_decl.body.len().saturating_sub(1);
         let mut last: Option<Value> = None;
         for (i, expr) in func_decl.body.iter().enumerate() {
@@ -106,10 +117,10 @@ impl FasmGenerator {
         match func_decl.ret_type {
             chs_types::CHSType::Void => {}
             chs_types::CHSType::Int | chs_types::CHSType::UInt | chs_types::CHSType::Pointer(_) => {
-                func.push_instr(Instr::Mov(
-                    Value::Register(Register::Rax),
-                    last.expect("Expect last value"),
-                ));
+                match last.expect("Expect last value") {
+                    Value::Register(Register::Rax) => {}
+                    value => func.push_instr(Instr::Mov(Value::Register(Register::Rax), value)),
+                }
             }
             _ => todo!("return other types"),
         }
@@ -154,34 +165,12 @@ impl FasmGenerator {
                     match self.generate_expression(func, &v.casted)?.unwrap() {
                         Value::Memory(_, addr) => Value::Memory(size, addr),
                         Value::Const(_, v) => Value::Const(size, v),
-                        Value::Register(reg) => Value::Register(size.register_from_size(reg)),
+                        Value::Register(reg) => Value::Register(size.register_for_size(reg)),
                         val => val,
                     },
                 ))
             }
-            Expression::VarDecl(v) => {
-                if v.name == "_" {
-                    self.generate_expression(func, &v.value)?.unwrap();
-                    return Ok(None);
-                }
-                let size = SizeOperator::from_chstype(
-                    v.ttype.as_ref().expect("Expected type"),
-                    &self.type_map,
-                )?;
-                let stack_pos = func.allocate_stack(size.byte_size());
-
-                let src = match self.generate_expression(func, &v.value)?.unwrap() {
-                    Value::Register(reg) => Value::Register(size.register_from_size(reg)),
-                    src => src,
-                };
-                let dst = Value::Memory(size, format!("rbp-{}", stack_pos));
-
-                let s = self.scopes.last_mut().expect("Expected scope");
-                s.insert(v.name.clone(), dst.clone());
-
-                func.push_instr(Instr::Mov(dst, src));
-                Ok(None)
-            }
+            Expression::VarDecl(v) => self.generater_var_decl(func, v),
             Expression::Assign(v) => {
                 let size = SizeOperator::from_chstype(
                     v.ttype.as_ref().expect("Expected type"),
@@ -193,16 +182,18 @@ impl FasmGenerator {
                     }
                     _ => match self.generate_expression(func, &v.assined)?.unwrap() {
                         Value::Memory(_, a) => Value::Memory(size, a),
-                        Value::Register(reg) => Value::Register(size.register_from_size(reg)),
+                        Value::Register(reg) => Value::Register(size.register_for_size(reg)),
                         dst => dst,
-                    }
+                    },
                 };
                 let src = match self.generate_expression(func, &v.value)?.unwrap() {
                     Value::Memory(_, a) => Value::Memory(size, a),
-                    Value::Register(reg) => Value::Register(size.register_from_size(reg)),
+                    Value::Register(reg) => Value::Register(size.register_for_size(reg)),
                     src => src,
                 };
-                func.push_instr(Instr::Mov(dst, src));
+                if dst != src {
+                    func.push_instr(Instr::Mov(dst, src));
+                }
                 Ok(None)
             }
             Expression::Call(c) => {
@@ -254,13 +245,49 @@ impl FasmGenerator {
         }
     }
 
-    fn generate_assign_deref(&mut self, func: &mut fasm::Function, left: &Expression, ttype: &Option<chs_types::CHSType>) -> Result<Value, CHSError> {
+    fn generater_var_decl(
+        &mut self,
+        func: &mut fasm::Function,
+        v: &Box<nodes::VarDecl>,
+    ) -> Result<Option<Value>, CHSError> {
+        if v.name == "_" {
+            self.generate_expression(func, &v.value)?.unwrap();
+            return Ok(None);
+        }
+        let size =
+            SizeOperator::from_chstype(v.ttype.as_ref().expect("Expected type"), &self.type_map)?;
+        let stack_pos = func.allocate_stack(size.byte_size());
+
+        let src = match self.generate_expression(func, &v.value)?.unwrap() {
+            Value::Register(reg) => Value::Register(size.register_for_size(reg)),
+            Value::Const(size, c) => Value::Const(size, c),
+            src => {
+                let reg = size.register_for_size(Register::Rbx);
+                func.push_instr(Instr::Mov(Value::Register(reg), src));
+                Value::Register(reg)
+            }
+        };
+        let dst = Value::Memory(size, format!("rbp-{}", stack_pos));
+
+        let s = self.scopes.last_mut().expect("Expected scope");
+        s.insert(v.name.clone(), dst.clone());
+
+        func.push_instr(Instr::Mov(dst, src));
+        Ok(None)
+    }
+
+    fn generate_assign_deref(
+        &mut self,
+        func: &mut fasm::Function,
+        left: &Expression,
+        ttype: &Option<chs_types::CHSType>,
+    ) -> Result<Value, CHSError> {
         let size = SizeOperator::from_chstype(ttype.as_ref().unwrap(), &self.type_map)?;
         let lhs = self.generate_expression(func, left)?.unwrap();
         let lhs = match lhs {
             Value::Register(_) => lhs,
             _ => {
-                let reg = size.register_from_size(Register::Rbx) ;
+                let reg = size.register_for_size(Register::Rbx);
                 func.push_instr(Instr::Mov(Value::Register(reg), lhs));
                 Value::Register(reg)
             }
@@ -290,82 +317,146 @@ impl FasmGenerator {
             ttype: _,
         } = binop;
         let lhs = self.generate_expression(func, left)?.unwrap();
-        if !matches!(lhs, Value::Register(Register::Rax)) {
-            func.push_instr(Instr::Mov(Value::Register(Register::Rax), lhs));
-        }
-        // let _size = SizeOperator::from_chstype(ttype.as_ref().unwrap(), &self.type_map)?;
         let rhs = self.generate_expression(func, right)?.unwrap();
         match op {
-            Operator::Plus => {
-                func.push_instr(Instr::Add(Value::Register(Register::Rax), rhs));
-            }
-            Operator::Minus => {
-                func.push_instr(Instr::Sub(Value::Register(Register::Rax), rhs));
-            }
+            Operator::And => match (&lhs, &rhs) {
+                (Value::Memory(_, _) | Value::Register(_), Value::Const(_, _)) => {
+                    func.push_instr(Instr::And(lhs.clone(), rhs));
+                    return Ok(Some(lhs));
+                }
+                (Value::Memory(_, _), Value::Memory(size, _)) => {
+                    let reg = Value::Register(size.register_for_size(Register::Rbx));
+                    func.push_instr(Instr::Mov(reg.clone(), rhs));
+                    func.push_instr(Instr::And(lhs.clone(), reg));
+                    return Ok(Some(lhs));
+                }
+                (lhs, rhs) => todo!("implement generation {lhs} and {rhs}"),
+            },
+            Operator::Or => match (&lhs, &rhs) {
+                (Value::Memory(_, _) | Value::Register(_), Value::Const(_, _)) => {
+                    func.push_instr(Instr::Or(lhs.clone(), rhs));
+                    return Ok(Some(lhs));
+                }
+                (Value::Memory(_, _), Value::Memory(size, _)) => {
+                    let reg = Value::Register(size.register_for_size(Register::Rbx));
+                    func.push_instr(Instr::Mov(reg.clone(), rhs));
+                    func.push_instr(Instr::Or(lhs.clone(), reg));
+                    return Ok(Some(lhs));
+                }
+                (lhs, rhs) => todo!("implement generation {lhs} or {rhs}"),
+            },
+            Operator::Plus => match (&lhs, &rhs) {
+                (Value::Memory(_, _) | Value::Register(_), Value::Const(_, _)) => {
+                    func.push_instr(Instr::Add(lhs.clone(), rhs));
+                    return Ok(Some(lhs));
+                }
+                (Value::Memory(_, _), Value::Memory(size, _)) => {
+                    let reg = Value::Register(size.register_for_size(Register::Rbx));
+                    func.push_instr(Instr::Mov(reg.clone(), rhs));
+                    func.push_instr(Instr::Add(lhs.clone(), reg));
+                    return Ok(Some(lhs));
+                }
+                (lhs, rhs) => todo!("implement generation {lhs} + {rhs}"),
+            },
+            Operator::Minus => match (&lhs, &rhs) {
+                (Value::Memory(_, _), Value::Const(_, _)) => {
+                    func.push_instr(Instr::Sub(lhs.clone(), rhs));
+                    return Ok(Some(lhs));
+                }
+                (Value::Memory(_, _), Value::Memory(size, _)) => {
+                    let reg = Value::Register(size.register_for_size(Register::Rbx));
+                    func.push_instr(Instr::Mov(reg.clone(), rhs));
+                    func.push_instr(Instr::Sub(lhs.clone(), reg));
+                    return Ok(Some(lhs));
+                }
+                (lhs, rhs) => todo!("implement generation {lhs} - {rhs}"),
+            },
             Operator::Div => {
-                func.push_instr(Instr::Mov(Value::Register(Register::Rbx), rhs));
-                func.push_instr(Instr::Div(Value::Register(Register::Rbx)));
+                func.push_instr(Instr::Mov(Value::Register(Register::Rax), lhs));
+                let rhs = match rhs {
+                    Value::Register(_) => rhs,
+                    Value::Memory(_, _) => rhs,
+                    Value::Const(_, _) => {
+                        func.push_instr(Instr::Mov(Value::Register(Register::Rbx), rhs));
+                        Value::Register(Register::Rbx)
+                    }
+                    _ => todo!("implement generation div {rhs}"),
+                };
+                func.push_instr(Instr::Div(rhs));
+                return Ok(Some(Value::Register(Register::Rax)));
             }
             Operator::Mod => {
-                func.push_instr(Instr::Mov(Value::Register(Register::Rbx), rhs));
-                func.push_instr(Instr::Div(Value::Register(Register::Rbx)));
+                func.push_instr(Instr::Mov(Value::Register(Register::Rax), lhs));
+                let rhs = match rhs {
+                    Value::Register(_) => rhs,
+                    Value::Memory(_, _) => rhs,
+                    Value::Const(_, _) => {
+                        func.push_instr(Instr::Mov(Value::Register(Register::Rbx), rhs));
+                        Value::Register(Register::Rbx)
+                    }
+                    _ => todo!("implement generation mod {rhs}"),
+                };
+                func.push_instr(Instr::Div(rhs));
                 return Ok(Some(Value::Register(Register::Rdx)));
             }
             Operator::Mult => {
-                func.push_instr(Instr::Mov(Value::Register(Register::Rbx), rhs));
-                func.push_instr(Instr::Mul(Value::Register(Register::Rax)));
+                func.push_instr(Instr::Mov(Value::Register(Register::Rax), lhs));
+                let rhs = match rhs {
+                    Value::Register(_) => rhs,
+                    Value::Memory(_, _) => rhs,
+                    Value::Const(_, _) => {
+                        func.push_instr(Instr::Mov(Value::Register(Register::Rbx), rhs));
+                        Value::Register(Register::Rbx)
+                    }
+                    _ => todo!("implement generation mod {rhs}"),
+                };
+                func.push_instr(Instr::Mul(rhs));
+                return Ok(Some(Value::Register(Register::Rax)));
             }
-            Operator::Eq => {
-                func.push_instr(Instr::Xor(
-                    Value::Register(Register::Rbx),
-                    Value::Register(Register::Rbx),
-                ));
-                func.push_instr(Instr::Cmp(Value::Register(Register::Rax), rhs));
-                func.push_instr(Instr::Cmove(
-                    Cond::E,
-                    Value::Register(Register::Rax),
-                    Value::Register(Register::Rbx),
-                ));
-            }
-            Operator::NEq => {
-                func.push_instr(Instr::Xor(
-                    Value::Register(Register::Rbx),
-                    Value::Register(Register::Rbx),
-                ));
-                func.push_instr(Instr::Cmp(Value::Register(Register::Rax), rhs));
-                func.push_instr(Instr::Cmove(
-                    Cond::NE,
-                    Value::Register(Register::Rax),
-                    Value::Register(Register::Rbx),
-                ));
-            }
-            Operator::Gt => {
-                func.push_instr(Instr::Xor(
-                    Value::Register(Register::Rbx),
-                    Value::Register(Register::Rbx),
-                ));
-                func.push_instr(Instr::Cmp(Value::Register(Register::Rax), rhs));
-                func.push_instr(Instr::Cmove(
-                    Cond::G,
-                    Value::Register(Register::Rax),
-                    Value::Register(Register::Rbx),
-                ));
-            }
-            Operator::Lt => {
-                func.push_instr(Instr::Xor(
-                    Value::Register(Register::Rbx),
-                    Value::Register(Register::Rbx),
-                ));
-                func.push_instr(Instr::Cmp(Value::Register(Register::Rax), rhs));
-                func.push_instr(Instr::Cmove(
-                    Cond::L,
-                    Value::Register(Register::Rax),
-                    Value::Register(Register::Rbx),
-                ));
-            }
-            _ => unreachable!(),
+            op => {
+                self.bf = true;
+                match (&lhs, &rhs) {
+                    (Value::Memory(_, _), Value::Const(_, _)) => {
+                        func.push_instr(Instr::Cmp(lhs, rhs));
+                    }
+                    (Value::Memory(_, _), Value::Memory(size, _)) => {
+                        let reg = Value::Register(size.register_for_size(Register::Rbx));
+                        func.push_instr(Instr::Mov(reg.clone(), rhs));
+                        func.push_instr(Instr::Cmp(lhs.clone(), reg));
+                    }
+                    (Value::Register(reg), Value::Const(size, _)) => {
+                        let reg = Value::Register(size.register_for_size(*reg));
+                        let treg = Value::Register(size.register_for_size(Register::Rbx));
+                        func.push_instr(Instr::Mov(treg.clone(), rhs));
+                        func.push_instr(Instr::Cmp(reg, treg));
+                    }
+                    (Value::Const(size, ..), Value::Const(..)) => {
+                        let reg1 = Value::Register(size.register_for_size(Register::Rax));
+                        let reg2 = Value::Register(size.register_for_size(Register::Rbx));
+                        func.push_instr(Instr::Mov(reg1.clone(), lhs));
+                        func.push_instr(Instr::Mov(reg2.clone(), rhs));
+                        func.push_instr(Instr::Cmp(reg1, reg2));
+                    }
+                    (lhs, rhs) => todo!("implement generation {lhs} {op:?} {rhs}"),
+                }
+                match op {
+                    Operator::Eq => {
+                        func.push_instr(Instr::Set(Cond::NE, Value::Register(Register::Al)));
+                    }
+                    Operator::NEq => {
+                        func.push_instr(Instr::Set(Cond::E, Value::Register(Register::Al)));
+                    }
+                    Operator::Gt => {
+                        func.push_instr(Instr::Set(Cond::L, Value::Register(Register::Al)));
+                    }
+                    Operator::Lt => {
+                        func.push_instr(Instr::Set(Cond::G, Value::Register(Register::Al)));
+                    }
+                    op => todo!("implement generation for {op:?}"),
+                }
+                Ok(Some(Value::Register(Register::Al)))
+            } // _ => unreachable!(),
         }
-        Ok(Some(Value::Register(Register::Rax)))
     }
 
     fn generate_unop(
@@ -389,17 +480,11 @@ impl FasmGenerator {
                         Value::Register(Register::Rbx)
                     }
                 };
-                func.push_instr(Instr::Neg(lhs));
+                func.push_instr(Instr::Neg(lhs.clone()));
+                return Ok(Some(lhs));
             }
             Operator::LNot => {
-                let lhs = match lhs {
-                    Value::Register(_) => lhs,
-                    _ => {
-                        func.push_instr(Instr::Mov(Value::Register(Register::Rbx), lhs));
-                        Value::Register(Register::Rbx)
-                    }
-                };
-                func.push_instr(Instr::Not(lhs));
+                todo!("Lnot")
             }
             Operator::Refer => {
                 let lhs = match lhs {
@@ -419,7 +504,7 @@ impl FasmGenerator {
                         Value::Register(Register::Rbx)
                     }
                 };
-                let dst = Value::Register(size.register_from_size(Register::Rax));
+                let dst = Value::Register(size.register_for_size(Register::Rax));
                 func.push_instr(Instr::Mov(dst, Value::Memory(size, lhs.to_string())));
             }
             _ => unreachable!(),
@@ -433,23 +518,28 @@ impl FasmGenerator {
         e: &IfExpression,
     ) -> Result<Option<Value>, CHSError> {
         let IfExpression { loc: _, cond, body } = e;
-        self.label_count += 1;
-        let l = format!("L{}", self.label_count);
-        let cond = self.generate_expression(func, cond)?.unwrap();
-        if !matches!(cond, Value::Register(Register::Rax)) {
-            func.push_instr(Instr::Mov(Value::Register(Register::Rax), cond));
+        let lafter = self.new_label();
+        let v = self.generate_expression(func, cond)?.unwrap();
+        if !self.bf {
+            match &v {
+                Value::Const(size, ..) | Value::Memory(size, ..) => {
+                    let reg = Value::Register(size.register_for_size(Register::Rbx));
+                    func.push_instr(Instr::Mov(reg.clone(), v.clone()));
+                    func.push_instr(Instr::Test(reg.clone(), reg));
+                }
+                _ => {
+                    func.push_instr(Instr::Test(v.clone(), v));
+                }
+            }
+            self.bf = !self.bf
         }
-        func.push_instr(Instr::Test(
-            Value::Register(Register::Rax),
-            Value::Register(Register::Rax),
-        ));
-        func.push_instr(Instr::J(Cond::NZ, Value::Label(l.clone())));
+        func.push_instr(Instr::J(Cond::NZ, Value::Label(lafter.clone())));
         self.scopes.push(HashMap::new());
         for expr in body {
             self.generate_expression(func, expr)?;
         }
         self.scopes.pop();
-        func.push_block(l);
+        func.push_block(lafter);
         Ok(None)
     }
 
@@ -464,63 +554,87 @@ impl FasmGenerator {
             body,
             else_body,
         } = e;
-        self.label_count += 1;
-        let l1 = format!("L{}", self.label_count);
-        self.label_count += 1;
-        let l2 = format!("L{}", self.label_count);
-        let cond = self.generate_expression(func, cond)?.unwrap();
-        if !matches!(cond, Value::Register(Register::Rax)) {
-            func.push_instr(Instr::Mov(Value::Register(Register::Rax), cond));
+        let lafter = self.new_label();
+        let lother = self.new_label();
+        let v = self.generate_expression(func, cond)?.unwrap();
+        if !self.bf {
+            match &v {
+                Value::Const(size, ..) | Value::Memory(size, ..) => {
+                    let reg = Value::Register(size.register_for_size(Register::Rbx));
+                    func.push_instr(Instr::Mov(reg.clone(), v.clone()));
+                    func.push_instr(Instr::Test(reg.clone(), reg));
+                }
+                _ => {
+                    func.push_instr(Instr::Test(v.clone(), v));
+                }
+            }
+            self.bf = !self.bf
         }
-        func.push_instr(Instr::Test(
-            Value::Register(Register::Rax),
-            Value::Register(Register::Rax),
-        ));
-        func.push_instr(Instr::J(Cond::NZ, Value::Label(l1.clone())));
+        func.push_instr(Instr::J(Cond::NZ, Value::Label(lother.clone())));
         self.scopes.push(HashMap::new());
         for expr in body {
             self.generate_expression(func, expr)?;
         }
         self.scopes.pop();
-        func.push_instr(Instr::Jmp(Value::Label(l2.clone())));
-        func.push_block(l1);
+        func.push_instr(Instr::Jmp(Value::Label(lafter.clone())));
+        func.push_block(lother);
         self.scopes.push(HashMap::new());
         for expr in else_body {
             self.generate_expression(func, expr)?;
         }
         self.scopes.pop();
-        func.push_block(l2);
+        func.push_block(lafter);
         Ok(None) // TODO: Make the if-else return
     }
 
+    #[allow(unreachable_code)]
+    #[allow(unused)]
     fn generate_while(
         &mut self,
         func: &mut fasm::Function,
         e: &WhileExpression,
     ) -> Result<Option<Value>, CHSError> {
         let WhileExpression { loc: _, cond, body } = e;
-        self.label_count += 1;
-        let lcond = format!("L{}", self.label_count);
-        self.label_count += 1;
-        let after = format!("L{}", self.label_count);
-        func.push_block(lcond.clone());
-        let cond = self.generate_expression(func, cond)?.unwrap();
-        if !matches!(cond, Value::Register(Register::Rax)) {
-            func.push_instr(Instr::Mov(Value::Register(Register::Rax), cond));
-        }
-        func.push_instr(Instr::Test(
-            Value::Register(Register::Rax),
-            Value::Register(Register::Rax),
-        ));
-        func.push_instr(Instr::J(Cond::NZ, Value::Label(after.clone())));
+        let lcond = self.new_label();
+        let lbody = self.new_label();
+        let lafter = self.new_label();
+        func.push_instr(Instr::Jmp(Value::Label(lcond.clone())));
+        func.push_block(lbody.clone());
         self.scopes.push(HashMap::new());
         for expr in body {
             self.generate_expression(func, expr)?;
         }
         self.scopes.pop();
-        func.push_instr(Instr::Jmp(Value::Label(lcond)));
-        func.push_block(after);
+        func.push_block(lcond);
+        let v = self.generate_expression(func, cond)?.unwrap();
+        if !self.bf {
+            match &v {
+                Value::Const(size, ..) | Value::Memory(size, ..) => {
+                    let reg = Value::Register(size.register_for_size(Register::Rbx));
+                    func.push_instr(Instr::Mov(reg.clone(), v.clone()));
+                    func.push_instr(Instr::Test(reg.clone(), reg));
+                }
+                _ => {
+                    func.push_instr(Instr::Test(v.clone(), v));
+                }
+            }
+            self.bf = !self.bf
+        }
+        func.push_instr(Instr::J(Cond::NZ, Value::Label(lbody)));
+
+        func.push_block(lafter);
+
+        self.labels_free();
         Ok(None)
+    }
+
+    fn new_label(&mut self) -> String {
+        self.label_count += 1;
+        format!("L{}", self.label_count)
+    }
+
+    fn labels_free(&mut self) {
+        self.label_count = 0;
     }
 
     fn generate_syscall(

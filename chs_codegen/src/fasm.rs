@@ -3,7 +3,7 @@ use std::{fmt, path::PathBuf};
 use chs_util::{chs_error, CHSResult};
 
 #[allow(dead_code)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SizeOperator {
     Byte,
     Word,
@@ -65,10 +65,11 @@ impl SizeOperator {
         }
     }
 
-    pub fn register_from_size(&self, reg: Register) -> Register {
+    pub fn register_for_size(&self, reg: Register) -> Register {
         match (self, reg) {
+            (SizeOperator::Qword, reg) if reg.is_64() => reg,
             (SizeOperator::Byte, Register::Rax) => Register::Al,
-            (SizeOperator::Qword, Register::Rax|Register::Rbx) => reg,
+            (SizeOperator::Qword, Register::Al) => Register::Rax,
             (SizeOperator::Byte, Register::Rbx) => Register::Bl,
             _ => todo!("{self}, {reg}"),
         }
@@ -154,9 +155,31 @@ impl Register {
         use Register::*;
         [Rbx, R12, R13, R14, R15]
     }
+
+    fn is_64(&self) -> bool {
+        use Register::*;
+        matches!(
+            self,
+            Rax | Rcx
+                | Rdx
+                | Rbx
+                | Rsp
+                | Rbp
+                | Rsi
+                | Rdi
+                | R8
+                | R9
+                | R10
+                | R11
+                | R12
+                | R13
+                | R14
+                | R15
+        )
+    }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Value {
     /// Scale: A 2-bit constant factor that is either 1, 2, 4, or 8.
     ///
@@ -342,6 +365,7 @@ pub enum Instr {
     Cmove(Cond, Value, Value),
 
     Test(Value, Value),
+    Set(Cond, Value),
     J(Cond, Value),
     Jmp(Value),
     Call(Value),
@@ -375,6 +399,7 @@ impl fmt::Display for Instr {
             Self::Cmp(dst, src) => write!(f, "cmp {dst}, {src}"),
             Self::Cmove(cond, dst, src) => write!(f, "cmov{cond} {dst}, {src}"),
             Self::Test(dst, src) => write!(f, "test {dst}, {src}"),
+            Self::Set(cond, dst) => write!(f, "set{cond} {dst}"),
             Instr::J(cond, label) => write!(f, "j{cond} .{label}"), // local labels
             Instr::Jmp(label) => write!(f, "jmp .{label}"),         // local labels
             Instr::Call(label) => {
@@ -427,6 +452,8 @@ pub struct Function {
     name: String,
     stack_allocated: usize,
     blocks: Vec<Block>,
+    epiloge: bool,
+    prologe: bool,
 }
 
 impl Function {
@@ -435,6 +462,8 @@ impl Function {
             name: name.into(),
             stack_allocated: 0,
             blocks: Vec::new(),
+            prologe: true,
+            epiloge: true,
         }
     }
     pub fn allocate_stack(&mut self, size: usize) -> usize {
@@ -471,6 +500,14 @@ impl Function {
             .expect("Last block must be present")
             .push_instr(Instr::Raw(instr.into()));
     }
+
+    pub fn set_prelude(&mut self, arg: bool) {
+        self.prologe = arg;
+    }
+
+    pub fn set_epiloge(&mut self, arg: bool) {
+        self.epiloge = arg;
+    }
 }
 
 impl fmt::Display for Function {
@@ -481,22 +518,26 @@ impl fmt::Display for Function {
         writeln!(f, ";; function",)?;
         writeln!(f, "_{}:", self.name)?;
 
-        writeln!(f, "\tpush rbp")?;
-        writeln!(f, "\tmov rbp, rsp")?;
-        if self.stack_allocated > 0 {
-            writeln!(f, "\tsub rsp, {}", self.stack_allocated)?;
+        if self.prologe {
+            writeln!(f, "\tpush rbp")?;
+            writeln!(f, "\tmov rbp, rsp")?;
+            if self.stack_allocated > 0 {
+                writeln!(f, "\tsub rsp, {}", self.stack_allocated)?;
+            }
         }
 
         for blk in self.blocks.iter() {
             write!(f, "{}", blk)?;
         }
 
-        if self.stack_allocated > 0 {
-            writeln!(f, "\tadd rsp, {}", self.stack_allocated)?;
-        }
+        if self.epiloge {
+            if self.stack_allocated > 0 {
+                writeln!(f, "\tadd rsp, {}", self.stack_allocated)?;
+            }
 
-        writeln!(f, "\tpop rbp")?;
-        writeln!(f, "\tret")?;
+            writeln!(f, "\tpop rbp")?;
+            writeln!(f, "\tret")?;
+        }
 
         writeln!(f, ";; end")
     }
@@ -532,8 +573,7 @@ impl Module {
     }
 
     pub fn push_raw_instr_to_start(&mut self, instr: impl Into<String>) {
-        self.start
-            .push_instr(Instr::Raw(instr.into()));
+        self.start.push_instr(Instr::Raw(instr.into()));
     }
 
     pub fn out_path(&self) -> &PathBuf {
@@ -549,7 +589,7 @@ impl fmt::Display for Module {
         writeln!(f, "segment executable")?;
         writeln!(f, "_start:")?;
         for instr in self.start.instrs.iter() {
-            writeln!(f, "{}", instr)?;
+            writeln!(f, "\t{}", instr)?;
         }
         writeln!(f, "\tcall _main")?;
         writeln!(f, "\tmov rax, 60")?;

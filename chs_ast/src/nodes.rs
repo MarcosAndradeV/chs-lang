@@ -37,8 +37,8 @@ impl TypedModule {
                 chs_error!("{} Redefinition of {}", decl.loc, decl.name)
             }
         }
-        let var_name = "allocate".to_string();
-        let function = CHSType::Function(vec![CHSType::Int], Box::new(CHSType::Pointer(Box::new(CHSType::Void))));
+        let var_name = "print_int".to_string();
+        let function = CHSType::Function(vec![CHSType::Int], Box::new(CHSType::Void));
         env.globals_insert(&var_name, &function);
 
         for decl in &global_decls {
@@ -179,7 +179,7 @@ impl chs_types::InferType for Expression {
                     }
                     Ok(*ret_type.clone())
                 }
-                c => chs_error!("Cannot call {:?}", c),
+                c => chs_error!("{} Cannot call {:?}", call.loc, c),
             },
             Expression::Len(e) => {
                 let arg = e.infer(env)?;
@@ -299,7 +299,7 @@ impl chs_types::InferType for Expression {
                     let rigth = e.right.infer(env)?;
                     match (&left, &rigth) {
                         (CHSType::Pointer(..), CHSType::Pointer(..)) => {
-                            chs_error!("")
+                            chs_error!("{} {:?} + {:?} is not defined.", e.loc, left, rigth);
                         }
                         (CHSType::Int, CHSType::Pointer(..)) => {
                             e.ttype = Some(rigth.clone());

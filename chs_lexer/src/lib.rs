@@ -307,6 +307,7 @@ impl Lexer {
                     match self.peek_char() {
                         b'n' => buf.push('\n'),
                         b'\\' => buf.push('\\'),
+                        b'0' => buf.push('\0'),
                         _ => return self.make_token(TokenKind::Invalid, &buf),
                     }
                     self.read_char();

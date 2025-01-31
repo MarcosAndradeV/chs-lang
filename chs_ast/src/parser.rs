@@ -155,7 +155,7 @@ impl Parser {
                 self.expect_kind(ParenOpen)?;
                 let cond = self.parse_expression(Precedence::Lowest)?;
                 self.expect_kind(ParenClose)?;
-                self.parse_if_expression(loc, cond)?
+                return self.parse_if_expression(loc, cond)
             }
             Keyword if token.val_eq("while") => {
                 let loc = token.loc;
@@ -163,7 +163,7 @@ impl Parser {
                 let cond = self.parse_expression(Precedence::Lowest)?;
                 self.expect_kind(ParenClose)?;
                 let body = self.parse_expr_list(|t| t.val_eq("end"))?;
-                Expression::WhileExpression(Box::new(WhileExpression { loc, cond, body }))
+                return Ok(Expression::WhileExpression(Box::new(WhileExpression { loc, cond, body })))
             }
             String | Ident | Interger => Expression::from_literal_token(token)?,
             Keyword if token.val_eq("true") || token.val_eq("false") => {
