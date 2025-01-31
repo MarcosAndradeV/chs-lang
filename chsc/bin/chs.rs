@@ -22,7 +22,7 @@ fn main() {
             "compile",
             Cmd::new()
                 .help("Compiles the program.")
-                .arg("INPUT", 1)
+                .arg("INPUT", 0)
                 .flag("-o", "OUTPUT", false)
                 .flag_bool("-r")
                 .flag_bool("--emit-asm"),
@@ -31,12 +31,12 @@ fn main() {
             "check",
             Cmd::new()
                 .help("Check the program not compile.")
-                .arg("INPUT", 1),
+                .arg("INPUT", 0),
         );
     match cl.get_matches() {
         Some(("help", ..)) => cl.usage(),
         Some(("compile", flags, args)) => {
-            if let Some(file_path) = args.get(1).cloned() {
+            if let Some(file_path) = args.get(0).cloned() {
                 if let Err(err) = compile(
                     file_path,
                     flags.get("-o").cloned(),
@@ -50,7 +50,7 @@ fn main() {
             }
         }
         Some(("check", _, args)) => {
-            if let Some(file_path) = args.get(1).cloned() {
+            if let Some(file_path) = args.get(0).cloned() {
                 if let Err(err) = check(file_path) {
                     eprintln!("{err}")
                 }
