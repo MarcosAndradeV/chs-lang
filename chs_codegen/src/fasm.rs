@@ -441,7 +441,7 @@ impl Function {
         // self.push_raw_instr("sub rsp, 8");
         let res = self.stack_allocated;
         self.stack_allocated += size;
-        return res;
+        res
     }
 
     pub fn push_block(&mut self, label: impl Into<String>) -> &mut Block {
@@ -560,7 +560,7 @@ impl fmt::Display for Module {
             writeln!(f, "{}", func)?;
         }
 
-        if self.data.len() > 0 {
+        if !self.data.is_empty() {
             writeln!(f, "segment readable writable")?;
         }
         for data in self.data.iter() {

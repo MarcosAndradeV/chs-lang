@@ -60,6 +60,12 @@ pub struct TypeEnv<'a> {
     locals: Vec<HashMap<&'a String, &'a CHSType>>,
 }
 
+impl Default for TypeEnv<'_> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<'a> TypeEnv<'a> {
     pub fn new() -> Self {
         Self {

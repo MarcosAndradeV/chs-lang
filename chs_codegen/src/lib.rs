@@ -90,7 +90,7 @@ impl FasmGenerator {
         let cc = Register::get_syscall_call_convention();
         for (i, (name, _)) in func_decl.args.into_iter().enumerate() {
             assert!(i < cc.len());
-            scope.insert(name, fasm::Value::Register(cc[i].clone()));
+            scope.insert(name, fasm::Value::Register(cc[i]));
         }
         self.scopes.push(scope);
         func.push_block("start");
@@ -261,7 +261,7 @@ impl FasmGenerator {
             Value::Register(_) => lhs,
             _ => {
                 let reg = size.register_from_size(Register::Rbx) ;
-                func.push_instr(Instr::Mov(Value::Register(reg.clone()), lhs));
+                func.push_instr(Instr::Mov(Value::Register(reg), lhs));
                 Value::Register(reg)
             }
         };
@@ -534,7 +534,7 @@ impl FasmGenerator {
         for (i, arg) in args.enumerate().rev() {
             let reg = cc[i];
             let src = self.generate_expression(func, arg)?.unwrap();
-            func.push_instr(Instr::Mov(Value::Register(reg.clone()), src));
+            func.push_instr(Instr::Mov(Value::Register(reg), src));
         }
         match self.generate_expression(func, n)?.unwrap() {
             Value::Register(Register::Rax) => {}

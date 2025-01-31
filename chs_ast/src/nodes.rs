@@ -50,7 +50,7 @@ impl TypedModule {
         for f in &mut function_decls {
             env.locals_new();
             env.locals_extend(f.args.iter().map(|(n, a)| (n, a)));
-            if f.body.len() == 0 {
+            if f.body.is_empty() {
                 let expect = &f.ret_type;
                 let actual = CHSType::Void;
                 if !expect.equivalent(&actual, &env) {
@@ -65,20 +65,15 @@ impl TypedModule {
             let len = f.body.len() - 1;
             for (i, expr) in f.body.iter_mut().enumerate() {
                 let t = expr.infer(&mut env)?;
-                match expr {
-                    // TODO: Return() should be handle here like VarDecl.
-                    _ => {
-                        if i >= len {
-                            let expect = &f.ret_type;
-                            let actual = t;
-                            if !expect.equivalent(&actual, &env) {
-                                chs_error!(
-                                    "Return type mismatch. Expect: {:?}  Actual: {:?}",
-                                    expect,
-                                    actual
-                                );
-                            }
-                        }
+                if i >= len {
+                    let expect = &f.ret_type;
+                    let actual = t;
+                    if !expect.equivalent(&actual, &env) {
+                        chs_error!(
+                            "Return type mismatch. Expect: {:?}  Actual: {:?}",
+                            expect,
+                            actual
+                        );
                     }
                 }
             }
@@ -173,7 +168,7 @@ impl chs_types::InferType for Expression {
                     }
                     for (expect, actual) in fn_args.iter_mut().zip(call.args.iter_mut()) {
                         let actual = actual.infer(env)?;
-                        if !expect.equivalent(&actual, &env) {
+                        if !expect.equivalent(&actual, env) {
                             chs_error!(
                                 "{} Argument type mismatch. Expect: {:?}  Actual: {:?}",
                                 call.loc,
@@ -358,13 +353,13 @@ impl chs_types::InferType for Expression {
                                 actual
                             );
                         }
-                        return Ok(actual);
+                        Ok(actual)
                     }
-                    Operator::Negate => return Ok(expect),
+                    Operator::Negate => Ok(expect),
                     Operator::Deref => {
                         if let CHSType::Pointer(ptr) = expect {
                             e.ttype = Some(*ptr.clone());
-                            return Ok(*ptr);
+                            Ok(*ptr)
                         } else {
                             chs_error!("Cannot deref `{:?}` type", expect)
                         }

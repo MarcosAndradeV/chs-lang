@@ -48,8 +48,8 @@ impl Default for TokenKind {
 }
 
 impl TokenKind {
-    fn from_word_or_keyword(value: &String) -> Self {
-        match value.as_str() {
+    fn from_word_or_keyword(value: &str) -> Self {
+        match value {
             "fn" | "if" | "else" | "while" | "true" | "false" | "return" | "distinct" | "set"
             | "type" | "end" | "len" | "syscall" => Self::Keyword,
             _ => Self::Ident,
@@ -142,7 +142,7 @@ impl Lexer {
             ..Default::default()
         };
         lex.read_char();
-        return lex;
+        lex
     }
     fn read_char(&mut self) {
         if self.read_pos >= self.input.len() {
@@ -281,7 +281,7 @@ impl Lexer {
         let loc = self.loc.clone();
 
         loop {
-            if !matches!(self.ch, b'0'..=b'9') {
+            if !self.ch.is_ascii_digit() {
                 break;
             }
             self.read_char();

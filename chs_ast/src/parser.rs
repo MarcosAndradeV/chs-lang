@@ -250,7 +250,7 @@ impl Parser {
                     return Ok(left);
                 }
                 Plus | Asterisk | Slash | Minus | Eq | NotEq | Lt | Gt => {
-                    let operator = Operator::from_token(&ptoken, false)?;
+                    let operator = Operator::from_token(ptoken, false)?;
                     if precedence < operator.precedence() {
                         let loc = self.next().loc;
                         let infix = self.parse_infix_expression(loc, operator, left)?;
@@ -494,7 +494,7 @@ mod tests {
         .parse()
         {
             Ok(ast) => {
-                let main_fn = ast.function_decls.get(0);
+                let main_fn = ast.function_decls.first();
                 assert!(main_fn.is_some_and(|f| &f.name == "main"));
                 assert!(main_fn.is_some_and(|f| f.body.len() == 1));
             }
@@ -521,7 +521,7 @@ mod tests {
         .parse()
         {
             Ok(ast) => {
-                let main_fn = ast.function_decls.get(0);
+                let main_fn = ast.function_decls.first();
                 assert!(main_fn.is_some_and(|f| &f.name == "main"));
                 assert!(main_fn.is_some_and(|f| f.body.len() == 2));
             }

@@ -58,20 +58,11 @@ fn main() {
 }
 
 fn compile(file_path: String, outpath: Option<String>, run: bool, emit_asm: bool) -> CHSResult<()> {
-    let module = match chs_ast::parse_file(file_path) {
-        Ok(module) => module,
-        Err(err) => return Err(err),
-    };
+    let module = chs_ast::parse_file(file_path)?;
 
-    let typed_module = match TypedModule::from_module(module) {
-        Ok(typed_module) => typed_module,
-        Err(err) => return Err(err),
-    };
+    let typed_module = TypedModule::from_module(module)?;
 
-    let fasm_code = match FasmGenerator::generate(typed_module) {
-        Ok(code) => code,
-        Err(err) => return Err(err),
-    };
+    let fasm_code = FasmGenerator::generate(typed_module)?;
 
     let fasm_path = fasm_code.out_path();
     let mut out_file = File::create(fasm_path).map_err(|err| CHSError(err.to_string()))?;
@@ -121,15 +112,9 @@ if !emit_asm {    let mut rm_proc = process::Command::new("rm")
 }
 
 fn check(file_path: String) -> CHSResult<()> {
-    let module = match chs_ast::parse_file(file_path) {
-        Ok(module) => module,
-        Err(err) => return Err(err),
-    };
+    let module = chs_ast::parse_file(file_path)?;
 
-    let typed_module = match TypedModule::from_module(module) {
-        Ok(typed_module) => typed_module,
-        Err(err) => return Err(err),
-    };
+    let typed_module = TypedModule::from_module(module)?;
 
     println!("Module \"{}\" is type checked.", typed_module.file_path.display());
 
