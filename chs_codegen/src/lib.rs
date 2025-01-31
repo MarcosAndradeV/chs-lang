@@ -248,7 +248,7 @@ impl FasmGenerator {
     fn generater_var_decl(
         &mut self,
         func: &mut fasm::Function,
-        v: &Box<nodes::VarDecl>,
+        v: &nodes::VarDecl,
     ) -> Result<Option<Value>, CHSError> {
         if v.name == "_" {
             self.generate_expression(func, &v.value)?.unwrap();
@@ -322,52 +322,52 @@ impl FasmGenerator {
             Operator::And => match (&lhs, &rhs) {
                 (Value::Memory(_, _) | Value::Register(_), Value::Const(_, _)) => {
                     func.push_instr(Instr::And(lhs.clone(), rhs));
-                    return Ok(Some(lhs));
+                    Ok(Some(lhs))
                 }
                 (Value::Memory(_, _), Value::Memory(size, _)) => {
                     let reg = Value::Register(size.register_for_size(Register::Rbx));
                     func.push_instr(Instr::Mov(reg.clone(), rhs));
                     func.push_instr(Instr::And(lhs.clone(), reg));
-                    return Ok(Some(lhs));
+                    Ok(Some(lhs))
                 }
                 (lhs, rhs) => todo!("implement generation {lhs} and {rhs}"),
             },
             Operator::Or => match (&lhs, &rhs) {
                 (Value::Memory(_, _) | Value::Register(_), Value::Const(_, _)) => {
                     func.push_instr(Instr::Or(lhs.clone(), rhs));
-                    return Ok(Some(lhs));
+                    Ok(Some(lhs))
                 }
                 (Value::Memory(_, _), Value::Memory(size, _)) => {
                     let reg = Value::Register(size.register_for_size(Register::Rbx));
                     func.push_instr(Instr::Mov(reg.clone(), rhs));
                     func.push_instr(Instr::Or(lhs.clone(), reg));
-                    return Ok(Some(lhs));
+                    Ok(Some(lhs))
                 }
                 (lhs, rhs) => todo!("implement generation {lhs} or {rhs}"),
             },
             Operator::Plus => match (&lhs, &rhs) {
                 (Value::Memory(_, _) | Value::Register(_), Value::Const(_, _)) => {
                     func.push_instr(Instr::Add(lhs.clone(), rhs));
-                    return Ok(Some(lhs));
+                    Ok(Some(lhs))
                 }
                 (Value::Memory(_, _), Value::Memory(size, _)) => {
                     let reg = Value::Register(size.register_for_size(Register::Rbx));
                     func.push_instr(Instr::Mov(reg.clone(), rhs));
                     func.push_instr(Instr::Add(lhs.clone(), reg));
-                    return Ok(Some(lhs));
+                    Ok(Some(lhs))
                 }
                 (lhs, rhs) => todo!("implement generation {lhs} + {rhs}"),
             },
             Operator::Minus => match (&lhs, &rhs) {
                 (Value::Memory(_, _), Value::Const(_, _)) => {
                     func.push_instr(Instr::Sub(lhs.clone(), rhs));
-                    return Ok(Some(lhs));
+                    Ok(Some(lhs))
                 }
                 (Value::Memory(_, _), Value::Memory(size, _)) => {
                     let reg = Value::Register(size.register_for_size(Register::Rbx));
                     func.push_instr(Instr::Mov(reg.clone(), rhs));
                     func.push_instr(Instr::Sub(lhs.clone(), reg));
-                    return Ok(Some(lhs));
+                    Ok(Some(lhs))
                 }
                 (lhs, rhs) => todo!("implement generation {lhs} - {rhs}"),
             },
@@ -383,7 +383,7 @@ impl FasmGenerator {
                     _ => todo!("implement generation div {rhs}"),
                 };
                 func.push_instr(Instr::Div(rhs));
-                return Ok(Some(Value::Register(Register::Rax)));
+                Ok(Some(Value::Register(Register::Rax)))
             }
             Operator::Mod => {
                 func.push_instr(Instr::Mov(Value::Register(Register::Rax), lhs));
@@ -397,7 +397,7 @@ impl FasmGenerator {
                     _ => todo!("implement generation mod {rhs}"),
                 };
                 func.push_instr(Instr::Div(rhs));
-                return Ok(Some(Value::Register(Register::Rdx)));
+                Ok(Some(Value::Register(Register::Rdx)))
             }
             Operator::Mult => {
                 func.push_instr(Instr::Mov(Value::Register(Register::Rax), lhs));
@@ -411,7 +411,7 @@ impl FasmGenerator {
                     _ => todo!("implement generation mod {rhs}"),
                 };
                 func.push_instr(Instr::Mul(rhs));
-                return Ok(Some(Value::Register(Register::Rax)));
+                Ok(Some(Value::Register(Register::Rax)))
             }
             op => {
                 self.bf = true;
