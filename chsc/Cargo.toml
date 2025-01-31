@@ -8,7 +8,7 @@ chs_lexer = { path = "../chs_lexer/" }
 chs_ast = { path = "../chs_ast/" }
 chs_util = { path = "../chs_util/" }
 chs_codegen = { path = "../chs_codegen" }
-my_cli = "0.1.4"
+my_cli = "0.1.5"
 
 [[bin]]
 name = "chs"
