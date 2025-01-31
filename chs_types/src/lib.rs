@@ -24,7 +24,7 @@ impl CHSType {
             (CHSType::Pointer(a), CHSType::String) if **a == CHSType::Char => true,
             (CHSType::Alias(a), b) => env.get(a).is_some_and(|a| a.equivalent(b, env)),
             (a, CHSType::Alias(b)) => env.get(b).is_some_and(|b| b.equivalent(a, env)),
-            _ => false
+            _ => false,
         }
     }
 
@@ -48,7 +48,7 @@ impl TypeMap {
     pub fn get(&self, k: &String) -> Option<&CHSType> {
         match self.0.get(k) {
             Some(CHSType::Alias(sym)) => self.get(sym),
-            other => other
+            other => other,
         }
     }
 }
@@ -75,12 +75,10 @@ impl<'a> TypeEnv<'a> {
         }
     }
     pub fn type_decls_insert(&mut self, k: &'a String, v: &'a CHSType) -> Option<&CHSType> {
-        self.type_decls
-            .insert(k, v)
+        self.type_decls.insert(k, v)
     }
     pub fn globals_insert(&mut self, k: &'a String, v: &'a CHSType) -> Option<&CHSType> {
-        self.globals
-            .insert(k, v)
+        self.globals.insert(k, v)
     }
     pub fn get(&self, k: &String) -> Option<&&CHSType> {
         for scope in self.locals.iter().rev() {
@@ -88,7 +86,7 @@ impl<'a> TypeEnv<'a> {
             match get {
                 Some(CHSType::Alias(_)) => todo!("Get alias type"), // return self.get(sym),
                 Some(_) => return get,
-                _ => ()
+                _ => (),
             }
         }
         self.globals.get(k)

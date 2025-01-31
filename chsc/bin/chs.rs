@@ -37,7 +37,12 @@ fn main() {
         Some(("help", ..)) => cl.usage(),
         Some(("compile", flags, args)) => {
             if let Some(file_path) = args.get("INPUT").cloned() {
-                if let Err(err) = compile(file_path, flags.get("-o").cloned(), flags.is_present("-r"), flags.is_present("--emit-asm")) {
+                if let Err(err) = compile(
+                    file_path,
+                    flags.get("-o").cloned(),
+                    flags.is_present("-r"),
+                    flags.is_present("--emit-asm"),
+                ) {
                     eprintln!("{err}");
                 }
             } else {
@@ -85,15 +90,17 @@ fn compile(file_path: String, outpath: Option<String>, run: bool, emit_asm: bool
         chs_error!(String::from_utf8_lossy(&result.stderr));
     }
 
-if !emit_asm {    let mut rm_proc = process::Command::new("rm")
-        .arg(fasm_path)
-        .spawn()
-        .expect("Failed to spawn rm process");
+    if !emit_asm {
+        let mut rm_proc = process::Command::new("rm")
+            .arg(fasm_path)
+            .spawn()
+            .expect("Failed to spawn rm process");
 
-    let result = rm_proc.wait_with_output().expect("Failed to wait for fasm");
-    if !result.status.success() {
-        chs_error!("Failed {}", String::from_utf8_lossy(&result.stderr));
-    }}
+        let result = rm_proc.wait_with_output().expect("Failed to wait for fasm");
+        if !result.status.success() {
+            chs_error!("Failed {}", String::from_utf8_lossy(&result.stderr));
+        }
+    }
 
     if run {
         let mut run_proc = process::Command::new(format!("./{}", output_path.display()))
@@ -116,7 +123,10 @@ fn check(file_path: String) -> CHSResult<()> {
 
     let typed_module = TypedModule::from_module(module)?;
 
-    println!("Module \"{}\" is type checked.", typed_module.file_path.display());
+    println!(
+        "Module \"{}\" is type checked.",
+        typed_module.file_path.display()
+    );
 
     Ok(())
 }
