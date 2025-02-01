@@ -1,12 +1,12 @@
-cargo run -q -- compile -r tests/hello.chs
+cargo run -q -- compile -r -s tests/hello.chs
 rm tests/hello
-cargo run -q -- compile -r tests/ifs.chs
+cargo run -q -- compile -r -s tests/ifs.chs
 rm tests/ifs
-cargo run -q -- compile -r tests/inc.chs
+cargo run -q -- compile -r -s tests/inc.chs
 rm tests/inc
-cargo run -q -- compile -r tests/mmap_test.chs
+cargo run -q -- compile -r -s tests/mmap_test.chs
 rm tests/mmap_test
-cargo run -q -- compile -r tests/simple2.chs
+cargo run -q -- compile -r -s tests/simple2.chs
 rm tests/simple2
-cargo run -q -- compile -r tests/while.chs
+cargo run -q -- compile -r -s tests/while.chs
 rm tests/while

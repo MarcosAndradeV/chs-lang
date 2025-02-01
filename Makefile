@@ -4,8 +4,8 @@ build:
 release:
 	cargo build --release --bin chs
 
-test:
-	cargo test --all
+test: build
+	./rere.py replay test.list
 
 chs: release
 

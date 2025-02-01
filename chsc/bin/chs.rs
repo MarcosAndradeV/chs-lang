@@ -6,7 +6,7 @@ use std::{
     io::{Empty, Write},
     os::unix::process::CommandExt,
     path::PathBuf,
-    process::{self, exit, ExitCode},
+    process::{self, exit, ExitCode, Stdio},
 };
 
 use chs_ast::nodes::TypedModule;
@@ -25,6 +25,7 @@ fn main() {
                 .arg("INPUT", 0)
                 .flag("-o", "OUTPUT", false)
                 .flag_bool("-r")
+                .flag_bool("-s")
                 .flag_bool("--emit-asm"),
         )
         .add_cmd(
@@ -41,6 +42,7 @@ fn main() {
                     file_path,
                     flags.get("-o").cloned(),
                     flags.is_present("-r"),
+                    flags.is_present("-s"),
                     flags.is_present("--emit-asm"),
                 ) {
                     eprintln!("{err}");
@@ -62,7 +64,13 @@ fn main() {
     }
 }
 
-fn compile(file_path: String, outpath: Option<String>, run: bool, emit_asm: bool) -> CHSResult<()> {
+fn compile(
+    file_path: String,
+    outpath: Option<String>,
+    run: bool,
+    silent: bool,
+    emit_asm: bool,
+) -> CHSResult<()> {
     let module = chs_ast::parse_file(file_path)?;
 
     let typed_module = TypedModule::from_module(module)?;
@@ -72,18 +80,23 @@ fn compile(file_path: String, outpath: Option<String>, run: bool, emit_asm: bool
     let fasm_path = fasm_code.out_path();
     let mut out_file = File::create(fasm_path).map_err(|err| CHSError(err.to_string()))?;
     write!(out_file, "{}", fasm_code).map_err(|err| CHSError(err.to_string()))?;
-    println!("[INFO] Generating {}", fasm_path.display());
+    if !silent {
+        println!("[INFO] Generating {}", fasm_path.display());
+    }
     let output_path = match outpath {
         Some(a) => PathBuf::from(a),
         None => fasm_path.with_extension(""),
     };
-    let mut fasm_proc = process::Command::new("fasm")
-        .arg(fasm_path)
-        .arg(&output_path)
-        .spawn()
-        .expect("Failed to spawn fasm process");
+    let mut fasm_proc = process::Command::new("fasm");
+    fasm_proc.arg(fasm_path).arg(&output_path);
+
+    if silent {
+        fasm_proc.stdout(Stdio::null());
+    }
 
     let result = fasm_proc
+        .spawn()
+        .expect("Failed to spawn fasm process")
         .wait_with_output()
         .expect("Failed to wait for fasm");
     if !result.status.success() {
