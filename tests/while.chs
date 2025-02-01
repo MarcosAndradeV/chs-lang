@@ -1,11 +1,12 @@
 fn main()
+    msg := "Hello CHS\n"
     i := 0
     while(i < 10)
-        print("CHS\n")
+        print(msg)
         set i = i + 1
     end
 end
 
 fn print(msg: string)
-    _ := syscall(1, 1, msg, len(msg))
+    _ := syscall(1, 1, msg, len msg)
 end
