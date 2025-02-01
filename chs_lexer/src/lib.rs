@@ -20,18 +20,22 @@ pub enum TokenKind {
     Dot,
     Asterisk,
     Ampersand,
+    DoubleAmpersand,
     Arrow,
     Plus,
     Slash,
     Minus,
+    Mod,
+
     Eq,
     NotEq,
     Gt,
     Lt,
+
     Bang,
-    Or,
-    And,
-    Mod,
+
+    Pipe,
+    DoublePipe,
 
     ParenOpen,
     ParenClose,
@@ -57,6 +61,10 @@ impl TokenKind {
     }
     pub fn is_eof(&self) -> bool {
         *self == TokenKind::EOF
+    }
+    pub fn is_op(&self) -> bool {
+        use TokenKind::*;
+        matches!(self, Plus | Asterisk | Slash | Minus | Eq | NotEq | Lt | Gt | Mod | Pipe | Ampersand | DoublePipe | DoubleAmpersand)
     }
 }
 
@@ -90,11 +98,12 @@ impl fmt::Display for TokenKind {
             TokenKind::Slash => write!(f, "Slash"),
             TokenKind::Eq => write!(f, "Eq"),
             TokenKind::Comment => write!(f, "Comment"),
-            TokenKind::Or => write!(f, "Or"),
-            TokenKind::And => write!(f, "And"),
             TokenKind::Mod => write!(f, "Mod"),
             TokenKind::Gt => write!(f, "Gt"),
             TokenKind::Lt => write!(f, "Lt"),
+            TokenKind::DoubleAmpersand => write!(f, "DoubleAmpersand"),
+            TokenKind::Pipe => write!(f, "Pipe"),
+            TokenKind::DoublePipe => write!(f, "DoublePipe"),
         }
     }
 }
@@ -219,7 +228,7 @@ impl Lexer {
             b'&' => {
                 if self.peek_char() == b'&' {
                     self.read_char();
-                    self.make_token(And, "&&")
+                    self.make_token(DoubleAmpersand, "&&")
                 } else {
                     self.make_token(Ampersand, "&")
                 }
@@ -227,9 +236,9 @@ impl Lexer {
             b'|' => {
                 if self.peek_char() == b'|' {
                     self.read_char();
-                    self.make_token(Or, "||")
+                    self.make_token(DoublePipe, "||")
                 } else {
-                    self.make_token(Invalid, "|")
+                    self.make_token(Pipe, "|")
                 }
             }
             b',' => self.make_token(Comma, ","),
