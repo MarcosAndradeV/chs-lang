@@ -468,9 +468,8 @@ impl Function {
     }
     pub fn allocate_stack(&mut self, size: usize) -> usize {
         // self.push_raw_instr("sub rsp, 8");
-        let res = self.stack_allocated;
         self.stack_allocated += size;
-        res
+        self.stack_allocated
     }
 
     pub fn push_block(&mut self, label: impl Into<String>) -> &mut Block {
