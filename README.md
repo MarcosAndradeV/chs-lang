@@ -44,16 +44,19 @@ $ cp -v target/release/chs .
 
 ### Testing:
 
-- No support yet
-        
+```console
+$ ./rere.py replay test.list
+```
+
 ### Usage:
 
 ```console
 $ ./chs
-USAGE: target/debug/chs <COMMAND> [OPTIONS]
+Usage: chs <COMMAND> [ARGS] [[-|--]FLAG]
 COMMANDS:
-      help         Print this message
-      compile      Compile a program: chs compile <file.chs>
+    help                                                    Print help message
+    compile <INPUT> [--emit-asm]  [-o <OUTPUT>] [-r]  [-s]  Compiles the program.
+    check <INPUT>                                           Check the program not compile.
 ```
 
 ### Editor Support:
@@ -72,10 +75,6 @@ fn main()
   syscall(1, 1, msg, len(msg))
 end
 ```
-### Description    
-  TODO 
-### Type system overview 
-  TODO
 
 ## License
 
