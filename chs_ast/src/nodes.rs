@@ -1,4 +1,4 @@
-use std::{any::Any, path::PathBuf};
+use std::path::PathBuf;
 
 use chs_lexer::Token;
 use chs_util::{chs_error, CHSError, CHSResult, Loc};

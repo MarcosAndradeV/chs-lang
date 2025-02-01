@@ -410,14 +410,11 @@ impl FasmGenerator {
                 (lhs, rhs) => todo!("implement generation {lhs} - {rhs}"),
             },
             Operator::Div => {
-                match (&lhs, &rhs) {
-                    (Value::Const(_, c1), Value::Const(_, c2)) => {
-                        if *c2 == 0 {
-                            chs_error!("{} Cannot divide by 0 in constants.", loc)
-                        }
-                        return Ok(Some(Value::Const(SizeOperator::Byte, *c1 / *c2)))
+                if let (Value::Const(_, c1), Value::Const(_, c2)) = (&lhs, &rhs) {
+                    if *c2 == 0 {
+                        chs_error!("{} Cannot divide by 0 in constants.", loc)
                     }
-                    _ => {}
+                    return Ok(Some(Value::Const(SizeOperator::Byte, *c1 / *c2)))
                 }
                 func.push_instr(Instr::Mov(Value::Register(Register::Rax), lhs));
                 let rhs = match rhs {
@@ -433,14 +430,11 @@ impl FasmGenerator {
                 Ok(Some(Value::Register(Register::Rax)))
             }
             Operator::Mod => {
-                match (&lhs, &rhs) {
-                    (Value::Const(_, c1), Value::Const(_, c2)) => {
-                        if *c2 == 0 {
-                            chs_error!("{} Cannot divide by 0 in constants.", loc)
-                        }
-                        return Ok(Some(Value::Const(SizeOperator::Byte, *c1 / *c2)))
+                if let (Value::Const(_, c1), Value::Const(_, c2)) = (&lhs, &rhs) {
+                    if *c2 == 0 {
+                        chs_error!("{} Cannot divide by 0 in constants.", loc)
                     }
-                    _ => {}
+                    return Ok(Some(Value::Const(SizeOperator::Byte, *c1 / *c2)))
                 }
                 func.push_instr(Instr::Mov(Value::Register(Register::Rax), lhs));
                 let rhs = match rhs {
@@ -456,11 +450,8 @@ impl FasmGenerator {
                 Ok(Some(Value::Register(Register::Rdx)))
             }
             Operator::Mult => {
-                match (&lhs, &rhs) {
-                    (Value::Const(_, c1), Value::Const(_, c2)) => {
-                        return Ok(Some(Value::Const(SizeOperator::Byte, *c1 * *c2)))
-                    }
-                    _ => {}
+                if let (Value::Const(_, c1), Value::Const(_, c2)) = (&lhs, &rhs) {
+                    return Ok(Some(Value::Const(SizeOperator::Byte, *c1 * *c2)))
                 }
                 func.push_instr(Instr::Mov(Value::Register(Register::Rax), lhs));
                 let rhs = match rhs {
