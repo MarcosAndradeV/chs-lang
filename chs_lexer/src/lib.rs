@@ -64,7 +64,21 @@ impl TokenKind {
     }
     pub fn is_op(&self) -> bool {
         use TokenKind::*;
-        matches!(self, Plus | Asterisk | Slash | Minus | Eq | NotEq | Lt | Gt | Mod | Pipe | Ampersand | DoublePipe | DoubleAmpersand)
+        matches!(
+            self,
+            Plus | Asterisk
+                | Slash
+                | Minus
+                | Eq
+                | NotEq
+                | Lt
+                | Gt
+                | Mod
+                | Pipe
+                | Ampersand
+                | DoublePipe
+                | DoubleAmpersand
+        )
     }
 }
 

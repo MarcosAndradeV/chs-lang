@@ -330,11 +330,17 @@ impl FasmGenerator {
         let rhs = self.generate_expression(func, right)?.unwrap();
         match op {
             Operator::LAnd => match (&lhs, &rhs) {
-                (Value::Memory(_, _) | Value::Register(_), Value::Const(_, _) | Value::Register(_)) => {
+                (
+                    Value::Memory(_, _) | Value::Register(_),
+                    Value::Const(_, _) | Value::Register(_),
+                ) => {
                     func.push_instr(Instr::And(lhs.clone(), rhs));
                     Ok(Some(lhs))
                 }
-                ( Value::Register(_)|Value::Const(_, _) , Value::Memory(_, _) | Value::Register(_))=> {
+                (
+                    Value::Register(_) | Value::Const(_, _),
+                    Value::Memory(_, _) | Value::Register(_),
+                ) => {
                     func.push_instr(Instr::And(rhs.clone(), lhs));
                     Ok(Some(rhs))
                 }
@@ -344,17 +350,24 @@ impl FasmGenerator {
                     func.push_instr(Instr::And(lhs.clone(), reg));
                     Ok(Some(lhs))
                 }
-                (Value::Const(_, c1), Value::Const(_, c2)) => {
-                    Ok(Some(Value::Const(SizeOperator::Byte, (*c1 != 0 && *c2 != 0) as i64)))
-                }
+                (Value::Const(_, c1), Value::Const(_, c2)) => Ok(Some(Value::Const(
+                    SizeOperator::Byte,
+                    (*c1 != 0 && *c2 != 0) as i64,
+                ))),
                 (lhs, rhs) => todo!("implement generation {lhs} && {rhs}"),
             },
             Operator::LOr => match (&lhs, &rhs) {
-                (Value::Memory(_, _) | Value::Register(_), Value::Const(_, _) | Value::Register(_)) => {
+                (
+                    Value::Memory(_, _) | Value::Register(_),
+                    Value::Const(_, _) | Value::Register(_),
+                ) => {
                     func.push_instr(Instr::Or(lhs.clone(), rhs));
                     Ok(Some(lhs))
                 }
-                ( Value::Register(_)|Value::Const(_, _) , Value::Memory(_, _) | Value::Register(_))=> {
+                (
+                    Value::Register(_) | Value::Const(_, _),
+                    Value::Memory(_, _) | Value::Register(_),
+                ) => {
                     func.push_instr(Instr::Or(rhs.clone(), lhs));
                     Ok(Some(rhs))
                 }
@@ -364,17 +377,24 @@ impl FasmGenerator {
                     func.push_instr(Instr::Or(lhs.clone(), reg));
                     Ok(Some(lhs))
                 }
-                (Value::Const(_, c1), Value::Const(_, c2)) => {
-                    Ok(Some(Value::Const(SizeOperator::Byte, (*c1 != 0 || *c2 != 0) as i64)))
-                }
+                (Value::Const(_, c1), Value::Const(_, c2)) => Ok(Some(Value::Const(
+                    SizeOperator::Byte,
+                    (*c1 != 0 || *c2 != 0) as i64,
+                ))),
                 (lhs, rhs) => todo!("implement generation {lhs} || {rhs}"),
             },
             Operator::Plus => match (&lhs, &rhs) {
-                (Value::Memory(_, _) | Value::Register(_), Value::Const(_, _) | Value::Register(_)) => {
+                (
+                    Value::Memory(_, _) | Value::Register(_),
+                    Value::Const(_, _) | Value::Register(_),
+                ) => {
                     func.push_instr(Instr::Add(lhs.clone(), rhs));
                     Ok(Some(lhs))
                 }
-                ( Value::Register(_)|Value::Const(_, _) , Value::Memory(_, _) | Value::Register(_))=> {
+                (
+                    Value::Register(_) | Value::Const(_, _),
+                    Value::Memory(_, _) | Value::Register(_),
+                ) => {
                     func.push_instr(Instr::Add(rhs.clone(), lhs));
                     Ok(Some(rhs))
                 }
@@ -390,11 +410,17 @@ impl FasmGenerator {
                 (lhs, rhs) => todo!("implement generation {lhs} + {rhs}"),
             },
             Operator::Minus => match (&lhs, &rhs) {
-                (Value::Memory(_, _) | Value::Register(_), Value::Const(_, _) | Value::Register(_)) => {
+                (
+                    Value::Memory(_, _) | Value::Register(_),
+                    Value::Const(_, _) | Value::Register(_),
+                ) => {
                     func.push_instr(Instr::Sub(lhs.clone(), rhs));
                     Ok(Some(lhs))
                 }
-                ( Value::Register(_)|Value::Const(_, _) , Value::Memory(_, _) | Value::Register(_))=> {
+                (
+                    Value::Register(_) | Value::Const(_, _),
+                    Value::Memory(_, _) | Value::Register(_),
+                ) => {
                     func.push_instr(Instr::Sub(rhs.clone(), lhs));
                     Ok(Some(rhs))
                 }
@@ -414,7 +440,7 @@ impl FasmGenerator {
                     if *c2 == 0 {
                         chs_error!("{} Cannot divide by 0 in constants.", loc)
                     }
-                    return Ok(Some(Value::Const(SizeOperator::Byte, *c1 / *c2)))
+                    return Ok(Some(Value::Const(SizeOperator::Byte, *c1 / *c2)));
                 }
                 func.push_instr(Instr::Mov(Value::Register(Register::Rax), lhs));
                 let rhs = match rhs {
@@ -434,7 +460,7 @@ impl FasmGenerator {
                     if *c2 == 0 {
                         chs_error!("{} Cannot divide by 0 in constants.", loc)
                     }
-                    return Ok(Some(Value::Const(SizeOperator::Byte, *c1 / *c2)))
+                    return Ok(Some(Value::Const(SizeOperator::Byte, *c1 / *c2)));
                 }
                 func.push_instr(Instr::Mov(Value::Register(Register::Rax), lhs));
                 let rhs = match rhs {
@@ -451,7 +477,7 @@ impl FasmGenerator {
             }
             Operator::Mult => {
                 if let (Value::Const(_, c1), Value::Const(_, c2)) = (&lhs, &rhs) {
-                    return Ok(Some(Value::Const(SizeOperator::Byte, *c1 * *c2)))
+                    return Ok(Some(Value::Const(SizeOperator::Byte, *c1 * *c2)));
                 }
                 func.push_instr(Instr::Mov(Value::Register(Register::Rax), lhs));
                 let rhs = match rhs {
@@ -483,23 +509,21 @@ impl FasmGenerator {
                         func.push_instr(Instr::Mov(treg.clone(), rhs));
                         func.push_instr(Instr::Cmp(reg, treg));
                     }
-                    (Value::Const(_, c1), Value::Const(_, c2)) => {
-                        match op {
-                            Operator::Eq => {
-                                return Ok(Some(Value::Const(SizeOperator::Byte, (*c1 == *c2) as i64)))
-                            }
-                            Operator::NEq => {
-                                return Ok(Some(Value::Const(SizeOperator::Byte, (*c1 != *c2) as i64)))
-                            }
-                            Operator::Gt => {
-                                return Ok(Some(Value::Const(SizeOperator::Byte, (*c1 > *c2) as i64)))
-                            }
-                            Operator::Lt => {
-                                return Ok(Some(Value::Const(SizeOperator::Byte, (*c1 < *c2) as i64)))
-                            }
-                            op => todo!("implement generation for {op:?}"),
+                    (Value::Const(_, c1), Value::Const(_, c2)) => match op {
+                        Operator::Eq => {
+                            return Ok(Some(Value::Const(SizeOperator::Byte, (*c1 == *c2) as i64)))
                         }
-                    }
+                        Operator::NEq => {
+                            return Ok(Some(Value::Const(SizeOperator::Byte, (*c1 != *c2) as i64)))
+                        }
+                        Operator::Gt => {
+                            return Ok(Some(Value::Const(SizeOperator::Byte, (*c1 > *c2) as i64)))
+                        }
+                        Operator::Lt => {
+                            return Ok(Some(Value::Const(SizeOperator::Byte, (*c1 < *c2) as i64)))
+                        }
+                        op => todo!("implement generation for {op:?}"),
+                    },
                     (lhs, rhs) => todo!("implement generation {lhs} {op:?} {rhs}"),
                 }
                 match op {
@@ -551,7 +575,9 @@ impl FasmGenerator {
             }
             Operator::LNot => {
                 let lhs = match lhs {
-                    Value::Const(_, c1) => return Ok(Some(Value::Const(SizeOperator::Byte, (c1 == 0) as i64))),
+                    Value::Const(_, c1) => {
+                        return Ok(Some(Value::Const(SizeOperator::Byte, (c1 == 0) as i64)))
+                    }
                     Value::Register(_) => lhs,
                     _ => {
                         let reg = Value::Register(size.register_for_size(Register::Rbx));

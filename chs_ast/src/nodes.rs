@@ -298,17 +298,29 @@ impl chs_types::InferType for Expression {
                     let left = e.left.infer(env)?;
                     let right = e.right.infer(env)?;
                     if !left.equivalent(&right, env) {
-                        chs_error!("{} {:?} {:?} {:?} is not defined.", e.loc, e.op, left, right);
+                        chs_error!(
+                            "{} {:?} {:?} {:?} is not defined.",
+                            e.loc,
+                            e.op,
+                            left,
+                            right
+                        );
                     }
                     e.ttype = Some(CHSType::Boolean);
                     Ok(CHSType::Boolean)
                 }
-                Operator::Plus | Operator::Minus  => {
+                Operator::Plus | Operator::Minus => {
                     let left = e.left.infer(env)?;
                     let right = e.right.infer(env)?;
                     match (&left, &right) {
                         (CHSType::Pointer(..), CHSType::Pointer(..)) => {
-                            chs_error!("{} {:?} {:?} {:?} is not defined.", e.loc, e.op, left, right);
+                            chs_error!(
+                                "{} {:?} {:?} {:?} is not defined.",
+                                e.loc,
+                                e.op,
+                                left,
+                                right
+                            );
                         }
                         (CHSType::Int, CHSType::Pointer(..)) => {
                             e.ttype = Some(right.clone());
@@ -330,7 +342,13 @@ impl chs_types::InferType for Expression {
                             e.ttype = Some(left.clone());
                             Ok(left)
                         }
-                        _ => chs_error!("{} {:?} {:?} {:?} is not defined.", e.loc, e.op ,left, right)
+                        _ => chs_error!(
+                            "{} {:?} {:?} {:?} is not defined.",
+                            e.loc,
+                            e.op,
+                            left,
+                            right
+                        ),
                     }
                 }
                 Operator::Div | Operator::Mod | Operator::Mult => {
@@ -338,18 +356,32 @@ impl chs_types::InferType for Expression {
                     let right = e.right.infer(env)?;
                     match (&left, &right) {
                         (a, b) if a.is_pointer() || b.is_pointer() => {
-                            chs_error!("{} {:?} {:?} {:?} is not defined.", e.loc, e.op ,left, right)
+                            chs_error!(
+                                "{} {:?} {:?} {:?} is not defined.",
+                                e.loc,
+                                e.op,
+                                left,
+                                right
+                            )
                         }
                         (CHSType::Int, CHSType::Int) => {
                             e.ttype = Some(left.clone());
                             Ok(left)
                         }
-                        _ => chs_error!("{} {:?} {:?} {:?} is not defined.", e.loc, e.op ,left, right)
+                        _ => chs_error!(
+                            "{} {:?} {:?} {:?} is not defined.",
+                            e.loc,
+                            e.op,
+                            left,
+                            right
+                        ),
                     }
                 }
                 Operator::Or => chs_error!("{} {:?} is not defined.", e.loc, e.op),
                 Operator::And => chs_error!("{} {:?} is not defined.", e.loc, e.op),
-                Operator::Negate|Operator::LNot|Operator::Refer | Operator::Deref => unreachable!("Not a binary operator"),
+                Operator::Negate | Operator::LNot | Operator::Refer | Operator::Deref => {
+                    unreachable!("Not a binary operator")
+                }
             },
             Expression::Unop(e) => {
                 let expect = e.left.infer(env)?;
@@ -370,7 +402,7 @@ impl chs_types::InferType for Expression {
                     Operator::Negate => {
                         e.ttype = Some(expect.clone());
                         Ok(expect)
-                    },
+                    }
                     Operator::Deref => {
                         if let CHSType::Pointer(ptr) = expect {
                             e.ttype = Some(*ptr.clone());
@@ -382,7 +414,7 @@ impl chs_types::InferType for Expression {
                     Operator::Refer => {
                         e.ttype = Some(expect.clone());
                         Ok(CHSType::Pointer(Box::new(expect)))
-                    },
+                    }
                     _ => unreachable!("Not a unary operator"),
                 }
             }
@@ -578,8 +610,7 @@ impl Operator {
             Operator::Plus | Operator::Minus => Precedence::Sum,
             Operator::Mult | Operator::Div | Operator::Mod => Precedence::Product,
             Operator::Lt | Operator::Gt => Precedence::RelatonalGteLte,
-            Operator::Eq | Operator::NEq
-            => Precedence::Equals,
+            Operator::Eq | Operator::NEq => Precedence::Equals,
             Operator::LOr => Precedence::LOr,
             Operator::LAnd => Precedence::LAnd,
             Operator::Or => Precedence::Or,
