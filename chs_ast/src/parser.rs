@@ -253,7 +253,7 @@ impl Parser {
                     left = call;
                     return Ok(left);
                 }
-                Plus | Asterisk | Slash | Minus | Eq | NotEq | Lt | Gt => {
+                k if k.is_op() => {
                     let operator = Operator::from_token(ptoken, false)?;
                     if precedence < operator.precedence() {
                         let loc = self.next().loc;

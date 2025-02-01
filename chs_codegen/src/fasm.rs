@@ -48,7 +48,6 @@ impl SizeOperator {
         match ttype {
             chs_types::CHSType::Pointer(_)
             | chs_types::CHSType::Function(_, _)
-            | chs_types::CHSType::Boolean
             | chs_types::CHSType::String
             | chs_types::CHSType::Int
             | chs_types::CHSType::UInt => Ok(Self::Qword),
@@ -60,7 +59,7 @@ impl SizeOperator {
                 }
             }
             chs_types::CHSType::Distinct(chstype) => Self::from_chstype(chstype, type_map),
-            chs_types::CHSType::Char => Ok(Self::Byte),
+            chs_types::CHSType::Char | chs_types::CHSType::Boolean => Ok(Self::Byte),
             chs_types::CHSType::Void => chs_error!("TODO"),
         }
     }
@@ -68,9 +67,11 @@ impl SizeOperator {
     pub fn register_for_size(&self, reg: Register) -> Register {
         match (self, reg) {
             (SizeOperator::Qword, reg) if reg.is_64() => reg,
+            (SizeOperator::Byte, reg) if reg.is_8() => reg,
             (SizeOperator::Byte, Register::Rax) => Register::Al,
             (SizeOperator::Qword, Register::Al) => Register::Rax,
             (SizeOperator::Byte, Register::Rbx) => Register::Bl,
+            (SizeOperator::Byte, Register::R12) => Register::R12L,
             _ => todo!("{self}, {reg}"),
         }
     }
@@ -118,6 +119,7 @@ pub enum Register {
     R15,
     Al,
     Bl,
+    R12L,
 }
 
 impl fmt::Display for Register {
@@ -141,6 +143,7 @@ impl fmt::Display for Register {
             Self::R15 => write!(f, "r15"),
             Self::Al => write!(f, "al"),
             Self::Bl => write!(f, "bl"),
+            Self::R12L => write!(f, "r12l"),
         }
     }
 }
@@ -176,6 +179,10 @@ impl Register {
                 | R14
                 | R15
         )
+    }
+    pub fn is_8(&self) -> bool {
+        use Register::*;
+        matches!(self, Al | Bl | R12L)
     }
 }
 

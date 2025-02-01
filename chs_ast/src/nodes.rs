@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{any::Any, path::PathBuf};
 
 use chs_lexer::Token;
 use chs_util::{chs_error, CHSError, CHSResult, Loc};
@@ -294,12 +294,21 @@ impl chs_types::InferType for Expression {
                     e.ttype = Some(CHSType::Boolean);
                     Ok(CHSType::Boolean)
                 }
-                Operator::Plus | Operator::Minus => {
+                Operator::LAnd | Operator::LOr => {
+                    let left = e.left.infer(env)?;
+                    let right = e.right.infer(env)?;
+                    if !left.equivalent(&right, env) {
+                        chs_error!("{} {:?} {:?} {:?} is not defined.", e.loc, e.op, left, right);
+                    }
+                    e.ttype = Some(CHSType::Boolean);
+                    Ok(CHSType::Boolean)
+                }
+                Operator::Plus | Operator::Minus  => {
                     let left = e.left.infer(env)?;
                     let right = e.right.infer(env)?;
                     match (&left, &right) {
                         (CHSType::Pointer(..), CHSType::Pointer(..)) => {
-                            chs_error!("{} {:?} + {:?} is not defined.", e.loc, left, right);
+                            chs_error!("{} {:?} {:?} {:?} is not defined.", e.loc, e.op, left, right);
                         }
                         (CHSType::Int, CHSType::Pointer(..)) => {
                             e.ttype = Some(right.clone());
@@ -321,24 +330,26 @@ impl chs_types::InferType for Expression {
                             e.ttype = Some(left.clone());
                             Ok(left)
                         }
-                        _ => chs_error!(""),
+                        _ => chs_error!("{} {:?} {:?} {:?} is not defined.", e.loc, e.op ,left, right)
                     }
                 }
-                Operator::Div | Operator::Mult => {
+                Operator::Div | Operator::Mod | Operator::Mult => {
                     let left = e.left.infer(env)?;
                     let right = e.right.infer(env)?;
                     match (&left, &right) {
                         (a, b) if a.is_pointer() || b.is_pointer() => {
-                            chs_error!("")
+                            chs_error!("{} {:?} {:?} {:?} is not defined.", e.loc, e.op ,left, right)
                         }
                         (CHSType::Int, CHSType::Int) => {
                             e.ttype = Some(left.clone());
                             Ok(left)
                         }
-                        _ => chs_error!(""),
+                        _ => chs_error!("{} {:?} {:?} {:?} is not defined.", e.loc, e.op ,left, right)
                     }
                 }
-                _ => unreachable!("Not a binary operator"),
+                Operator::Or => chs_error!("{} {:?} is not defined.", e.loc, e.op),
+                Operator::And => chs_error!("{} {:?} is not defined.", e.loc, e.op),
+                Operator::Negate|Operator::LNot|Operator::Refer | Operator::Deref => unreachable!("Not a binary operator"),
             },
             Expression::Unop(e) => {
                 let expect = e.left.infer(env)?;
@@ -353,9 +364,13 @@ impl chs_types::InferType for Expression {
                                 actual
                             );
                         }
+                        e.ttype = Some(actual.clone());
                         Ok(actual)
                     }
-                    Operator::Negate => Ok(expect),
+                    Operator::Negate => {
+                        e.ttype = Some(expect.clone());
+                        Ok(expect)
+                    },
                     Operator::Deref => {
                         if let CHSType::Pointer(ptr) = expect {
                             e.ttype = Some(*ptr.clone());
@@ -364,7 +379,10 @@ impl chs_types::InferType for Expression {
                             chs_error!("Cannot deref `{:?}` type", expect)
                         }
                     }
-                    Operator::Refer => Ok(CHSType::Pointer(Box::new(expect))),
+                    Operator::Refer => {
+                        e.ttype = Some(expect.clone());
+                        Ok(CHSType::Pointer(Box::new(expect)))
+                    },
                     _ => unreachable!("Not a unary operator"),
                 }
             }
@@ -515,6 +533,8 @@ pub enum Operator {
     Div,
     Mult,
     Mod,
+    LOr,
+    LAnd,
     Or,
     And,
     Eq,
@@ -545,8 +565,10 @@ impl Operator {
             Gt => Ok(Self::Gt),
             Lt => Ok(Self::Lt),
             Mod => Ok(Self::Mod),
-            And => Ok(Self::And),
-            Or => Ok(Self::Or),
+            DoubleAmpersand => Ok(Self::LAnd),
+            DoublePipe => Ok(Self::LOr),
+            Ampersand => Ok(Self::Or),
+            Pipe => Ok(Self::And),
             _ => chs_error!("{} Unsupported operator", token.loc),
         }
     }
@@ -555,8 +577,13 @@ impl Operator {
         match self {
             Operator::Plus | Operator::Minus => Precedence::Sum,
             Operator::Mult | Operator::Div | Operator::Mod => Precedence::Product,
-            Operator::Lt | Operator::Gt => Precedence::LessGreater,
-            Operator::Eq | Operator::NEq | Operator::Or | Operator::And => Precedence::Equals,
+            Operator::Lt | Operator::Gt => Precedence::RelatonalGteLte,
+            Operator::Eq | Operator::NEq
+            => Precedence::Equals,
+            Operator::LOr => Precedence::LOr,
+            Operator::LAnd => Precedence::LAnd,
+            Operator::Or => Precedence::Or,
+            Operator::And => Precedence::And,
             Operator::Negate | Operator::LNot => Precedence::Prefix,
             Operator::Refer | Operator::Deref => Precedence::Prefix,
             // _ => Precedence::Lowest,
@@ -567,8 +594,14 @@ impl Operator {
 #[derive(Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum Precedence {
     Lowest = 1,
+    LOr,
+    LAnd,
+    Or,
+    Xor,
+    And,
     Equals,
-    LessGreater,
+    RelatonalGteLte,
+    BitWise,
     Sum,
     Product,
     Prefix,
