@@ -207,7 +207,7 @@ impl chs_types::InferType for Expression {
                 Ok(CHSType::Void)
             }
             Expression::Assign(e) => {
-                let expect = e.assined.infer(env)?;
+                let expect = e.assigned.infer(env)?;
                 let actual = e.value.infer(env)?;
                 if !expect.equivalent(&actual, env) {
                     chs_error!(
@@ -282,13 +282,13 @@ impl chs_types::InferType for Expression {
             Expression::Binop(e) => match e.op {
                 Operator::Eq | Operator::NEq | Operator::Gt | Operator::Lt => {
                     let left = e.left.infer(env)?;
-                    let rigth = e.right.infer(env)?;
-                    if !left.equivalent(&rigth, env) {
+                    let right = e.right.infer(env)?;
+                    if !left.equivalent(&right, env) {
                         chs_error!(
                             "{} Argument type mismatch. Expect: {:?}  Actual: {:?}",
                             e.loc,
                             left,
-                            rigth
+                            right
                         );
                     }
                     e.ttype = Some(CHSType::Boolean);
@@ -296,14 +296,14 @@ impl chs_types::InferType for Expression {
                 }
                 Operator::Plus | Operator::Minus => {
                     let left = e.left.infer(env)?;
-                    let rigth = e.right.infer(env)?;
-                    match (&left, &rigth) {
+                    let right = e.right.infer(env)?;
+                    match (&left, &right) {
                         (CHSType::Pointer(..), CHSType::Pointer(..)) => {
-                            chs_error!("{} {:?} + {:?} is not defined.", e.loc, left, rigth);
+                            chs_error!("{} {:?} + {:?} is not defined.", e.loc, left, right);
                         }
                         (CHSType::Int, CHSType::Pointer(..)) => {
-                            e.ttype = Some(rigth.clone());
-                            Ok(rigth)
+                            e.ttype = Some(right.clone());
+                            Ok(right)
                         }
                         (CHSType::Pointer(..), CHSType::Int) => {
                             e.ttype = Some(left.clone());
@@ -326,8 +326,8 @@ impl chs_types::InferType for Expression {
                 }
                 Operator::Div | Operator::Mult => {
                     let left = e.left.infer(env)?;
-                    let rigth = e.right.infer(env)?;
-                    match (&left, &rigth) {
+                    let right = e.right.infer(env)?;
+                    match (&left, &right) {
                         (a, b) if a.is_pointer() || b.is_pointer() => {
                             chs_error!("")
                         }
@@ -376,11 +376,11 @@ impl Expression {
     pub fn from_literal_token(token: Token) -> Result<Self, CHSError> {
         use chs_lexer::TokenKind::*;
         match token.kind {
-            Interger => {
+            Integer => {
                 let value: i64 = token
                     .value
                     .parse::<i64>()
-                    .expect("No interger token. Probably a lexer error.");
+                    .expect("No integer token. Probably a lexer error.");
                 Ok(Self::ConstExpression(ConstExpression::IntegerLiteral(
                     value,
                 )))
@@ -395,7 +395,7 @@ impl Expression {
             String => Ok(Self::ConstExpression(ConstExpression::StringLiteral(
                 token.value,
             ))),
-            _ => chs_error!("{} Unsuported literal", token.loc),
+            _ => chs_error!("{} Unsupported literal", token.loc),
         }
     }
 }
@@ -434,7 +434,7 @@ pub struct GlobalDecl {
 #[derive(Debug)]
 pub struct Assign {
     pub loc: Loc,
-    pub assined: Expression,
+    pub assigned: Expression,
     pub value: Expression,
     pub ttype: Option<CHSType>,
 }
@@ -547,7 +547,7 @@ impl Operator {
             Mod => Ok(Self::Mod),
             And => Ok(Self::And),
             Or => Ok(Self::Or),
-            _ => chs_error!("{} Unsuported operator", token.loc),
+            _ => chs_error!("{} Unsupported operator", token.loc),
         }
     }
 

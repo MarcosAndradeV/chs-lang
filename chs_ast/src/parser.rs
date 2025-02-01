@@ -140,12 +140,12 @@ impl Parser {
             }
             Keyword if token.val_eq("set") => {
                 let loc = token.loc;
-                let assined = self.parse_expression(Precedence::Lowest)?;
+                let assigned = self.parse_expression(Precedence::Lowest)?;
                 self.expect_kind(Assign)?;
                 let value = self.parse_expression(Precedence::Lowest)?;
                 Expression::Assign(Box::new(nodes::Assign {
                     loc,
-                    assined,
+                    assigned,
                     value,
                     ttype: None,
                 }))
@@ -169,7 +169,7 @@ impl Parser {
                     body,
                 })));
             }
-            String | Ident | Interger => Expression::from_literal_token(token)?,
+            String | Ident | Integer => Expression::from_literal_token(token)?,
             Keyword if token.val_eq("true") || token.val_eq("false") => {
                 Expression::from_literal_token(token)?
             }
@@ -304,7 +304,7 @@ impl Parser {
                         args.push(Expression::Assign(
                             nodes::Assign {
                                 loc: token.loc,
-                                assined: Expression::ConstExpression(ConstExpression::Symbol(
+                                assigned: Expression::ConstExpression(ConstExpression::Symbol(
                                     token.value,
                                 )),
                                 value: self.parse_expression(Precedence::Lowest)?,
@@ -474,7 +474,7 @@ impl Parser {
                 let ttype = self.parse_type()?;
                 CHSType::Distinct(Box::new(ttype))
             }
-            _ => chs_error!("Type not implemnted {}", ttoken),
+            _ => chs_error!("Type not implemented {}", ttoken),
         };
         Ok(ttype)
     }

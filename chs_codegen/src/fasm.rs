@@ -150,7 +150,7 @@ impl Register {
         use Register::*;
         [Rdi, Rsi, Rdx, R10, R8, R9]
     }
-    /// Exculding `rsp` and `rbp`
+    /// Excluding `rsp` and `rbp`
     pub const fn get_callee_saved() -> [Self; 5] {
         use Register::*;
         [Rbx, R12, R13, R14, R15]
@@ -266,7 +266,7 @@ pub enum DataDirective {
     Rd,
     Dq,
     Rq,
-    // TODO: do te others
+    // TODO: do be others
 }
 
 impl fmt::Display for DataDirective {

@@ -176,11 +176,11 @@ impl FasmGenerator {
                     v.ttype.as_ref().expect("Expected type"),
                     &self.type_map,
                 )?;
-                let dst = match &v.assined {
+                let dst = match &v.assigned {
                     Expression::Unop(u) if u.op == Operator::Deref => {
                         self.generate_assign_deref(func, &u.left, &u.ttype)?
                     }
-                    _ => match self.generate_expression(func, &v.assined)?.unwrap() {
+                    _ => match self.generate_expression(func, &v.assigned)?.unwrap() {
                         Value::Memory(_, a) => Value::Memory(size, a),
                         Value::Register(reg) => Value::Register(size.register_for_size(reg)),
                         dst => dst,

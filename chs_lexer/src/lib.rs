@@ -8,7 +8,7 @@ pub enum TokenKind {
     EOF,
     Comment,
 
-    Interger,
+    Integer,
     Keyword,
     Ident,
     String,
@@ -66,7 +66,7 @@ impl fmt::Display for TokenKind {
             TokenKind::Invalid => write!(f, "Invalid"),
             TokenKind::EOF => write!(f, "EOF"),
             TokenKind::Ident => write!(f, "Ident"),
-            TokenKind::Interger => write!(f, "Interger"),
+            TokenKind::Integer => write!(f, "Integer"),
             TokenKind::Keyword => write!(f, "Keyword"),
             TokenKind::Assign => write!(f, "Assign"),
             TokenKind::Comma => write!(f, "Comma"),
@@ -289,7 +289,7 @@ impl Lexer {
         let value: String = String::from_utf8_lossy(&self.input[start_pos..self.pos]).into();
 
         Token {
-            kind: TokenKind::Interger,
+            kind: TokenKind::Integer,
             value,
             loc,
         }
@@ -396,12 +396,12 @@ mod tests {
             tlex.gen_token(Ident, "x"),
             tlex.gen_token(Colon, ":"),
             tlex.gen_token(Assign, "="),
-            tlex.gen_token(Interger, "5"),
+            tlex.gen_token(Integer, "5"),
             tlex.gen_token(Semicolon, ";"),
             tlex.gen_token(Ident, "y"),
             tlex.gen_token(Colon, ":"),
             tlex.gen_token(Assign, "="),
-            tlex.gen_token(Interger, "5"),
+            tlex.gen_token(Integer, "5"),
             tlex.gen_token(Semicolon, ";"),
             tlex.gen_token(Ident, "x"),
             tlex.gen_token(Plus, "+"),
@@ -427,7 +427,7 @@ mod tests {
             tlex.gen_token(Minus, "-"),
             tlex.gen_token(Slash, "/"),
             tlex.gen_token(Asterisk, "*"),
-            tlex.gen_token(Interger, "5"),
+            tlex.gen_token(Integer, "5"),
             tlex.gen_token(Semicolon, ";"),
             tlex.gen_token(EOF, "\0"),
         ];
