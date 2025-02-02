@@ -8,6 +8,7 @@ use chs_types::{CHSType, InferType, TypeEnv, TypeMap};
 #[derive(Debug, Default)]
 pub struct Module {
     pub file_path: PathBuf,
+    pub imported_modules: Vec<UseModuleDecl>,
     pub type_decls: Vec<TypeDecl>,
     pub global_decls: Vec<GlobalDecl>,
     pub function_decls: Vec<FunctionDecl>,
@@ -25,6 +26,7 @@ impl TypedModule {
     pub fn from_module(m: Module) -> CHSResult<TypedModule> {
         let Module {
             file_path,
+            imported_modules: _,
             type_decls,
             global_decls,
             mut function_decls,
@@ -448,6 +450,12 @@ impl Expression {
             _ => chs_error!("{} Unsupported literal", token.loc),
         }
     }
+}
+
+#[derive(Debug)]
+pub struct UseModuleDecl {
+    pub loc: Loc,
+    pub path: PathBuf,
 }
 
 #[derive(Debug)]

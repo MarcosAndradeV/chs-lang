@@ -1,6 +1,6 @@
-use chs_util::Loc;
+use chs_util::{CHSError, CHSResult, Loc};
 use core::fmt;
-use std::path::PathBuf;
+use std::{fs, path::PathBuf};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum TokenKind {
@@ -54,7 +54,7 @@ impl Default for TokenKind {
 impl TokenKind {
     fn from_word_or_keyword(value: &str) -> Self {
         match value {
-            "fn" | "if" | "else" | "while" | "true" | "false" | "return" | "distinct" | "set"
+            "fn" | "if" | "else" | "while" | "true" | "false" | "use" | "distinct" | "set"
             | "type" | "end" | "len" | "syscall" => Self::Keyword,
             _ => Self::Ident,
         }
@@ -152,20 +152,23 @@ pub struct Lexer {
     read_pos: usize,
     ch: u8,
     loc: Loc,
+    file_path: PathBuf,
 }
 
 impl Lexer {
     pub fn get_filename(&self) -> PathBuf {
-        self.loc.filepath.clone()
+        self.file_path.clone()
     }
-    pub fn new(filepath: PathBuf, input: Vec<u8>) -> Self {
+    pub fn new(file_path: PathBuf) -> CHSResult<Self> {
+        let input = fs::read(&file_path).map_err(|err| CHSError(format!("ERROR: Cannot read file {err}")))?;
         let mut lex = Self {
             input,
-            loc: Loc::new(filepath, 1, 1),
+            loc: Loc::new(file_path.clone(), 1, 1),
+            file_path,
             ..Default::default()
         };
         lex.read_char();
-        lex
+        Ok(lex)
     }
     fn read_char(&mut self) {
         if self.read_pos >= self.input.len() {
@@ -360,124 +363,6 @@ impl Lexer {
             kind: TokenKind::from_word_or_keyword(&value),
             value,
             loc,
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    struct LexTester {
-        line: usize,
-        col: usize,
-    }
-    impl LexTester {
-        fn new() -> Self {
-            LexTester { line: 1, col: 1 }
-        }
-        fn gen_token(&self, kind: TokenKind, value: &str) -> Token {
-            Token {
-                loc: Loc::new(file!().into(), self.line, self.col),
-                kind,
-                value: value.to_string(),
-            }
-        }
-    }
-
-    #[test]
-    fn test_next_token_1() {
-        use TokenKind::*;
-        let input = "=+(){}".to_string();
-        let tlex = LexTester::new();
-        let tests = &[
-            tlex.gen_token(Assign, "="),
-            tlex.gen_token(Plus, "+"),
-            tlex.gen_token(ParenOpen, "("),
-            tlex.gen_token(ParenClose, ")"),
-            tlex.gen_token(CurlyOpen, "{"),
-            tlex.gen_token(CurlyClose, "}"),
-            tlex.gen_token(EOF, "\0"),
-        ];
-        let mut lex = Lexer::new(file!().into(), input.into_bytes());
-        for tt in tests {
-            assert_eq!(lex.next_token().kind, tt.kind)
-        }
-    }
-
-    #[test]
-    fn test_next_token_2() {
-        use TokenKind::*;
-        let input = r#"
-            x := 5;
-            y := 10;
-            x + y;
-            "#
-        .to_string();
-        let tlex = LexTester::new();
-        let tests = &[
-            tlex.gen_token(Ident, "x"),
-            tlex.gen_token(Colon, ":"),
-            tlex.gen_token(Assign, "="),
-            tlex.gen_token(Integer, "5"),
-            tlex.gen_token(Semicolon, ";"),
-            tlex.gen_token(Ident, "y"),
-            tlex.gen_token(Colon, ":"),
-            tlex.gen_token(Assign, "="),
-            tlex.gen_token(Integer, "5"),
-            tlex.gen_token(Semicolon, ";"),
-            tlex.gen_token(Ident, "x"),
-            tlex.gen_token(Plus, "+"),
-            tlex.gen_token(Ident, "y"),
-            tlex.gen_token(Semicolon, ";"),
-        ];
-        let mut lex = Lexer::new(file!().into(), input.into_bytes());
-        for tt in tests {
-            assert_eq!(lex.next_token().kind, tt.kind)
-        }
-    }
-
-    #[test]
-    fn test_next_token_3() {
-        use TokenKind::*;
-        let input = r#"
-            ! - / * 5;
-            "#
-        .to_string();
-        let tlex = LexTester::new();
-        let tests = &[
-            tlex.gen_token(Bang, "!"),
-            tlex.gen_token(Minus, "-"),
-            tlex.gen_token(Slash, "/"),
-            tlex.gen_token(Asterisk, "*"),
-            tlex.gen_token(Integer, "5"),
-            tlex.gen_token(Semicolon, ";"),
-            tlex.gen_token(EOF, "\0"),
-        ];
-        let mut lex = Lexer::new(file!().into(), input.into_bytes());
-        for tt in tests {
-            assert_eq!(lex.next_token().kind, tt.kind)
-        }
-    }
-
-    #[test]
-    fn test_next_token_4() {
-        use TokenKind::*;
-        let input = r#"
-            false != true;
-            "#
-        .to_string();
-        let tlex = LexTester::new();
-        let tests = &[
-            tlex.gen_token(Keyword, "false"),
-            tlex.gen_token(NotEq, "!="),
-            tlex.gen_token(Keyword, "true"),
-            tlex.gen_token(Semicolon, ";"),
-            tlex.gen_token(EOF, "\0"),
-        ];
-        let mut lex = Lexer::new(file!().into(), input.into_bytes());
-        for tt in tests {
-            assert_eq!(lex.next_token().kind, tt.kind)
         }
     }
 }

@@ -42,12 +42,22 @@ impl CHSType {
 }
 
 #[derive(Debug)]
-pub struct TypeMap(HashMap<String, CHSType>);
+pub struct TypeMap {
+    type_decls: HashMap<String, CHSType>,
+    globals: HashMap<String, CHSType>,
+}
 
 impl TypeMap {
-    pub fn get(&self, k: &String) -> Option<&CHSType> {
-        match self.0.get(k) {
-            Some(CHSType::Alias(sym)) => self.get(sym),
+    pub fn get_type(&self, k: &String) -> Option<&CHSType> {
+        match self.type_decls.get(k) {
+            Some(CHSType::Alias(sym)) => self.get_type(sym),
+            other => other,
+        }
+    }
+
+    pub fn get_global(&self, k: &String) -> Option<&CHSType> {
+        match self.globals.get(k) {
+            Some(CHSType::Alias(sym)) => self.get_type(sym),
             other => other,
         }
     }
@@ -77,6 +87,12 @@ impl<'a> TypeEnv<'a> {
     pub fn type_decls_insert(&mut self, k: &'a String, v: &'a CHSType) -> Option<&CHSType> {
         self.type_decls.insert(k, v)
     }
+    pub fn type_decls_get(&self, k: &'a String) -> Option<&&CHSType> {
+        match self.type_decls.get(k) {
+            Some(CHSType::Alias(sym)) => self.type_decls.get(sym),
+            tt => tt
+        }
+    }
     pub fn globals_insert(&mut self, k: &'a String, v: &'a CHSType) -> Option<&CHSType> {
         self.globals.insert(k, v)
     }
@@ -84,7 +100,7 @@ impl<'a> TypeEnv<'a> {
         for scope in self.locals.iter().rev() {
             let get = scope.get(k);
             match get {
-                Some(CHSType::Alias(_)) => todo!("Get alias type"), // return self.get(sym),
+                Some(CHSType::Alias(sym)) => return self.type_decls_get(sym), // return self.get(sym),
                 Some(_) => return get,
                 _ => (),
             }
@@ -111,11 +127,16 @@ impl<'a> TypeEnv<'a> {
     }
 
     pub fn into_type_defs(self) -> TypeMap {
-        TypeMap(HashMap::from_iter(
+        TypeMap {
+            globals: HashMap::from_iter(
             self.globals
                 .into_iter()
-                .map(|(k, v)| (k.clone(), v.clone())),
-        ))
+                .map(|(k, v)| (k.clone(), v.clone()))),
+            type_decls: HashMap::from_iter(
+            self.type_decls
+                .into_iter()
+                .map(|(k, v)| (k.clone(), v.clone())))
+        }
     }
 }
 

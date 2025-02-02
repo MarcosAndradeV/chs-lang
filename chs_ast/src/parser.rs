@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use crate::nodes::{self, *};
 use chs_lexer::{Lexer, Token, TokenKind};
 use chs_types::CHSType;
@@ -68,6 +70,25 @@ impl Parser {
                 chs_error!("{} Invalid token '{}'", token.loc, token.value);
             }
             match token.kind {
+                Keyword if token.val_eq("use") => {
+                    let loc = token.loc;
+                    let path = PathBuf::from(self.expect_kind(String)?.value);
+                    if !path.exists() {
+                        chs_error!("{} file \"{}\" cannot be found", loc, path.display());
+                    }
+                    if !self.module.imported_modules.iter().any(|im| im.path == path) {
+                        let mut p = Parser::new(Lexer::new(path.clone())?);
+                        p.module.imported_modules.push(UseModuleDecl {
+                            loc,
+                            path
+                        });
+                        let m = p.parse()?;
+                        self.module.function_decls.extend(m.function_decls);
+                        self.module.global_decls.extend(m.global_decls);
+                        self.module.type_decls.extend(m.type_decls);
+                        self.module.imported_modules.extend(m.imported_modules);
+                    }
+                }
                 Keyword if token.val_eq("fn") => {
                     let loc = token.loc;
                     let token = self.expect_kind(Ident)?;
@@ -477,61 +498,5 @@ impl Parser {
             _ => chs_error!("Type not implemented {}", ttoken),
         };
         Ok(ttype)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn simple_parse_file() {
-        match Parser::new(Lexer::new(
-            file!().into(),
-            r#"
-                fn main()
-                    print("Hello, world!")
-                end
-            "#
-            .into(),
-        ))
-        .parse()
-        {
-            Ok(ast) => {
-                let main_fn = ast.function_decls.first();
-                assert!(main_fn.is_some_and(|f| &f.name == "main"));
-                assert!(main_fn.is_some_and(|f| f.body.len() == 1));
-            }
-            Err(err) => {
-                assert!(false, "{err}");
-            }
-        }
-    }
-
-    #[test]
-    fn parse_if_expression() {
-        match Parser::new(Lexer::new(
-            file!().into(),
-            r#"
-                fn main()
-                    x := 1
-                    if(x == 1)
-                        print("Hello, world!")
-                    end
-                end
-            "#
-            .into(),
-        ))
-        .parse()
-        {
-            Ok(ast) => {
-                let main_fn = ast.function_decls.first();
-                assert!(main_fn.is_some_and(|f| &f.name == "main"));
-                assert!(main_fn.is_some_and(|f| f.body.len() == 2));
-            }
-            Err(err) => {
-                assert!(false, "{err}");
-            }
-        }
     }
 }

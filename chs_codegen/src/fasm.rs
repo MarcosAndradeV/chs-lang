@@ -52,7 +52,7 @@ impl SizeOperator {
             | chs_types::CHSType::Int
             | chs_types::CHSType::UInt => Ok(Self::Qword),
             chs_types::CHSType::Alias(k) => {
-                if let Some(ttype) = type_map.get(k) {
+                if let Some(ttype) = type_map.get_type(k) {
                     Self::from_chstype(ttype, type_map)
                 } else {
                     chs_error!("Type not found")
