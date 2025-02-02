@@ -20,7 +20,7 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 # WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-import sys
+import sys, os
 import subprocess
 from difflib import unified_diff
 from typing import List, BinaryIO, Tuple, Optional
@@ -96,6 +96,7 @@ if __name__ == '__main__':
 
     if len(argv) == 0:
         print(f'Usage: {program_name} <record|replay> <test.list>')
+        print(f'       {program_name} <update> <testfolder> <test.list>')
         print('ERROR: no subcommand is provided')
         exit(1)
     subcommand, *argv = argv
@@ -160,6 +161,34 @@ if __name__ == '__main__':
             if failed:
                 exit(1)
         print('OK')
+    elif subcommand == 'update':
+        if len(argv) == 0:
+            print(f'Usage: {program_name} <update> <testfolder> <test.list>')
+            print('ERROR: no test.list is provided')
+            exit(1)
+        folder_path, *argv = argv
+        if len(argv) == 0:
+            print(f'Usage: {program_name} <update> <testfolder> <test.list>')
+            print('ERROR: no test.list is provided')
+            exit(1)
+        output_file, *argv = argv
+        try:
+            with open(output_file, 'w', encoding='utf-8') as outfile:
+                for root, _, files in os.walk(folder_path):
+                    for file in files:
+                        if file.endswith(".chs"):
+                            file_path = os.path.join(root, file)
+                            try:
+                                outfile.write(f"cargo run -q -- compile -r -s {file_path}\n")
+                                outfile.write(f"rm {file_path.removesuffix(".chs")}\n")
+                            except Exception as e:
+                                print(f"Error writing file path {file_path} to output file: {e}")
+                                print("Skipping this file.")
+
+        except FileNotFoundError:
+            print(f"Error: Folder '{folder_path}' not found.")
+        except Exception as e:
+            print(f"An error occurred: {e}")
     else:
         print(f'ERROR: unknown subcommand {subcommand}');
         exit(1);

@@ -1,14 +1,23 @@
-:i count 12
+:i count 14
 :b shell 45
-cargo run -q -- compile -r -s tests/hello.chs
+cargo run -q -- compile -r -s tests/while.chs
 :i returncode 0
-:b stdout 15
-Hello from CHS
+:b stdout 100
+Hello CHS
+Hello CHS
+Hello CHS
+Hello CHS
+Hello CHS
+Hello CHS
+Hello CHS
+Hello CHS
+Hello CHS
+Hello CHS
 
 :b stderr 0
 
 :b shell 14
-rm tests/hello
+rm tests/while
 :i returncode 0
 :b stdout 0
 
@@ -75,25 +84,32 @@ rm tests/simple2
 
 :b stderr 0
 
-:b shell 45
-cargo run -q -- compile -r -s tests/while.chs
+:b shell 51
+cargo run -q -- compile -r -s tests/arithmetics.chs
 :i returncode 0
-:b stdout 100
-Hello CHS
-Hello CHS
-Hello CHS
-Hello CHS
-Hello CHS
-Hello CHS
-Hello CHS
-Hello CHS
-Hello CHS
-Hello CHS
+:b stdout 0
+
+:b stderr 55
+ERROR: Return type mismatch. Expect: Void  Actual: Int
+
+:b shell 20
+rm tests/arithmetics
+:i returncode 1
+:b stdout 0
+
+:b stderr 86
+rm: não foi possível remover 'tests/arithmetics': Arquivo ou diretório inexistente
+
+:b shell 45
+cargo run -q -- compile -r -s tests/hello.chs
+:i returncode 0
+:b stdout 15
+Hello from CHS
 
 :b stderr 0
 
 :b shell 14
-rm tests/while
+rm tests/hello
 :i returncode 0
 :b stdout 0
 
