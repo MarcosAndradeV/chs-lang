@@ -97,6 +97,7 @@ pub enum ConstExpression {
     IntegerLiteral(i64),
     BooleanLiteral(bool),
     StringLiteral(String),
+    CharLiteral(u8),
     Void,
 }
 
@@ -110,6 +111,7 @@ impl chs_types::InferType for ConstExpression {
             ConstExpression::IntegerLiteral(_) => Ok(CHSType::Int),
             ConstExpression::BooleanLiteral(_) => Ok(CHSType::Boolean),
             ConstExpression::StringLiteral(_) => Ok(CHSType::String),
+            ConstExpression::CharLiteral(_) => Ok(CHSType::Char),
             ConstExpression::Void => Ok(CHSType::Void),
         }
     }
@@ -447,6 +449,15 @@ impl Expression {
             String => Ok(Self::ConstExpression(ConstExpression::StringLiteral(
                 token.value,
             ))),
+            Character => {
+                let value: char = token
+                    .value
+                    .parse::<char>()
+                    .expect("No char token. Probably a lexer error.");
+                Ok(Self::ConstExpression(ConstExpression::CharLiteral(
+                    value as u8,
+                )))
+            }
             _ => chs_error!("{} Unsupported literal", token.loc),
         }
     }

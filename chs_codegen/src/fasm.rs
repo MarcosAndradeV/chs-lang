@@ -68,9 +68,10 @@ impl SizeOperator {
         match (self, reg) {
             (SizeOperator::Qword, reg) if reg.is_64() => reg,
             (SizeOperator::Byte, reg) if reg.is_8() => reg,
-            (SizeOperator::Byte, Register::Rax) => Register::Al,
             (SizeOperator::Qword, Register::Al) => Register::Rax,
+            (SizeOperator::Byte, Register::Rax) => Register::Al,
             (SizeOperator::Byte, Register::Rbx) => Register::Bl,
+            (SizeOperator::Byte, Register::Rdi) => Register::Dil,
             (SizeOperator::Byte, Register::R12) => Register::R12L,
             _ => todo!("{self}, {reg}"),
         }
@@ -119,31 +120,40 @@ pub enum Register {
     R15,
     Al,
     Bl,
+    Cl,
+    Dl,
+    Sil,
+    Dil,
     R12L,
 }
 
 impl fmt::Display for Register {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use Register::*;
         match self {
-            Self::Rax => write!(f, "rax"),
-            Self::Rcx => write!(f, "rcx"),
-            Self::Rdx => write!(f, "rdx"),
-            Self::Rbx => write!(f, "rbx"),
-            Self::Rsp => write!(f, "rsp"),
-            Self::Rbp => write!(f, "rbp"),
-            Self::Rsi => write!(f, "rsi"),
-            Self::Rdi => write!(f, "rdi"),
-            Self::R8 => write!(f, "r8"),
-            Self::R9 => write!(f, "r9"),
-            Self::R10 => write!(f, "r10"),
-            Self::R11 => write!(f, "r11"),
-            Self::R12 => write!(f, "r12"),
-            Self::R13 => write!(f, "r13"),
-            Self::R14 => write!(f, "r14"),
-            Self::R15 => write!(f, "r15"),
-            Self::Al => write!(f, "al"),
-            Self::Bl => write!(f, "bl"),
-            Self::R12L => write!(f, "r12l"),
+            Rax => write!(f, "rax"),
+            Rcx => write!(f, "rcx"),
+            Rdx => write!(f, "rdx"),
+            Rbx => write!(f, "rbx"),
+            Rsp => write!(f, "rsp"),
+            Rbp => write!(f, "rbp"),
+            Rsi => write!(f, "rsi"),
+            Rdi => write!(f, "rdi"),
+            R8 => write!(f, "r8"),
+            R9 => write!(f, "r9"),
+            R10 => write!(f, "r10"),
+            R11 => write!(f, "r11"),
+            R12 => write!(f, "r12"),
+            R13 => write!(f, "r13"),
+            R14 => write!(f, "r14"),
+            R15 => write!(f, "r15"),
+            Al => write!(f, "al"),
+            Bl => write!(f, "bl"),
+            Cl => write!(f, "cl"),
+            Dl => write!(f, "dl"),
+            Sil => write!(f, "sil"),
+            Dil => write!(f, "dil"),
+            R12L => write!(f, "r12l"),
         }
     }
 }
@@ -182,7 +192,15 @@ impl Register {
     }
     pub fn is_8(&self) -> bool {
         use Register::*;
-        matches!(self, Al | Bl | R12L)
+        matches!(self,
+            Al |
+            Bl |
+            Cl |
+            Dl |
+            Sil |
+            Dil |
+            R12L
+        )
     }
 }
 

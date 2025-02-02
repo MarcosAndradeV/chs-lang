@@ -12,6 +12,7 @@ pub enum TokenKind {
     Keyword,
     Ident,
     String,
+    Character,
 
     Assign,
     Comma,
@@ -118,6 +119,7 @@ impl fmt::Display for TokenKind {
             TokenKind::DoubleAmpersand => write!(f, "DoubleAmpersand"),
             TokenKind::Pipe => write!(f, "Pipe"),
             TokenKind::DoublePipe => write!(f, "DoublePipe"),
+            TokenKind::Character => write!(f, "Character"),
         }
     }
 }
@@ -267,6 +269,7 @@ impl Lexer {
             b'[' => self.make_token(SquareOpen, "["),
             b']' => self.make_token(SquareClose, "]"),
             b'a'..=b'z' | b'A'..=b'Z' | b'_' => self.word(),
+            b'\'' => self.character(),
             b'"' => self.string(),
             b'0'..=b'9' => self.number(),
             0 => self.make_token(EOF, "\0"),
@@ -321,6 +324,39 @@ impl Lexer {
         }
     }
 
+    fn character(&mut self) -> Token {
+        let start_loc = self.loc.clone();
+        let mut buf = String::new();
+
+        self.read_char();
+        match self.ch {
+            b'\'' => return self.make_token(TokenKind::Invalid, "Empty character literal".into()),
+            b'\\' => {
+                match self.peek_char() {
+                    b'n' => buf.push('\n'),
+                    b'\\' => buf.push('\\'),
+                    b'0' => buf.push('\0'),
+                    _ => return self.make_token(TokenKind::Invalid, "Unsupported escape character.".into()),
+                }
+                self.read_char();
+                self.read_char();
+            }
+            ch => {
+                buf.push(ch as char);
+                self.read_char();
+            },
+        }
+        if self.ch != b'\'' {
+            return self.make_token(TokenKind::Invalid, "Unclosed character literal".into());
+        }
+        self.read_char();
+        Token {
+            value:buf,
+            kind: TokenKind::Character,
+            loc: start_loc,
+        }
+    }
+
     fn string(&mut self) -> Token {
         let start_loc = self.loc.clone();
         let mut buf = String::new();
@@ -328,13 +364,13 @@ impl Lexer {
             self.read_char();
             match self.ch {
                 b'\"' => break self.read_char(),
-                b'\0' => return self.make_token(TokenKind::Invalid, &buf),
+                b'\0' => return self.make_token(TokenKind::Invalid, "Unclosed string literal".into()),
                 b'\\' => {
                     match self.peek_char() {
                         b'n' => buf.push('\n'),
                         b'\\' => buf.push('\\'),
                         b'0' => buf.push('\0'),
-                        _ => return self.make_token(TokenKind::Invalid, &buf),
+                        _ => return self.make_token(TokenKind::Invalid, "Unsupported escape character.".into()),
                     }
                     self.read_char();
                 }

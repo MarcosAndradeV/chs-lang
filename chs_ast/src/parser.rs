@@ -197,7 +197,7 @@ impl Parser {
                     body,
                 })));
             }
-            String | Ident | Integer => Expression::from_literal_token(token)?,
+            String | Ident | Integer | Character => Expression::from_literal_token(token)?,
             Keyword if token.val_eq("true") || token.val_eq("false") => {
                 Expression::from_literal_token(token)?
             }

@@ -1,4 +1,4 @@
-:i count 14
+:i count 16
 :b shell 45
 cargo run -q -- compile -r -s tests/while.chs
 :i returncode 0
@@ -64,6 +64,23 @@ cargo run -q -- compile -r -s tests/mmap_test.chs
 
 :b shell 18
 rm tests/mmap_test
+:i returncode 0
+:b stdout 0
+
+:b stderr 0
+
+:b shell 44
+cargo run -q -- compile -r -s tests/char.chs
+:i returncode 0
+:b stdout 9
+10
+99
+48
+
+:b stderr 0
+
+:b shell 13
+rm tests/char
 :i returncode 0
 :b stdout 0
 

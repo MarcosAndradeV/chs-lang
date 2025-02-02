@@ -140,6 +140,9 @@ impl FasmGenerator {
             Expression::ConstExpression(IntegerLiteral(v)) => {
                 Ok(Some(Value::Const(SizeOperator::Qword, *v)))
             }
+            Expression::ConstExpression(CharLiteral(v)) => {
+                Ok(Some(Value::Const(SizeOperator::Byte, *v as i64)))
+            }
             Expression::ConstExpression(BooleanLiteral(v)) => {
                 Ok(Some(Value::Const(SizeOperator::Byte, *v as i64)))
             }
@@ -163,7 +166,7 @@ impl FasmGenerator {
                 let size = SizeOperator::from_chstype(&v.ttype, &self.type_map)?;
                 Ok(Some(
                     match self.generate_expression(func, &v.casted)?.unwrap() {
-                        Value::Memory(_, addr) => Value::Memory(size, addr),
+                        // Value::Memory(_, addr) => Value::Memory(size, addr),
                         Value::Const(_, v) => Value::Const(size, v),
                         Value::Register(reg) => Value::Register(size.register_for_size(reg)),
                         val => val,
@@ -206,7 +209,12 @@ impl FasmGenerator {
                 for (i, arg) in c.args.iter().enumerate() {
                     let src = self.generate_expression(func, arg)?.unwrap();
                     if i <= cc.len() {
-                        let dst = Value::Register(cc[i]);
+                        let reg = cc[i];
+                        let dst = match src {
+                            Value::Const(size, _) => Value::Register(size.register_for_size(reg)),
+                            Value::Memory(size, _) => Value::Register(size.register_for_size(reg)),
+                            _ => Value::Register(reg),
+                        };
                         func.push_instr(Instr::Mov(dst, src));
                     } else {
                         func.push_instr(Instr::Push(src));
