@@ -156,8 +156,8 @@ pub struct Lexer {
 }
 
 impl Lexer {
-    pub fn get_filename(&self) -> PathBuf {
-        self.file_path.clone()
+    pub fn get_filename(&self) -> &PathBuf {
+        &self.file_path
     }
     pub fn new(file_path: PathBuf) -> CHSResult<Self> {
         let input = fs::read(&file_path).map_err(|err| CHSError(format!("ERROR: Cannot read file {err}")))?;

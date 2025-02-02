@@ -17,7 +17,7 @@ impl Parser {
     pub fn new(lexer: Lexer) -> Self {
         Self {
             module: Module {
-                file_path: lexer.get_filename(),
+                file_path: lexer.get_filename().clone(),
                 ..Default::default()
             },
             lexer,
@@ -59,7 +59,7 @@ impl Parser {
         self.peeked.as_ref().unwrap()
     }
 
-    pub fn parse(mut self) -> CHSResult<Module> {
+    pub fn parse(mut self, root: Option<&PathBuf>) -> CHSResult<Module> {
         use chs_lexer::TokenKind::*;
         loop {
             let token = self.next();
@@ -74,20 +74,27 @@ impl Parser {
                     let loc = token.loc;
                     let path = PathBuf::from(self.expect_kind(String)?.value);
                     if !path.exists() {
-                        chs_error!("{} file \"{}\" cannot be found", loc, path.display());
+                        chs_error!("{} file \"{}\" cannot be found.", loc, path.display());
                     }
-                    if !self.module.imported_modules.iter().any(|im| im.path == path) {
-                        let mut p = Parser::new(Lexer::new(path.clone())?);
-                        p.module.imported_modules.push(UseModuleDecl {
-                            loc,
-                            path
-                        });
-                        let m = p.parse()?;
-                        self.module.function_decls.extend(m.function_decls);
-                        self.module.global_decls.extend(m.global_decls);
-                        self.module.type_decls.extend(m.type_decls);
-                        self.module.imported_modules.extend(m.imported_modules);
+                    if root.is_some_and(|p| *p == path) {
+                        chs_error!("{} Cannot import root file \"{}\" ", loc, path.display());
                     }
+                    if path == *self.lexer.get_filename() {
+                        chs_error!("{} Cannot import self \"{}\" ", loc, path.display());
+                    }
+                    if self.module.imported_modules.iter().any(|im| im.path == path) {
+                        chs_error!("{} Cannot import file \"{}\" again.", loc, path.display());
+                    }
+                    let mut p = Parser::new(Lexer::new(path.clone())?);
+                    p.module.imported_modules.push(UseModuleDecl {
+                        loc,
+                        path
+                    });
+                    let m = p.parse(Some(self.lexer.get_filename()))?;
+                    self.module.function_decls.extend(m.function_decls);
+                    self.module.global_decls.extend(m.global_decls);
+                    self.module.type_decls.extend(m.type_decls);
+                    self.module.imported_modules.extend(m.imported_modules);
                 }
                 Keyword if token.val_eq("fn") => {
                     let loc = token.loc;

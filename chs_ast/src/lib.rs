@@ -11,5 +11,5 @@ pub mod parser;
 pub fn parse_file(file_path: String) -> CHSResult<Module> {
     Parser::new(
         Lexer::new(PathBuf::from(file_path))?
-    ).parse()
+    ).parse(None)
 }
