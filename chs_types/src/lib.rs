@@ -1,5 +1,5 @@
 use chs_util::CHSResult;
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CHSType {
@@ -13,6 +13,23 @@ pub enum CHSType {
     Distinct(Box<Self>),
     Pointer(Box<Self>),
     Function(Vec<Self>, Box<Self>),
+}
+
+impl fmt::Display for CHSType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CHSType::Int => write!(f, "int"),
+            CHSType::UInt => write!(f, "uint"),
+            CHSType::Void => write!(f, "void"),
+            CHSType::Char => write!(f, "char"),
+            CHSType::Boolean => write!(f, "bool"),
+            CHSType::String => write!(f, "string"),
+            CHSType::Alias(s) => write!(f, "{s}"),
+            CHSType::Distinct(t) => write!(f, "distinct {t}"),
+            CHSType::Pointer(t) => write!(f, "*{t}"),
+            CHSType::Function(..) => todo!(),
+        }
+    }
 }
 
 impl CHSType {
@@ -141,6 +158,5 @@ impl<'a> TypeEnv<'a> {
 }
 
 pub trait InferType {
-    // TODO: add `hint: Option<CHSType>`
-    fn infer<'a>(&'a mut self, env: &mut TypeEnv<'a>) -> CHSResult<CHSType>;
+    fn infer<'a>(&'a mut self, hint: Option<&CHSType>, env: &mut TypeEnv<'a>) -> CHSResult<CHSType>;
 }

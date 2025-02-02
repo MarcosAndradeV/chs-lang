@@ -204,12 +204,12 @@ impl Parser {
             Keyword if token.val_eq("len") => {
                 Expression::Len(Box::new(self.parse_expression(Precedence::Prefix)?))
             }
-            Keyword if token.val_eq("type") => {
+            Keyword if token.val_eq("cast") => {
                 let loc = token.loc;
                 self.expect_kind(ParenOpen)?;
                 let ttype = self.parse_type()?;
                 self.expect_kind(ParenClose)?;
-                let casted = self.parse_expression(Precedence::Lowest)?;
+                let casted = self.parse_expression(Precedence::Prefix)?;
                 Expression::Cast(Box::new(Cast { loc, ttype, casted }))
             }
             Keyword if token.val_eq("syscall") => {
@@ -317,33 +317,18 @@ impl Parser {
 
     fn parse_init_list(&mut self) -> CHSResult<Expression> {
         use chs_lexer::TokenKind::*;
-        let mut args = vec![];
+        let mut exprs = vec![];
         loop {
             let ptoken = self.peek();
             match ptoken.kind {
                 CurlyClose => {
-                    self.next();
-                    return Ok(Expression::ExpressionList(args));
+                    let loc = self.next().loc;
+                    return Ok(Expression::ExpressionList(ExpressionList { loc, exprs, ttype: None }));
                 }
                 Ident => {
-                    let token = self.next();
+                    self.next();
                     let ntoken = self.next();
-                    if ntoken.kind == Assign {
-                        args.push(Expression::Assign(
-                            nodes::Assign {
-                                loc: token.loc,
-                                assigned: Expression::ConstExpression(ConstExpression::Symbol(
-                                    token.value,
-                                )),
-                                value: self.parse_expression(Precedence::Lowest)?,
-                                ttype: None,
-                            }
-                            .into(),
-                        ));
-                        continue;
-                    } else {
                         self.peeked = Some(ntoken);
-                    }
                 }
                 Comma => {
                     self.next();
@@ -352,7 +337,7 @@ impl Parser {
                 _ => {}
             }
             let value = self.parse_expression(Precedence::Lowest)?;
-            args.push(value);
+            exprs.push(value);
         }
     }
 

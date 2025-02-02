@@ -2,7 +2,7 @@ fn main()
     n := '\n'
     c := 'c'
     z := '0'
-    print_int(type(int)n)
-    print_int(type(int)c)
-    print_int(type(int)z)
+    print_int(cast(int)n)
+    print_int(cast(int)c)
+    print_int(cast(int)z)
 end

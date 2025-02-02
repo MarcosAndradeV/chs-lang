@@ -104,18 +104,21 @@ rm tests/simple2
 :b shell 51
 cargo run -q -- compile -r -s tests/arithmetics.chs
 :i returncode 0
-:b stdout 0
+:b stdout 70
+Addition: 30
+Subtraction: 10
+Multiplication: 200
+Divison: 3
+Modulo: 0
 
-:b stderr 55
-ERROR: Return type mismatch. Expect: Void  Actual: Int
+:b stderr 0
 
 :b shell 20
 rm tests/arithmetics
-:i returncode 1
+:i returncode 0
 :b stdout 0
 
-:b stderr 86
-rm: não foi possível remover 'tests/arithmetics': Arquivo ou diretório inexistente
+:b stderr 0
 
 :b shell 45
 cargo run -q -- compile -r -s tests/hello.chs

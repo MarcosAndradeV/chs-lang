@@ -16,5 +16,5 @@ fn main()
 end
 
 fn puts(s: string)
-    syscall(1, 1, s, len s)
+    _ := syscall(1, 1, s, len s)
 end

@@ -3,10 +3,10 @@ pub mod fasm;
 use std::collections::HashMap;
 
 use chs_ast::nodes::{
-    self, Binop, ConstExpression, Expression, IfElseExpression, IfExpression, Operator, Syscall,
-    TypedModule, Unop, WhileExpression,
+    self, Binop, ConstExpression, Expression, ExpressionList, IfElseExpression, IfExpression,
+    Operator, Syscall, TypedModule, Unop, WhileExpression,
 };
-use chs_types::TypeMap;
+use chs_types::{CHSType, TypeMap};
 use chs_util::{chs_error, CHSError, CHSResult};
 use fasm::{Cond, DataDef, DataDirective, DataExpr, Instr, Register, SizeOperator, Value};
 
@@ -115,8 +115,8 @@ impl FasmGenerator {
         }
 
         match func_decl.ret_type {
-            chs_types::CHSType::Void => {}
-            chs_types::CHSType::Int | chs_types::CHSType::UInt | chs_types::CHSType::Pointer(_) => {
+            CHSType::Void => {}
+            CHSType::Int | CHSType::UInt | CHSType::Pointer(_) => {
                 match last.expect("Expect last value") {
                     Value::Register(Register::Rax) => {}
                     value => func.push_instr(Instr::Mov(Value::Register(Register::Rax), value)),
@@ -249,6 +249,7 @@ impl FasmGenerator {
             }
             Expression::Group(e) => self.generate_expression(func, e),
             Expression::Syscall(e) => self.generate_syscall(func, e),
+            Expression::ExpressionList(e) => self.generate_expression_list(func, e),
             _ => todo!("generation for expression {:?}", expr),
         }
     }
@@ -266,20 +267,24 @@ impl FasmGenerator {
             SizeOperator::from_chstype(v.ttype.as_ref().expect("Expected type"), &self.type_map)?;
         let stack_pos = func.allocate_stack(size.byte_size());
 
+        let dst = Value::Memory(size, format!("rbp-{}", stack_pos));
         let src = match self.generate_expression(func, &v.value)?.unwrap() {
             Value::Register(reg) => Value::Register(size.register_for_size(reg)),
             Value::Const(size, c) => Value::Const(size, c),
+            src if src == dst => {
+                let s = self.scopes.last_mut().expect("Expected scope");
+                s.insert(v.name.clone(), dst.clone());
+                return Ok(None);
+            }
             src => {
                 let reg = size.register_for_size(Register::Rbx);
                 func.push_instr(Instr::Mov(Value::Register(reg), src));
                 Value::Register(reg)
             }
         };
-        let dst = Value::Memory(size, format!("rbp-{}", stack_pos));
 
         let s = self.scopes.last_mut().expect("Expected scope");
         s.insert(v.name.clone(), dst.clone());
-
         func.push_instr(Instr::Mov(dst, src));
         Ok(None)
     }
@@ -288,7 +293,7 @@ impl FasmGenerator {
         &mut self,
         func: &mut fasm::Function,
         left: &Expression,
-        ttype: &Option<chs_types::CHSType>,
+        ttype: &Option<CHSType>,
     ) -> Result<Value, CHSError> {
         let size = SizeOperator::from_chstype(ttype.as_ref().unwrap(), &self.type_map)?;
         let lhs = self.generate_expression(func, left)?.unwrap();
@@ -771,5 +776,44 @@ impl FasmGenerator {
         }
         func.push_instr(Instr::Syscall);
         Ok(Some(Value::Register(Register::Rax)))
+    }
+
+    fn generate_expression_list(
+        &mut self,
+        _func: &mut fasm::Function,
+        _e: &ExpressionList,
+    ) -> CHSResult<Option<Value>> {
+        todo!("Generation of expression list")
+        // let ExpressionList {
+        //     loc: _,
+        //     exprs,
+        //     ttype,
+        // } = e;
+        // match ttype.as_ref().unwrap() {
+        //     CHSType::Array(n, ttype) => {
+        //         let n = (*n as usize) - 1;
+        //         let size = SizeOperator::from_chstype(ttype, &self.type_map)?;
+        //         let stack_pos = func.allocate_stack(0);
+        //         let mut curr_stack_pos = func.allocate_stack(0);
+        //         func.allocate_stack(size.byte_size() * n);
+        //         for expr in exprs {
+        //             let src = match self.generate_expression(func, expr)?.unwrap() {
+        //                 Value::Register(reg) => Value::Register(size.register_for_size(reg)),
+        //                 Value::Const(size, c) => Value::Const(size, c),
+        //                 src => {
+        //                     let reg = size.register_for_size(Register::Rbx);
+        //                     func.push_instr(Instr::Mov(Value::Register(reg), src));
+        //                     Value::Register(reg)
+        //                 }
+        //             };
+        //             let dst = Value::Memory(size, format!("rbp-{}", curr_stack_pos));
+        //             func.push_instr(Instr::Mov(dst, src));
+        //             curr_stack_pos += size.byte_size();
+        //         }
+        //         return Ok(Some(Value::Memory(size, format!("rbp-{}", stack_pos))));
+        //     }
+        //     CHSType::Alias(_) | CHSType::Distinct(_) => todo!("distinct and alias in list"),
+        //     _ => unreachable!(),
+        // }
     }
 }

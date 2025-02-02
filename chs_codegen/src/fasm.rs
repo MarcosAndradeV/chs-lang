@@ -60,7 +60,7 @@ impl SizeOperator {
             }
             chs_types::CHSType::Distinct(chstype) => Self::from_chstype(chstype, type_map),
             chs_types::CHSType::Char | chs_types::CHSType::Boolean => Ok(Self::Byte),
-            chs_types::CHSType::Void => chs_error!("TODO"),
+            chs_types::CHSType::Void => chs_error!("Cannot get size form void. Bug in type checker"),
         }
     }
 
