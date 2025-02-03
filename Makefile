@@ -1,3 +1,6 @@
+chs: release
+	cp -v target/release/chs .
+
 build:
 	cargo build --bin chs
 
@@ -6,8 +9,6 @@ release:
 
 test: build
 	./rere.py replay test.list
-
-chs: release
 
 help:
 	@echo "usage: make chs"
