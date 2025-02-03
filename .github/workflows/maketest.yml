@@ -1,5 +1,4 @@
 name: Makefile CI
-
 on:
   push:
     branches: [ "master" ]
@@ -8,11 +7,9 @@ on:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
-
     steps:
     - uses: actions/checkout@v4
-
+    - uses: stevenwdv/setup-fasm@v1.4.4
     - name: Run test
       run: make test
