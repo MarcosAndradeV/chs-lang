@@ -3,8 +3,7 @@ pub mod fasm;
 use std::collections::HashMap;
 
 use chs_ast::nodes::{
-    self, Binop, ConstExpression, Expression, ExpressionList, IfElseExpression, IfExpression,
-    Operator, Syscall, TypedModule, Unop, WhileExpression,
+    self, Array, Binop, ConstExpression, Expression, ExpressionList, IfElseExpression, IfExpression, Operator, Syscall, TypedModule, Unop, WhileExpression
 };
 use chs_types::{CHSType, TypeMap};
 use chs_util::{chs_error, CHSError, CHSResult};
@@ -250,6 +249,7 @@ impl FasmGenerator {
             Expression::Group(e) => self.generate_expression(func, e),
             Expression::Syscall(e) => self.generate_syscall(func, e),
             Expression::ExpressionList(e) => self.generate_expression_list(func, e),
+            Expression::Array(e) => self.generate_array(func, e),
             _ => todo!("generation for expression {:?}", expr),
         }
     }
@@ -784,5 +784,14 @@ impl FasmGenerator {
         _e: &ExpressionList,
     ) -> CHSResult<Option<Value>> {
         todo!("Generation of expression list")
+    }
+
+    fn generate_array(&self, func: &mut fasm::Function, e: &Array) -> CHSResult<Option<Value>> {
+        let s = func.allocate_stack(8);
+        let size_operator = SizeOperator::from_chstype(&e.ttype, &self.type_map)?;
+        func.allocate_stack(e.size as usize * size_operator.byte_size());
+        let mem = Value::Memory(size_operator, format!("rbp-{s}"));
+        func.push_instr(Instr::Lea(Value::Register(Register::Rax), mem));
+        Ok(Some(Value::Register(Register::Rax)))
     }
 }

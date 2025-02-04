@@ -56,7 +56,7 @@ impl TokenKind {
     fn from_word_or_keyword(value: &str) -> Self {
         match value {
             "fn" | "if" | "else" | "while" | "true" | "false" | "use" | "distinct" | "set"
-            | "type"| "cast" | "end" | "len" | "syscall" => Self::Keyword,
+            | "type"| "cast" | "end" | "len" | "syscall" | "array" => Self::Keyword,
             _ => Self::Ident,
         }
     }

@@ -133,6 +133,7 @@ pub enum Expression {
     Call(Box<Call>),
     Cast(Box<Cast>),
     Syscall(Box<Syscall>),
+    Array(Box<Array>),
     Len(Box<Expression>),
     VarDecl(Box<VarDecl>),
     Assign(Box<Assign>),
@@ -208,6 +209,10 @@ impl chs_types::InferType for Expression {
                     arg => chs_error!("Cannot get the len of {}", arg),
                 }
                 Ok(CHSType::Int)
+            }
+            Expression::Array(e) => {
+                assert!(e.size > 0);
+                Ok(CHSType::Pointer(Box::new(e.ttype.clone())))
             }
             Expression::VarDecl(e) => {
                 if let Some(ref expect) = e.ttype {
@@ -555,6 +560,13 @@ pub struct Syscall {
     pub loc: Loc,
     pub arity: usize,
     pub args: Vec<Expression>,
+}
+
+#[derive(Debug)]
+pub struct Array {
+    pub loc: Loc,
+    pub ttype: CHSType,
+    pub size: u64,
 }
 
 #[derive(Debug)]

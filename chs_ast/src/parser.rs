@@ -204,6 +204,15 @@ impl Parser {
             Keyword if token.val_eq("len") => {
                 Expression::Len(Box::new(self.parse_expression(Precedence::Prefix)?))
             }
+            Keyword if token.val_eq("array") => {
+                let loc = token.loc;
+                self.expect_kind(ParenOpen)?;
+                let ttype = self.parse_type()?;
+                self.expect_kind(Comma)?;
+                let size = self.expect_kind(Integer)?.value.parse::<u64>().expect("TODO");
+                self.expect_kind(ParenClose)?;
+                Expression::Array(Box::new(Array { loc, ttype, size }))
+            }
             Keyword if token.val_eq("cast") => {
                 let loc = token.loc;
                 self.expect_kind(ParenOpen)?;
