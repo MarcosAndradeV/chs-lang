@@ -27,7 +27,7 @@ impl fmt::Display for CHSType {
             CHSType::Alias(s) => write!(f, "{s}"),
             CHSType::Distinct(t) => write!(f, "distinct {t}"),
             CHSType::Pointer(t) => write!(f, "*{t}"),
-            CHSType::Function(..) => todo!(),
+            CHSType::Function(args, ret_type) => write!(f, "fn({}) -> {ret_type}", args.iter().map(|a| a.to_string()).collect::<Vec<String>>().join(", ")),
         }
     }
 }

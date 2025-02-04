@@ -104,7 +104,11 @@ pub enum ConstExpression {
 }
 
 impl chs_types::InferType for ConstExpression {
-    fn infer(&mut self, hint: Option<&CHSType>, env: &mut chs_types::TypeEnv) -> CHSResult<CHSType> {
+    fn infer(
+        &mut self,
+        hint: Option<&CHSType>,
+        env: &mut chs_types::TypeEnv,
+    ) -> CHSResult<CHSType> {
         _ = hint;
         match self {
             ConstExpression::Symbol(sym) => match env.get(sym) {
@@ -139,29 +143,27 @@ pub enum Expression {
 }
 
 impl chs_types::InferType for Expression {
-    fn infer<'a>(&'a mut self, hint: Option<&CHSType>, env: &mut chs_types::TypeEnv<'a>) -> CHSResult<CHSType> {
+    fn infer<'a>(
+        &'a mut self,
+        hint: Option<&CHSType>,
+        env: &mut chs_types::TypeEnv<'a>,
+    ) -> CHSResult<CHSType> {
         match self {
-            // Expression::ExpressionList(e) if hint.is_none() => {
-            //     chs_error!("{} Cannot infer the type of expression list without a type hint.", e.loc)
-            // },
-            Expression::ExpressionList(_) => {
-                todo!("Type checking for expression list.");
-                // let hint = hint.unwrap().clone();
-                // match hint {
-                //     t => chs_error!("{} Cannot create type {t} from expression list.", e.loc)
-                // }
-                // e.ttype = Some(hint.clone());
-                // Ok(hint)
+            Expression::ExpressionList(e) => {
+                chs_error!(
+                    "{} Cannot infer the type of expression list. Not implemented yet :(",
+                    e.loc
+                )
             }
             Expression::ConstExpression(e) => e.infer(hint, env),
             Expression::Group(e) => e.infer(hint, env),
             Expression::Cast(e) => {
-                e.casted.infer(hint, env)?;
+                e.casted.infer(Some(&e.ttype), env)?;
                 Ok(e.ttype.clone())
             }
             Expression::Syscall(e) => {
                 if e.arity > 7 && e.arity == 0 {
-                    chs_error!("Syscall arity mismatch");
+                    chs_error!("{} Syscall arity mismatch", e.loc);
                 }
                 for (i, actual) in e.args.iter_mut().enumerate() {
                     let actual = actual.infer(hint, env)?;
@@ -182,7 +184,7 @@ impl chs_types::InferType for Expression {
             Expression::Call(call) => match call.caller.infer(hint, env)? {
                 CHSType::Function(ref mut fn_args, ret_type) => {
                     if fn_args.len() != call.args.len() {
-                        chs_error!("Arity mismatch");
+                        chs_error!("{} Arity mismatch function call", call.loc);
                     }
                     for (expect, actual) in fn_args.iter_mut().zip(call.args.iter_mut()) {
                         let actual = actual.infer(hint, env)?;
@@ -317,13 +319,7 @@ impl chs_types::InferType for Expression {
                     let left = e.left.infer(hint, env)?;
                     let right = e.right.infer(hint, env)?;
                     if !left.equivalent(&right, env) {
-                        chs_error!(
-                            "{} {} {} {} is not defined.",
-                            e.loc,
-                            left,
-                            e.op,
-                            right
-                        );
+                        chs_error!("{} {} {} {} is not defined.", e.loc, left, e.op, right);
                     }
                     e.ttype = Some(CHSType::Boolean);
                     Ok(CHSType::Boolean)
@@ -333,13 +329,7 @@ impl chs_types::InferType for Expression {
                     let right = e.right.infer(hint, env)?;
                     match (&left, &right) {
                         (CHSType::Pointer(..), CHSType::Pointer(..)) => {
-                            chs_error!(
-                                "{} {} {} {} is not defined.",
-                                e.loc,
-                                left,
-                                e.op,
-                                right
-                            );
+                            chs_error!("{} {} {} {} is not defined.", e.loc, left, e.op, right);
                         }
                         (CHSType::Int, CHSType::Pointer(..)) => {
                             e.ttype = Some(right.clone());
@@ -361,13 +351,7 @@ impl chs_types::InferType for Expression {
                             e.ttype = Some(left.clone());
                             Ok(left)
                         }
-                        _ => chs_error!(
-                            "{} {} {} {}  is not defined.",
-                            e.loc,
-                            left,
-                            e.op,
-                            right
-                        ),
+                        _ => chs_error!("{} {} {} {}  is not defined.", e.loc, left, e.op, right),
                     }
                 }
                 Operator::Div | Operator::Mod | Operator::Mult => {
@@ -375,25 +359,13 @@ impl chs_types::InferType for Expression {
                     let right = e.right.infer(hint, env)?;
                     match (&left, &right) {
                         (a, b) if a.is_pointer() || b.is_pointer() => {
-                            chs_error!(
-                                "{} {} {:?} {}  is not defined.",
-                                e.loc,
-                                left,
-                                e.op,
-                                right
-                            )
+                            chs_error!("{} {} {:?} {}  is not defined.", e.loc, left, e.op, right)
                         }
                         (CHSType::Int, CHSType::Int) => {
                             e.ttype = Some(left.clone());
                             Ok(left)
                         }
-                        _ => chs_error!(
-                            "{} {} {} {}  is not defined.",
-                            e.loc,
-                            left,
-                            e.op,
-                            right
-                        ),
+                        _ => chs_error!("{} {} {} {}  is not defined.", e.loc, left, e.op, right),
                     }
                 }
                 Operator::Or => chs_error!("{} {} is not defined.", e.loc, e.op),
@@ -629,17 +601,14 @@ impl fmt::Display for Operator {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Operator::Plus => write!(f, "+"),
-            Operator::Negate |
-            Operator::Minus => write!(f, "-"),
+            Operator::Negate | Operator::Minus => write!(f, "-"),
             Operator::Div => write!(f, "/"),
-            Operator::Deref |
-            Operator::Mult => write!(f, "*"),
+            Operator::Deref | Operator::Mult => write!(f, "*"),
             Operator::Mod => write!(f, "%"),
             Operator::LOr => write!(f, "||"),
             Operator::LAnd => write!(f, "&&"),
             Operator::Or => write!(f, "|"),
-            Operator::Refer |
-            Operator::And => write!(f, "&"),
+            Operator::Refer | Operator::And => write!(f, "&"),
             Operator::Eq => write!(f, "=="),
             Operator::NEq => write!(f, "!="),
             Operator::Gt => write!(f, ">"),
