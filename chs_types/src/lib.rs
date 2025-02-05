@@ -27,7 +27,14 @@ impl fmt::Display for CHSType {
             CHSType::Alias(s) => write!(f, "{s}"),
             CHSType::Distinct(t) => write!(f, "distinct {t}"),
             CHSType::Pointer(t) => write!(f, "*{t}"),
-            CHSType::Function(args, ret_type) => write!(f, "fn({}) -> {ret_type}", args.iter().map(|a| a.to_string()).collect::<Vec<String>>().join(", ")),
+            CHSType::Function(args, ret_type) => write!(
+                f,
+                "fn({}) -> {ret_type}",
+                args.iter()
+                    .map(|a| a.to_string())
+                    .collect::<Vec<String>>()
+                    .join(", ")
+            ),
         }
     }
 }
@@ -107,7 +114,7 @@ impl<'a> TypeEnv<'a> {
     pub fn type_decls_get(&self, k: &'a String) -> Option<&&CHSType> {
         match self.type_decls.get(k) {
             Some(CHSType::Alias(sym)) => self.type_decls.get(sym),
-            tt => tt
+            tt => tt,
         }
     }
     pub fn globals_insert(&mut self, k: &'a String, v: &'a CHSType) -> Option<&CHSType> {
@@ -146,17 +153,20 @@ impl<'a> TypeEnv<'a> {
     pub fn into_type_defs(self) -> TypeMap {
         TypeMap {
             globals: HashMap::from_iter(
-            self.globals
-                .into_iter()
-                .map(|(k, v)| (k.clone(), v.clone()))),
+                self.globals
+                    .into_iter()
+                    .map(|(k, v)| (k.clone(), v.clone())),
+            ),
             type_decls: HashMap::from_iter(
-            self.type_decls
-                .into_iter()
-                .map(|(k, v)| (k.clone(), v.clone())))
+                self.type_decls
+                    .into_iter()
+                    .map(|(k, v)| (k.clone(), v.clone())),
+            ),
         }
     }
 }
 
 pub trait InferType {
-    fn infer<'a>(&'a mut self, hint: Option<&CHSType>, env: &mut TypeEnv<'a>) -> CHSResult<CHSType>;
+    fn infer<'a>(&'a mut self, hint: Option<&CHSType>, env: &mut TypeEnv<'a>)
+        -> CHSResult<CHSType>;
 }

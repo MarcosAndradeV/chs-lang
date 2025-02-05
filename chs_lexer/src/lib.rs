@@ -56,7 +56,7 @@ impl TokenKind {
     fn from_word_or_keyword(value: &str) -> Self {
         match value {
             "fn" | "if" | "else" | "while" | "true" | "false" | "use" | "distinct" | "set"
-            | "type"| "cast" | "end" | "len" | "syscall" | "array" => Self::Keyword,
+            | "type" | "cast" | "end" | "len" | "syscall" | "array" => Self::Keyword,
             _ => Self::Ident,
         }
     }
@@ -162,7 +162,8 @@ impl Lexer {
         &self.file_path
     }
     pub fn new(file_path: PathBuf) -> CHSResult<Self> {
-        let input = fs::read(&file_path).map_err(|err| CHSError(format!("ERROR: Cannot read file {err}")))?;
+        let input = fs::read(&file_path)
+            .map_err(|err| CHSError(format!("ERROR: Cannot read file {err}")))?;
         let mut lex = Self {
             input,
             loc: Loc::new(file_path.clone(), 1, 1),
@@ -336,7 +337,10 @@ impl Lexer {
                     b'n' => buf.push('\n'),
                     b'\\' => buf.push('\\'),
                     b'0' => buf.push('\0'),
-                    _ => return self.make_token(TokenKind::Invalid, "Unsupported escape character.".into()),
+                    _ => {
+                        return self
+                            .make_token(TokenKind::Invalid, "Unsupported escape character.".into())
+                    }
                 }
                 self.read_char();
                 self.read_char();
@@ -344,14 +348,14 @@ impl Lexer {
             ch => {
                 buf.push(ch as char);
                 self.read_char();
-            },
+            }
         }
         if self.ch != b'\'' {
             return self.make_token(TokenKind::Invalid, "Unclosed character literal".into());
         }
         self.read_char();
         Token {
-            value:buf,
+            value: buf,
             kind: TokenKind::Character,
             loc: start_loc,
         }
@@ -364,13 +368,20 @@ impl Lexer {
             self.read_char();
             match self.ch {
                 b'\"' => break self.read_char(),
-                b'\0' => return self.make_token(TokenKind::Invalid, "Unclosed string literal".into()),
+                b'\0' => {
+                    return self.make_token(TokenKind::Invalid, "Unclosed string literal".into())
+                }
                 b'\\' => {
                     match self.peek_char() {
                         b'n' => buf.push('\n'),
                         b'\\' => buf.push('\\'),
                         b'0' => buf.push('\0'),
-                        _ => return self.make_token(TokenKind::Invalid, "Unsupported escape character.".into()),
+                        _ => {
+                            return self.make_token(
+                                TokenKind::Invalid,
+                                "Unsupported escape character.".into(),
+                            )
+                        }
                     }
                     self.read_char();
                 }

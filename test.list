@@ -1,7 +1,7 @@
 cargo run -q -- compile -r -s tests/hello.chs
 rm tests/hello
-cargo run -q -- compile -r -s tests/arithmetics.chs
-rm tests/arithmetics
+cargo run -q -- compile -r -s tests/arithmetic.chs
+rm tests/arithmetic
 cargo run -q -- compile -r -s tests/ifs.chs
 rm tests/ifs
 cargo run -q -- compile -r -s tests/while.chs

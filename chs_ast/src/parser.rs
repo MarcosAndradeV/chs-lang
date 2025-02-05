@@ -82,14 +82,16 @@ impl Parser {
                     if path == *self.lexer.get_filename() {
                         chs_error!("{} Cannot import self \"{}\" ", loc, path.display());
                     }
-                    if self.module.imported_modules.iter().any(|im| im.path == path) {
+                    if self
+                        .module
+                        .imported_modules
+                        .iter()
+                        .any(|im| im.path == path)
+                    {
                         chs_error!("{} Cannot import file \"{}\" again.", loc, path.display());
                     }
                     let mut p = Parser::new(Lexer::new(path.clone())?);
-                    p.module.imported_modules.push(UseModuleDecl {
-                        loc,
-                        path
-                    });
+                    p.module.imported_modules.push(UseModuleDecl { loc, path });
                     let m = p.parse(Some(self.lexer.get_filename()))?;
                     self.module.function_decls.extend(m.function_decls);
                     self.module.global_decls.extend(m.global_decls);
@@ -209,7 +211,11 @@ impl Parser {
                 self.expect_kind(ParenOpen)?;
                 let ttype = self.parse_type()?;
                 self.expect_kind(Comma)?;
-                let size = self.expect_kind(Integer)?.value.parse::<u64>().expect("TODO");
+                let size = self
+                    .expect_kind(Integer)?
+                    .value
+                    .parse::<u64>()
+                    .expect("TODO");
                 self.expect_kind(ParenClose)?;
                 Expression::Array(Box::new(Array { loc, ttype, size }))
             }
@@ -332,12 +338,16 @@ impl Parser {
             match ptoken.kind {
                 CurlyClose => {
                     let loc = self.next().loc;
-                    return Ok(Expression::ExpressionList(ExpressionList { loc, exprs, ttype: None }));
+                    return Ok(Expression::ExpressionList(ExpressionList {
+                        loc,
+                        exprs,
+                        ttype: None,
+                    }));
                 }
                 Ident => {
                     self.next();
                     let ntoken = self.next();
-                        self.peeked = Some(ntoken);
+                    self.peeked = Some(ntoken);
                 }
                 Comma => {
                     self.next();

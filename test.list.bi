@@ -14,20 +14,20 @@ rm tests/hello
 
 :b stderr 0
 
-:b shell 51
-cargo run -q -- compile -r -s tests/arithmetics.chs
+:b shell 50
+cargo run -q -- compile -r -s tests/arithmetic.chs
 :i returncode 0
-:b stdout 70
+:b stdout 71
 Addition: 30
 Subtraction: 10
 Multiplication: 200
-Divison: 3
+Division: 3
 Modulo: 0
 
 :b stderr 0
 
-:b shell 20
-rm tests/arithmetics
+:b shell 19
+rm tests/arithmetic
 :i returncode 0
 :b stdout 0
 
@@ -52,7 +52,7 @@ rm tests/ifs
 :b shell 45
 cargo run -q -- compile -r -s tests/while.chs
 :i returncode 0
-:b stdout 100
+:b stdout 120
 Hello CHS
 Hello CHS
 Hello CHS
@@ -63,6 +63,16 @@ Hello CHS
 Hello CHS
 Hello CHS
 Hello CHS
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
 
 :b stderr 0
 
@@ -138,8 +148,17 @@ rm tests/inc
 :b shell 45
 cargo run -q -- compile -r -s tests/array.chs
 :i returncode 0
-:b stdout 3
-10
+:b stdout 20
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
 
 :b stderr 0
 

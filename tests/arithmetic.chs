@@ -8,7 +8,7 @@ fn main()
     puts("Multiplication: ")
     print_int(20 * 10)
 
-    puts("Divison: ")
+    puts("Division: ")
     print_int(30 / 10)
 
     puts("Modulo: ")
