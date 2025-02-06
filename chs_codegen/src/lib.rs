@@ -1,10 +1,10 @@
-#![allow(dead_code)]
+#![allow(unused)]
 pub mod fasm;
 use std::collections::HashMap;
 
 use chs_ast::nodes::{
-    self, Array, Binop, ConstExpression, Expression, ExpressionList, IfElseExpression,
-    IfExpression, Operator, Syscall, TypedModule, Unop, WhileExpression,
+    self, Array, Assign, Binop, Call, Cast, ConstExpression, Expression, ExpressionList,
+    IfElseExpression, IfExpression, Operator, Syscall, TypedModule, Unop, WhileExpression,
 };
 use chs_types::{CHSType, TypeMap};
 use chs_util::{chs_error, CHSError, CHSResult};
@@ -17,6 +17,7 @@ pub struct FasmGenerator {
     scopes: Vec<HashMap<String, fasm::Value>>,
     datadefs: Vec<fasm::DataDef>,
     type_map: TypeMap,
+    temp_regs: usize,
 }
 
 impl FasmGenerator {
@@ -33,6 +34,7 @@ impl FasmGenerator {
             bool_flag: false,
             scopes: vec![],
             datadefs: vec![],
+            temp_regs: 0,
         };
         let mut out = fasm::Module::new(file_path.with_extension("asm"));
 
@@ -135,7 +137,6 @@ impl FasmGenerator {
         expr: &Expression,
     ) -> CHSResult<Option<Value>> {
         use nodes::ConstExpression::*;
-        let cc = Register::get_syscall_call_convention();
         match expr {
             Expression::ConstExpression(IntegerLiteral(v)) => {
                 Ok(Some(Value::Const(SizeOperator::Qword, *v)))
@@ -151,14 +152,9 @@ impl FasmGenerator {
                 self.str_count += 1;
                 let name = format!("str{}", self.str_count);
                 self.datadefs.push(DataDef {
-                    name: format!("{}_len", name.clone()),
-                    directive: DataDirective::Dq,
-                    items: vec![DataExpr::Const(v.len() as u64)],
-                });
-                self.datadefs.push(DataDef {
                     name: name.clone(),
                     directive: DataDirective::Db,
-                    items: vec![DataExpr::Str(v.clone())],
+                    items: vec![DataExpr::Str(v.clone()), DataExpr::Const(0)],
                 });
                 Ok(Some(Value::Label(name)))
             }
@@ -166,7 +162,6 @@ impl FasmGenerator {
                 let size = SizeOperator::from_chstype(&v.ttype, &self.type_map)?;
                 Ok(Some(
                     match self.generate_expression(func, &v.casted)?.unwrap() {
-                        // Value::Memory(_, addr) => Value::Memory(size, addr),
                         Value::Const(_, v) => Value::Const(size, v),
                         Value::Register(reg) => Value::Register(size.register_for_size(reg)),
                         val => val,
@@ -174,87 +169,15 @@ impl FasmGenerator {
                 ))
             }
             Expression::VarDecl(v) => self.generater_var_decl(func, v),
-            Expression::Assign(v) => {
-                let size = SizeOperator::from_chstype(
-                    v.ttype.as_ref().expect("Expected type"),
-                    &self.type_map,
-                )?;
-                let dst = match &v.assigned {
-                    Expression::Unop(u) if u.op == Operator::Deref => {
-                        self.generate_assign_deref(func, &u.left, &u.ttype)?
-                    }
-                    _ => match self.generate_expression(func, &v.assigned)?.unwrap() {
-                        Value::Memory(_, a) => Value::Memory(size, a),
-                        Value::Register(reg) => Value::Register(size.register_for_size(reg)),
-                        dst => dst,
-                    },
-                };
-                let src = match self.generate_expression(func, &v.value)?.unwrap() {
-                    // Value::Memory(_, a) => Value::Memory(size, a),
-                    Value::Register(reg) => Value::Register(size.register_for_size(reg)),
-                    lhs => {
-                        let reg = Value::Register(size.register_for_size(Register::R12));
-                        func.push_instr(Instr::Mov(reg.clone(), lhs));
-                        reg
-                    }
-                };
-                if dst != src {
-                    func.push_instr(Instr::Mov(dst, src));
-                }
-                Ok(None)
-            }
-            Expression::Call(c) => {
-                let f = match &c.caller {
-                    Expression::ConstExpression(ConstExpression::Symbol(sym)) => {
-                        Value::Label(sym.clone())
-                    }
-                    _ => todo!(),
-                };
-                for (i, arg) in c.args.iter().enumerate() {
-                    let src = self.generate_expression(func, arg)?.unwrap();
-                    if i <= cc.len() {
-                        let reg = cc[i];
-                        let dst = match src {
-                            Value::Const(size, _) => Value::Register(size.register_for_size(reg)),
-                            Value::Memory(size, _) => Value::Register(size.register_for_size(reg)),
-                            _ => Value::Register(reg),
-                        };
-                        func.push_instr(Instr::Mov(dst, src));
-                    } else {
-                        func.push_instr(Instr::Push(src));
-                    }
-                }
-
-                func.push_instr(Instr::Call(f));
-
-                // TODO: Make the expression contain the return type. For now it will always return on rax
-                Ok(Some(Value::Register(Register::Rax)))
-            }
-            Expression::Binop(binop) => self.generate_binop(func, binop),
-            Expression::Unop(unop) => self.generate_unop(func, unop),
-            Expression::IfExpression(e) => self.generate_if(func, e),
-            Expression::IfElseExpression(e) => self.generate_if_else(func, e),
-            Expression::WhileExpression(e) => self.generate_while(func, e),
-            Expression::Len(e) => {
-                let src = self.generate_expression(func, e)?.unwrap();
-                let src = match src {
-                    Value::Register(_) => src,
-                    Value::Label(_) => src,
-                    _ => {
-                        func.push_instr(Instr::Mov(Value::Register(Register::Rbx), src));
-                        Value::Register(Register::Rbx)
-                    }
-                };
-                func.push_instr(Instr::Mov(
-                    Value::Register(Register::Rax),
-                    Value::Memory(SizeOperator::Qword, format!("{}-8", src)),
-                ));
-                Ok(Some(Value::Register(Register::Rax)))
-            }
-            Expression::Group(e) => self.generate_expression(func, e),
-            Expression::Syscall(e) => self.generate_syscall(func, e),
-            Expression::ExpressionList(e) => self.generate_expression_list(func, e),
-            Expression::Array(e) => self.generate_array(func, e),
+            Expression::Assign(v) => self.generate_assign(func, v),
+            Expression::Unop(v) => self.generate_unop(func, v),
+            Expression::Binop(v) => self.generate_binop(func, v),
+            Expression::Call(v) => self.generate_call(func, v),
+            Expression::Syscall(v) => self.generate_syscall(func, v),
+            Expression::Group(v) => self.generate_expression(func, v),
+            Expression::WhileExpression(v) => self.generate_while(func, v),
+            Expression::IfExpression(v) => self.generate_if(func, v),
+            Expression::IfElseExpression(v) => self.generate_if_else(func, v),
             _ => todo!("generation for expression {:?}", expr),
         }
     }
@@ -268,53 +191,78 @@ impl FasmGenerator {
             self.generate_expression(func, &v.value)?;
             return Ok(None);
         }
-        match &v.value {
-            Expression::Array(e) => {
-                let size = SizeOperator::from_chstype(&e.ttype, &self.type_map)?;
-                let stack_pos_dst = func.allocate_stack(8);
-                let stack_pos_src = func.allocate_stack(size.byte_size() * (e.size as usize));
-                let src = Value::Memory(size, format!("rbp-{stack_pos_src}"));
-                let dst = Value::Memory(size, format!("rbp-{stack_pos_dst}"));
-                let s = self.scopes.last_mut().expect("Expected scope");
-                s.insert(v.name.clone(), dst.clone());
-                func.push_instr(Instr::Lea(Value::Register(Register::Rdx), src));
-                func.push_instr(Instr::Mov(dst, Value::Register(Register::Rdx)));
+
+        let size = SizeOperator::from_chstype(v.ttype.as_ref().unwrap(), &self.type_map)?;
+        let stack_pos = func.allocate_stack(size.byte_size());
+
+        let dst = Value::Memory(size, format!("rbp-{stack_pos}"));
+
+        let r = self.temp_regs;
+
+        let src = self.generate_expression(func, &v.value)?.unwrap();
+        let src = match src {
+            Value::Memory(s, _) => {
+                let treg = Value::from(s.register_for_size(self.alloc_register()));
+                func.push_instr(Instr::Mov(treg.clone(), src));
+                treg
             }
-            Expression::ExpressionList(_) => todo!(),
-            _ => {
-                let size = SizeOperator::from_chstype(v.ttype.as_ref().unwrap(), &self.type_map)?;
-                let stack_pos = func.allocate_stack(size.byte_size());
+            _ => src,
+        };
 
-                let dst = Value::Memory(size, format!("rbp-{stack_pos}"));
-
-                let src = self.generate_expression(func, &v.value)?.unwrap();
-
-                let s = self.scopes.last_mut().expect("Expected scope");
-                s.insert(v.name.clone(), dst.clone());
-                func.push_instr(Instr::Mov(dst, src));
-            }
+        if self.temp_regs.abs_diff(r) > 0 {
+            self.free_all_registers();
         }
+
+        let s = self.scopes.last_mut().expect("Expected scope");
+        s.insert(v.name.clone(), dst.clone());
+
+        func.push_instr(Instr::Mov(dst, src));
 
         Ok(None)
     }
 
-    fn generate_assign_deref(
+    fn generate_assign(
         &mut self,
         func: &mut fasm::Function,
-        left: &Expression,
-        ttype: &Option<CHSType>,
-    ) -> Result<Value, CHSError> {
-        let size = SizeOperator::from_chstype(ttype.as_ref().unwrap(), &self.type_map)?;
-        let lhs = self.generate_expression(func, left)?.unwrap();
-        let lhs = match lhs {
-            Value::Register(_) => lhs,
-            _ => {
-                let reg = size.register_for_size(Register::Rbx);
-                func.push_instr(Instr::Mov(Value::Register(reg), lhs));
-                Value::Register(reg)
+        e: &Assign,
+    ) -> Result<Option<Value>, CHSError> {
+        let rhs = self.generate_expression(func, &e.value)?.unwrap();
+
+        match e.assigned {
+            Expression::Unop(ref u) if u.op == Operator::Deref => {
+                let lhs = self.generate_expression(func, &u.left)?.unwrap();
+                let size = SizeOperator::from_chstype(u.ttype.as_ref().unwrap(), &self.type_map)?;
+                match (&lhs, &rhs) {
+                    (Value::Memory(..), Value::Memory(..)) => {
+                        let treg = Value::from(size.register_for_size(self.alloc_register()));
+                        func.push_raw_instr(format!("mov {treg}, {lhs}"));
+                        func.push_raw_instr(format!("mov [{treg}], {rhs}"));
+                        self.free_register();
+                    }
+                    (Value::Memory(..), Value::Const(s, _)) => {
+                        let treg = Value::from(size.register_for_size(self.alloc_register()));
+                        func.push_raw_instr(format!("mov {treg}, {lhs}"));
+                        func.push_raw_instr(format!("mov {s} [{treg}], {rhs}"));
+                        self.free_register();
+                    }
+                    (Value::Memory(size_operator, _), Value::Register(register)) => todo!(),
+                    _ => func.push_raw_instr(format!("mov [{lhs}], {rhs}")),
+                }
             }
-        };
-        Ok(Value::Memory(size, lhs.to_string()))
+            _ => {
+                let lhs = self.generate_expression(func, &e.assigned)?.unwrap();
+                if let Value::Memory(..) = &rhs {
+                    let treg = Value::from(self.alloc_register());
+                    func.push_raw_instr(format!("mov {treg}, {rhs}"));
+                    func.push_raw_instr(format!("mov {lhs}, {treg}"));
+                    self.free_register();
+                } else {
+                    func.push_raw_instr(format!("mov {lhs}, {rhs}"));
+                }
+            }
+        }
+
+        Ok(None)
     }
 
     fn get_var(&self, name: &str) -> CHSResult<&Value> {
@@ -339,226 +287,254 @@ impl FasmGenerator {
             ttype,
         } = binop;
         let size = SizeOperator::from_chstype(ttype.as_ref().unwrap(), &self.type_map)?;
-        let lhs = {
-            let lhs = self.generate_expression(func, left)?.unwrap();
-            if lhs.is_register() {
-                let reg = Value::Register(size.register_for_size(Register::R12));
-                func.push_instr(Instr::Mov(reg.clone(), lhs));
-                reg
-            } else {
-                lhs
-            }
-        };
+        let lhs = self.generate_expression(func, left)?.unwrap();
         let rhs = self.generate_expression(func, right)?.unwrap();
         match op {
-            Operator::LAnd => match (&lhs, &rhs) {
-                (
-                    Value::Memory(_, _) | Value::Register(_),
-                    Value::Const(_, _) | Value::Register(_),
-                ) => {
-                    func.push_instr(Instr::And(lhs.clone(), rhs));
-                    Ok(Some(lhs))
-                }
-                (
-                    Value::Register(_) | Value::Const(_, _),
-                    Value::Memory(_, _) | Value::Register(_),
-                ) => {
-                    func.push_instr(Instr::And(rhs.clone(), lhs));
-                    Ok(Some(rhs))
-                }
-                (Value::Memory(_, _), Value::Memory(size, _)) => {
-                    let reg = Value::Register(size.register_for_size(Register::Rbx));
-                    func.push_instr(Instr::Mov(reg.clone(), rhs));
-                    func.push_instr(Instr::And(lhs.clone(), reg));
-                    Ok(Some(lhs))
-                }
-                (Value::Const(_, c1), Value::Const(_, c2)) => Ok(Some(Value::Const(
-                    SizeOperator::Byte,
-                    (*c1 != 0 && *c2 != 0) as i64,
-                ))),
-                (lhs, rhs) => todo!("implement generation {lhs} && {rhs}"),
-            },
-            Operator::LOr => match (&lhs, &rhs) {
-                (
-                    Value::Memory(_, _) | Value::Register(_),
-                    Value::Const(_, _) | Value::Register(_),
-                ) => {
-                    func.push_instr(Instr::Or(lhs.clone(), rhs));
-                    Ok(Some(lhs))
-                }
-                (
-                    Value::Register(_) | Value::Const(_, _),
-                    Value::Memory(_, _) | Value::Register(_),
-                ) => {
-                    func.push_instr(Instr::Or(rhs.clone(), lhs));
-                    Ok(Some(rhs))
-                }
-                (Value::Memory(_, _), Value::Memory(size, _)) => {
-                    let reg = Value::Register(size.register_for_size(Register::Rbx));
-                    func.push_instr(Instr::Mov(reg.clone(), rhs));
-                    func.push_instr(Instr::Or(lhs.clone(), reg));
-                    Ok(Some(lhs))
-                }
-                (Value::Const(_, c1), Value::Const(_, c2)) => Ok(Some(Value::Const(
-                    SizeOperator::Byte,
-                    (*c1 != 0 || *c2 != 0) as i64,
-                ))),
-                (lhs, rhs) => todo!("implement generation {lhs} || {rhs}"),
-            },
-            Operator::Plus => match (&lhs, &rhs) {
-                (
-                    Value::Register(_),
-                    Value::Const(_, _) | Value::Memory(..) | Value::Register(_),
-                ) => {
-                    func.push_instr(Instr::Add(lhs.clone(), rhs));
-                    Ok(Some(lhs))
-                }
-                (Value::Const(_, _) | Value::Memory(..), Value::Register(_)) => {
-                    func.push_instr(Instr::Add(rhs.clone(), lhs));
-                    Ok(Some(rhs))
-                }
-                (Value::Memory(size, _), Value::Memory(..) | Value::Const(..)) => {
-                    let reg = Value::Register(size.register_for_size(Register::Rbx));
-                    func.push_instr(Instr::Mov(reg.clone(), rhs));
-                    func.push_instr(Instr::Add(reg.clone(), lhs.clone()));
-                    Ok(Some(reg))
-                }
-                (Value::Const(_, c1), Value::Const(_, c2)) => {
-                    Ok(Some(Value::Const(SizeOperator::Byte, *c1 + *c2)))
-                }
-                (lhs, rhs) => todo!("implement generation {lhs} + {rhs}"),
-            },
-            Operator::Minus => match (&lhs, &rhs) {
-                (
-                    Value::Register(_),
-                    Value::Const(_, _) | Value::Memory(..) | Value::Register(_),
-                ) => {
-                    func.push_instr(Instr::Sub(lhs.clone(), rhs));
-                    Ok(Some(lhs))
-                }
-                (Value::Const(_, _) | Value::Memory(..), Value::Register(_)) => {
-                    func.push_instr(Instr::Sub(rhs.clone(), lhs));
-                    Ok(Some(rhs))
-                }
-                (Value::Memory(size, _), Value::Memory(..) | Value::Const(..)) => {
-                    let reg = Value::Register(size.register_for_size(Register::Rbx));
-                    func.push_instr(Instr::Mov(reg.clone(), rhs));
-                    func.push_instr(Instr::Sub(reg.clone(), lhs.clone()));
-                    Ok(Some(reg))
-                }
-                (Value::Const(_, c1), Value::Const(_, c2)) => {
-                    Ok(Some(Value::Const(SizeOperator::Byte, *c1 - *c2)))
-                }
-                (lhs, rhs) => todo!("implement generation {lhs} - {rhs}"),
-            },
-            Operator::Div => {
-                if let (Value::Const(_, c1), Value::Const(_, c2)) = (&lhs, &rhs) {
-                    if *c2 == 0 {
-                        chs_error!("{} Cannot divide by 0 in constants.", loc)
-                    }
-                    return Ok(Some(Value::Const(SizeOperator::Byte, *c1 / *c2)));
-                }
-                func.push_instr(Instr::Mov(Value::Register(Register::Rax), lhs));
-                let rhs = match rhs {
-                    Value::Register(_) => rhs,
-                    Value::Memory(_, _) => rhs,
-                    Value::Const(_, _) => {
-                        func.push_instr(Instr::Mov(Value::Register(Register::Rbx), rhs));
-                        Value::Register(Register::Rbx)
-                    }
-                    _ => todo!("implement generation div {rhs}"),
+            Operator::Plus | Operator::Minus => {
+                use Value::*;
+                let inst = match op {
+                    Operator::Plus => Instr::Add,
+                    Operator::Minus => Instr::Sub,
+                    _ => unreachable!(""),
                 };
-                func.push_instr(Instr::Div(rhs));
-                Ok(Some(Value::Register(Register::Rax)))
-            }
-            Operator::Mod => {
-                if let (Value::Const(_, c1), Value::Const(_, c2)) = (&lhs, &rhs) {
-                    if *c2 == 0 {
-                        chs_error!("{} Cannot divide by 0 in constants.", loc)
-                    }
-                    return Ok(Some(Value::Const(SizeOperator::Byte, *c1 / *c2)));
-                }
-                func.push_instr(Instr::Mov(Value::Register(Register::Rax), lhs));
-                let rhs = match rhs {
-                    Value::Register(_) => rhs,
-                    Value::Memory(_, _) => rhs,
-                    Value::Const(_, _) => {
-                        func.push_instr(Instr::Mov(Value::Register(Register::Rbx), rhs));
-                        Value::Register(Register::Rbx)
-                    }
-                    _ => todo!("implement generation mod {rhs}"),
-                };
-                func.push_instr(Instr::Div(rhs));
-                Ok(Some(Value::Register(Register::Rdx)))
-            }
-            Operator::Mult => {
-                if let (Value::Const(_, c1), Value::Const(_, c2)) = (&lhs, &rhs) {
-                    return Ok(Some(Value::Const(SizeOperator::Byte, *c1 * *c2)));
-                }
-                func.push_instr(Instr::Mov(Value::Register(Register::Rax), lhs));
-                let rhs = match rhs {
-                    Value::Register(_) => rhs,
-                    Value::Memory(_, _) => rhs,
-                    Value::Const(_, _) => {
-                        func.push_instr(Instr::Mov(Value::Register(Register::Rbx), rhs));
-                        Value::Register(Register::Rbx)
-                    }
-                    _ => todo!("implement generation mul {rhs}"),
-                };
-                func.push_instr(Instr::Mul(rhs));
-                Ok(Some(Value::Register(Register::Rax)))
-            }
-            op => {
-                self.bool_flag = true;
                 match (&lhs, &rhs) {
-                    (Value::Memory(_, _), Value::Const(_, _)) => {
-                        func.push_instr(Instr::Cmp(lhs, rhs));
-                    }
-                    (Value::Memory(_, _), Value::Memory(size, _)) => {
-                        let reg = Value::Register(size.register_for_size(Register::Rbx));
-                        func.push_instr(Instr::Mov(reg.clone(), rhs));
-                        func.push_instr(Instr::Cmp(lhs.clone(), reg));
-                    }
-                    (Value::Register(reg), Value::Const(size, _)) => {
-                        let reg = Value::Register(size.register_for_size(*reg));
-                        let treg = Value::Register(size.register_for_size(Register::Rbx));
-                        func.push_instr(Instr::Mov(treg.clone(), rhs));
-                        func.push_instr(Instr::Cmp(reg, treg));
-                    }
-                    (Value::Const(_, c1), Value::Const(_, c2)) => match op {
-                        Operator::Eq => {
-                            return Ok(Some(Value::Const(SizeOperator::Byte, (*c1 == *c2) as i64)))
-                        }
-                        Operator::NEq => {
-                            return Ok(Some(Value::Const(SizeOperator::Byte, (*c1 != *c2) as i64)))
-                        }
-                        Operator::Gt => {
-                            return Ok(Some(Value::Const(SizeOperator::Byte, (*c1 > *c2) as i64)))
-                        }
-                        Operator::Lt => {
-                            return Ok(Some(Value::Const(SizeOperator::Byte, (*c1 < *c2) as i64)))
-                        }
-                        op => todo!("implement generation for {op:?}"),
+                    (Const(_, l), Const(_, r)) => match op {
+                        Operator::Plus => Ok(Some(Value::from((size, *l + *r)))),
+                        Operator::Minus => Ok(Some(Value::from((size, *l - *r)))),
+                        _ => unreachable!(""),
                     },
-                    (lhs, rhs) => todo!("implement generation {lhs} {op:?} {rhs}"),
+                    (Register(reg), Memory(..) | Const(..)) => {
+                        func.push_instr(inst(lhs.clone(), rhs.clone()));
+                        Ok(Some(Value::from(*reg)))
+                    }
+                    (Const(..) | Memory(..), Register(reg)) => {
+                        func.push_instr(inst(rhs.clone(), lhs.clone()));
+                        Ok(Some(Value::from(*reg)))
+                    }
+                    (Memory(..), Const(..) | Memory(..)) => {
+                        let val = Value::from(self.alloc_register());
+                        func.push_instr(Instr::Mov(val.clone(), lhs));
+                        func.push_instr(inst(val.clone(), rhs));
+                        self.free_register();
+                        Ok(Some(val))
+                    }
+                    (Memory(..) | Const(..), Memory(..)) => {
+                        let val = Value::from(self.alloc_register());
+                        func.push_instr(Instr::Mov(val.clone(), lhs));
+                        func.push_instr(inst(val.clone(), rhs));
+                        self.free_register();
+                        Ok(Some(val))
+                    }
+                    (Register(dst), Register(src)) => {
+                        func.push_instr(inst(lhs.clone(), rhs));
+                        Ok(Some(lhs))
+                    }
+                    _ => match op {
+                        Operator::Plus => todo!("{loc} Generation of {lhs} + {rhs}"),
+                        Operator::Minus => todo!("{loc} Generation of {lhs} - {rhs}"),
+                        _ => unreachable!(""),
+                    },
                 }
-                match op {
-                    Operator::Eq => {
-                        func.push_instr(Instr::Set(Cond::E, Value::Register(Register::Al)));
+            }
+            Operator::Div | Operator::Mult | Operator::Mod => {
+                let inst = match op {
+                    Operator::Div | Operator::Mod => Instr::Div,
+                    Operator::Mult => Instr::Mul,
+                    _ => unreachable!(""),
+                };
+                match (&lhs, &rhs) {
+                    (Value::Const(_, l), Value::Const(_, r)) => match op {
+                        Operator::Div => Ok(Some(Value::from((size, *l / *r)))),
+                        Operator::Mod => Ok(Some(Value::from((size, *l % *r)))),
+                        Operator::Mult => Ok(Some(Value::from((size, *l * *r)))),
+                        _ => unreachable!(""),
+                    },
+                    (Value::Const(..), Value::Memory(..)) => {
+                        func.push_raw_instr("xor rdx, rdx");
+                        func.push_instr(Instr::Mov(Value::from(Register::Rax), lhs));
+                        func.push_instr(inst(rhs));
+                        match op {
+                            Operator::Mod => Ok(Some(Value::from(Register::Rdx))),
+                            Operator::Mult | Operator::Div => Ok(Some(Value::from(Register::Rax))),
+                            _ => unreachable!(""),
+                        }
                     }
-                    Operator::NEq => {
-                        func.push_instr(Instr::Set(Cond::NE, Value::Register(Register::Al)));
+                    (Value::Memory(..), Value::Const(..)) => {
+                        func.push_raw_instr("xor rdx, rdx");
+                        func.push_instr(Instr::Mov(Value::from(Register::Rax), lhs));
+                        let r = self.alloc_register();
+                        func.push_instr(Instr::Mov(Value::from(r), rhs));
+                        func.push_instr(inst(Value::from(r)));
+                        self.free_register();
+                        match op {
+                            Operator::Mod => Ok(Some(Value::from(Register::Rdx))),
+                            Operator::Mult | Operator::Div => Ok(Some(Value::from(Register::Rax))),
+                            _ => unreachable!(""),
+                        }
                     }
-                    Operator::Gt => {
-                        func.push_instr(Instr::Set(Cond::L, Value::Register(Register::Al)));
+                    (Value::Memory(..), Value::Memory(..)) => {
+                        func.push_raw_instr("xor rdx, rdx");
+                        func.push_instr(Instr::Mov(Value::from(Register::Rax), lhs));
+                        let r = self.alloc_register();
+                        func.push_instr(Instr::Mov(Value::from(r), rhs));
+                        func.push_instr(inst(Value::from(r)));
+                        self.free_register();
+                        match op {
+                            Operator::Mod => Ok(Some(Value::from(Register::Rdx))),
+                            Operator::Mult | Operator::Div => Ok(Some(Value::from(Register::Rax))),
+                            _ => unreachable!(""),
+                        }
                     }
-                    Operator::Lt => {
-                        func.push_instr(Instr::Set(Cond::G, Value::Register(Register::Al)));
+                    (Value::Memory(..), Value::Memory(..)) if lhs == rhs => match op {
+                        Operator::Div => Ok(Some(Value::from((size, 1)))),
+                        Operator::Mod => Ok(Some(Value::from((size, 0)))),
+                        Operator::Mult => {
+                            func.push_instr(Instr::Mov(Value::from(Register::Rax), lhs));
+                            func.push_instr(Instr::Mul(Value::from(Register::Rax)));
+                            Ok(Some(Value::from(Register::Rax)))
+                        }
+                        _ => unreachable!(""),
+                    },
+                    (Value::Memory(..), Value::Memory(..)) => todo!(),
+                    (Value::Register(reg), Value::Memory(..) | Value::Register(..)) => {
+                        if *reg != Register::Rax {
+                            func.push_instr(Instr::Mov(Value::from(Register::Rax), lhs));
+                        }
+                        func.push_instr(inst(rhs));
+                        match op {
+                            Operator::Mod => Ok(Some(Value::from(Register::Rdx))),
+                            Operator::Mult | Operator::Div => Ok(Some(Value::from(Register::Rax))),
+                            _ => unreachable!(""),
+                        }
                     }
-                    op => todo!("implement generation for {op:?}"),
+                    (Value::Register(reg), Value::Const(..)) => {
+                        if *reg != Register::Rax {
+                            func.push_instr(Instr::Mov(Value::from(Register::Rax), lhs));
+                        }
+                        let r = self.alloc_register();
+                        func.push_instr(Instr::Mov(Value::from(r), rhs));
+                        func.push_instr(inst(Value::from(r)));
+                        self.free_register();
+                        match op {
+                            Operator::Mod => Ok(Some(Value::from(Register::Rdx))),
+                            Operator::Mult | Operator::Div => Ok(Some(Value::from(Register::Rax))),
+                            _ => unreachable!(""),
+                        }
+                    }
+                    _ => match op {
+                        Operator::Div => todo!("{loc} Generation of {lhs} / {rhs}"),
+                        Operator::Mult => todo!("{loc} Generation of {lhs} * {rhs}"),
+                        Operator::Mod => todo!("{loc} Generation of {lhs} % {rhs}"),
+                        _ => unreachable!(""),
+                    },
                 }
-                Ok(Some(Value::Register(Register::Al)))
-            } // _ => unreachable!(),
+            }
+            Operator::LOr => match (&lhs, &rhs) {
+                (Value::Const(_, l), Value::Const(_, r)) => {
+                    Ok(Some(Value::from((size, (*l != 0 || *r != 0) as i64))))
+                }
+                (Value::Memory(..) | Value::Register(..), Value::Const(s, 1))
+                | (Value::Const(s, 1), Value::Memory(..) | Value::Register(..)) => {
+                    Ok(Some(Value::Const(*s, 1)))
+                }
+                (Value::Memory(..) | Value::Register(..), Value::Const(_, 0)) => Ok(Some(lhs)),
+                (Value::Const(_, 0), Value::Memory(..) | Value::Register(..)) => Ok(Some(rhs)),
+                (
+                    Value::Memory(..) | Value::Register(..),
+                    Value::Memory(..) | Value::Register(..),
+                ) => {
+                    func.push_instr(Instr::Mov(Value::from(Register::Al), lhs));
+                    let r = size.register_for_size(self.alloc_register());
+                    func.push_instr(Instr::Mov(Value::from(r), rhs));
+                    func.push_instr(Instr::Or(Value::from(Register::Al), Value::from(r)));
+                    self.free_register();
+                    Ok(Some(Value::from(Register::Al)))
+                }
+                _ => todo!("{loc} Generation of {lhs} || {rhs}"),
+            },
+            Operator::LAnd => match (&lhs, &rhs) {
+                (Value::Const(_, l), Value::Const(_, r)) => {
+                    Ok(Some(Value::from((size, (*l != 0 && *r != 0) as i64))))
+                }
+                (Value::Memory(..) | Value::Register(..), Value::Const(s, 1))
+                | (Value::Const(s, 1), Value::Memory(..) | Value::Register(..)) => {
+                    Ok(Some(Value::Const(*s, 1)))
+                }
+                (Value::Memory(..) | Value::Register(..), Value::Const(s, 0))
+                | (Value::Const(s, 0), Value::Memory(..) | Value::Register(..)) => {
+                    Ok(Some(Value::Const(*s, 0)))
+                }
+                (
+                    Value::Memory(..) | Value::Register(..),
+                    Value::Memory(..) | Value::Register(..),
+                ) => {
+                    func.push_instr(Instr::Mov(Value::from(Register::Al), lhs));
+                    let r = size.register_for_size(self.alloc_register());
+                    func.push_instr(Instr::Mov(Value::from(r), rhs));
+                    func.push_instr(Instr::And(Value::from(Register::Al), Value::from(r)));
+                    self.free_register();
+                    Ok(Some(Value::from(Register::Al)))
+                }
+                _ => todo!("{loc} Generation of {lhs} && {rhs}"),
+            },
+            Operator::Or => todo!(),
+            Operator::And => todo!(),
+            Operator::Eq | Operator::NEq | Operator::Gt | Operator::Lt => {
+                let cond = match op {
+                    Operator::Eq => Cond::E,
+                    Operator::NEq => Cond::NE,
+                    Operator::Gt => Cond::G,
+                    Operator::Lt => Cond::L,
+                    _ => unreachable!(""),
+                };
+                match (&lhs, &rhs) {
+                    (Value::Const(_, l), Value::Const(_, r)) => match op {
+                        Operator::Eq => Ok(Some(Value::from((size, (*l == *r) as i64)))),
+                        Operator::NEq => Ok(Some(Value::from((size, (*l != *r) as i64)))),
+                        Operator::Gt => Ok(Some(Value::from((size, (*l > *r) as i64)))),
+                        Operator::Lt => Ok(Some(Value::from((size, (*l < *r) as i64)))),
+                        _ => unreachable!(""),
+                    },
+                    (
+                        Value::Memory(..) | Value::Register(..) | Value::Const(..),
+                        Value::Memory(..) | Value::Register(..) | Value::Const(..),
+                    ) => {
+                        {
+                            let rax = size.register_for_size(Register::Rax);
+                            let treg = size.register_for_size(self.alloc_register());
+                            func.push_instr(Instr::Mov(Value::from(rax), lhs));
+                            func.push_instr(Instr::Mov(Value::from(treg), rhs));
+                            func.push_instr(Instr::Cmp(Value::from(rax), Value::from(treg)));
+                            self.free_register();
+                        }
+                        {
+                            let rcx = Register::Rcx;
+                            let treg = self.alloc_register();
+                            func.push_instr(Instr::Mov(
+                                Value::from(rcx),
+                                Value::Const(SizeOperator::Qword, 0),
+                            ));
+                            func.push_instr(Instr::Mov(
+                                Value::from(treg),
+                                Value::Const(SizeOperator::Qword, 1),
+                            ));
+                            func.push_instr(Instr::Cmove(
+                                cond,
+                                Value::from(rcx),
+                                Value::from(treg),
+                            ));
+                            self.free_register();
+                        }
+                        Ok(Some(Value::from(Register::Cl)))
+                    }
+                    _ => match op {
+                        Operator::Eq => todo!("{loc} Generation of {lhs} == {rhs}"),
+                        Operator::NEq => todo!("{loc} Generation of {lhs} != {rhs}"),
+                        _ => unreachable!(),
+                    },
+                }
+            }
+            _ => unreachable!("Not binop"),
         }
     }
 
@@ -573,64 +549,58 @@ impl FasmGenerator {
             left,
             ttype,
         } = unop;
-        let size = SizeOperator::from_chstype(ttype.as_ref().unwrap(), &self.type_map)?;
-        let lhs = self.generate_expression(func, left)?.unwrap();
         match op {
             Operator::Negate => {
-                let lhs = match lhs {
-                    Value::Const(size, c1) => return Ok(Some(Value::Const(size, -c1))),
-                    Value::Register(reg) => Value::Register(size.register_for_size(reg)),
-                    _ => {
-                        let reg = Value::Register(size.register_for_size(Register::Rbx));
-                        func.push_instr(Instr::Mov(reg.clone(), lhs));
-                        reg
-                    }
-                };
-                func.push_instr(Instr::Neg(lhs.clone()));
-                return Ok(Some(lhs));
+                let src = self.generate_expression(func, left)?.unwrap();
+                match src {
+                    Value::Memory(size_operator, _) => todo!(),
+                    Value::Register(register) => todo!(),
+                    Value::Const(s, n) => Ok(Some(Value::Const(s, -n))),
+                    Value::Label(_) => todo!(),
+                }
             }
-            Operator::LNot => {
-                let lhs = match lhs {
-                    Value::Const(_, c1) => {
-                        return Ok(Some(Value::Const(SizeOperator::Byte, (c1 == 0) as i64)))
-                    }
-                    Value::Register(_) => lhs,
-                    _ => {
-                        let reg = Value::Register(size.register_for_size(Register::Rbx));
-                        func.push_instr(Instr::Mov(reg.clone(), lhs));
-                        reg
-                    }
-                };
-                func.push_instr(Instr::Not(lhs.clone()));
-                return Ok(Some(lhs));
-            }
-            Operator::Refer => {
-                let lhs = match lhs {
-                    Value::Const(..) => {
-                        chs_error!("Cannot take a reference to a literal")
-                    }
-                    _ => lhs,
-                };
-                func.push_instr(Instr::Lea(Value::Register(Register::Rax), lhs));
-            }
+            Operator::LNot => todo!(),
+            Operator::Refer => match left {
+                Expression::Binop(binop) => todo!(),
+                Expression::Unop(unop) => todo!(),
+                Expression::Call(call) => todo!(),
+                Expression::Cast(cast) => todo!(),
+                Expression::Syscall(syscall) => todo!(),
+                Expression::Array(array) => todo!(),
+                Expression::Len(expression) => todo!(),
+                Expression::Group(expression) => todo!(),
+                Expression::ConstExpression(ConstExpression::Symbol(sym)) => {
+                    let dst = Value::from(self.alloc_register());
+                    func.push_instr(Instr::Lea(dst.clone(), self.get_var(sym)?.clone()));
+                    Ok(Some(dst))
+                }
+                Expression::ConstExpression(..) | Expression::ExpressionList(..) => {
+                    todo!("Refer to `{{...}}` and consts")
+                }
+                _ => unreachable!("Refer void"),
+            },
             Operator::Deref => {
-                let lhs = match lhs {
-                    Value::Const(..) => {
-                        chs_error!("{} Cannot take a deref a literal", loc)
+                let ttype = ttype.as_ref().unwrap();
+                let size = SizeOperator::from_chstype(ttype, &self.type_map)?;
+                let dst = self.alloc_register();
+                func.push_raw_instr(format!("xor {dst}, {dst}"));
+                let src = self.generate_expression(func, left)?.unwrap();
+                match &src {
+                    Value::Memory(_, addr) => {
+                        func.push_raw_instr(format!("mov {dst}, [{addr}]"));
+                        let dst2 = Value::Register(size.register_for_size(dst));
+                        func.push_raw_instr(format!("mov {dst2}, [{dst}]"));
+                        Ok(Some(dst2))
                     }
-                    Value::Register(reg) => Value::Register(size.register_for_size(reg)),
                     _ => {
-                        let reg = Value::Register(size.register_for_size(Register::Rbx));
-                        func.push_instr(Instr::Mov(reg.clone(), lhs));
-                        reg
+                        let dst = Value::Register(size.register_for_size(dst));
+                        func.push_raw_instr(format!("mov {dst}, [{src}]"));
+                        Ok(Some(dst))
                     }
-                };
-                let dst = Value::Register(size.register_for_size(Register::Rax));
-                func.push_instr(Instr::Mov(dst, Value::Memory(size, lhs.to_string())));
+                }
             }
-            _ => unreachable!(),
+            _ => unreachable!("Not Unop"),
         }
-        Ok(Some(Value::Register(Register::Rax)))
     }
 
     fn generate_if(
@@ -638,29 +608,21 @@ impl FasmGenerator {
         func: &mut fasm::Function,
         e: &IfExpression,
     ) -> Result<Option<Value>, CHSError> {
-        let IfExpression { loc: _, cond, body } = e;
+        let IfExpression { loc, cond, body } = e;
         let lafter = self.new_label();
-        let v = self.generate_expression(func, cond)?.unwrap();
-        if !self.bool_flag {
-            match &v {
-                Value::Const(size, ..) | Value::Memory(size, ..) => {
-                    let reg = Value::Register(size.register_for_size(Register::Rbx));
-                    func.push_instr(Instr::Mov(reg.clone(), v.clone()));
-                    func.push_instr(Instr::Test(reg.clone(), reg));
-                }
-                _ => {
-                    func.push_instr(Instr::Test(v.clone(), v));
-                }
-            }
-            self.bool_flag = !self.bool_flag
-        }
-        func.push_instr(Instr::J(Cond::NZ, Value::Label(lafter.clone())));
+        let vcond = self.generate_expression(func, &cond)?.unwrap();
+        func.push_raw_instr(format!("xor rax, rax"));
+        func.push_raw_instr(format!("mov al, {vcond}"));
+        func.push_raw_instr(format!("test rax, rax"));
+        func.push_raw_instr(format!("jz .{lafter}"));
+
         self.scopes.push(HashMap::new());
         for expr in body {
             self.generate_expression(func, expr)?;
         }
         self.scopes.pop();
-        func.push_block(lafter);
+
+        func.push_block(&lafter);
         Ok(None)
     }
 
@@ -676,36 +638,29 @@ impl FasmGenerator {
             else_body,
         } = e;
         let lafter = self.new_label();
-        let lother = self.new_label();
-        let v = self.generate_expression(func, cond)?.unwrap();
-        if !self.bool_flag {
-            match &v {
-                Value::Const(size, ..) | Value::Memory(size, ..) => {
-                    let reg = Value::Register(size.register_for_size(Register::Rbx));
-                    func.push_instr(Instr::Mov(reg.clone(), v.clone()));
-                    func.push_instr(Instr::Test(reg.clone(), reg));
-                }
-                _ => {
-                    func.push_instr(Instr::Test(v.clone(), v));
-                }
-            }
-            self.bool_flag = !self.bool_flag
-        }
-        func.push_instr(Instr::J(Cond::NZ, Value::Label(lother.clone())));
+        let lelse = self.new_label();
+        let vcond = self.generate_expression(func, &cond)?.unwrap();
+        func.push_raw_instr(format!("xor rax, rax"));
+        func.push_raw_instr(format!("mov al, {vcond}"));
+        func.push_raw_instr(format!("test rax, rax"));
+        func.push_raw_instr(format!("jz .{lelse}"));
+
         self.scopes.push(HashMap::new());
         for expr in body {
             self.generate_expression(func, expr)?;
         }
         self.scopes.pop();
-        func.push_instr(Instr::Jmp(Value::Label(lafter.clone())));
-        func.push_block(lother);
+
+        func.push_raw_instr(format!("jmp .{lafter}"));
+
+        func.push_block(&lelse);
         self.scopes.push(HashMap::new());
         for expr in else_body {
             self.generate_expression(func, expr)?;
         }
         self.scopes.pop();
-        func.push_block(lafter);
-        Ok(None) // TODO: Make the if-else return
+        func.push_block(&lafter);
+        Ok(None)
     }
 
     #[allow(unreachable_code)]
@@ -715,36 +670,38 @@ impl FasmGenerator {
         func: &mut fasm::Function,
         e: &WhileExpression,
     ) -> Result<Option<Value>, CHSError> {
-        let WhileExpression { loc: _, cond, body } = e;
+        let WhileExpression { loc, cond, body } = e;
         let lcond = self.new_label();
+        func.push_instr(Instr::Jmp(lcond.clone()));
         let lbody = self.new_label();
-        let lafter = self.new_label();
-        func.push_instr(Instr::Jmp(Value::Label(lcond.clone())));
-        func.push_block(lbody.clone());
+        func.push_block(&lbody);
+
         self.scopes.push(HashMap::new());
         for expr in body {
             self.generate_expression(func, expr)?;
         }
         self.scopes.pop();
-        func.push_block(lcond);
-        let v = self.generate_expression(func, cond)?.unwrap();
-        if !self.bool_flag {
-            match &v {
-                Value::Const(size, ..) | Value::Memory(size, ..) => {
-                    let reg = Value::Register(size.register_for_size(Register::Rbx));
-                    func.push_instr(Instr::Mov(reg.clone(), v.clone()));
-                    func.push_instr(Instr::Test(reg.clone(), reg));
-                }
-                _ => {
-                    func.push_instr(Instr::Test(v.clone(), v));
-                }
-            }
-            self.bool_flag = !self.bool_flag
-        }
-        func.push_instr(Instr::J(Cond::NZ, Value::Label(lbody)));
 
-        func.push_block(lafter);
-
+        func.push_block(&lcond);
+        let vcond = self.generate_expression(func, &cond)?.unwrap();
+        func.push_raw_instr(format!("xor rax, rax"));
+        func.push_raw_instr(format!("mov al, {vcond}"));
+        func.push_raw_instr(format!("test rax, rax"));
+        func.push_raw_instr(format!("jnz .{lbody}"));
+        // match cond {
+        //     Expression::Binop(e) if e.op == Operator::Eq => {
+        //         let lhs = self.generate_expression(func, &e.left)?.unwrap();
+        //         let rhs = self.generate_expression(func, &e.right)?.unwrap();
+        //         if lhs == rhs {
+        //             func.push_instr(Instr::Jmp(lbody.clone()));
+        //             return Ok(None);
+        //         }
+        //         func.push_instr(Instr::Cmp(lhs, rhs));
+        //         func.push_instr(Instr::J(Cond::NE, lbody));
+        //     }
+        //     Expression::Binop(e) => chs_error!("{} Unimplemented binop in while condition", loc),
+        //     _ => chs_error!("{} Forbiden expression in while condition", loc),
+        // }
         Ok(None)
     }
 
@@ -757,27 +714,18 @@ impl FasmGenerator {
         self.label_count = 0;
     }
 
-    fn generate_syscall(
-        &mut self,
-        func: &mut fasm::Function,
-        e: &Syscall,
-    ) -> CHSResult<Option<Value>> {
-        let mut args = e.args.iter();
-        let n = args.next().unwrap();
-        let cc = Register::get_syscall_call_convention();
-        for (i, arg) in args.enumerate().rev() {
-            let reg = cc[i];
-            let src = self.generate_expression(func, arg)?.unwrap();
-            func.push_instr(Instr::Mov(Value::Register(reg), src));
-        }
-        match self.generate_expression(func, n)?.unwrap() {
-            Value::Register(Register::Rax) => {}
-            n => {
-                func.push_instr(Instr::Mov(Value::Register(Register::Rax), n));
-            }
-        }
-        func.push_instr(Instr::Syscall);
-        Ok(Some(Value::Register(Register::Rax)))
+    fn alloc_register(&mut self) -> Register {
+        assert!(self.temp_regs <= Register::get_callee_saved().len());
+        self.temp_regs += 1;
+        Register::get_callee_saved()[self.temp_regs - 1]
+    }
+
+    fn free_register(&mut self) {
+        self.temp_regs -= 1;
+    }
+
+    fn free_all_registers(&mut self) {
+        self.temp_regs = 0;
     }
 
     fn generate_expression_list(
@@ -794,6 +742,60 @@ impl FasmGenerator {
         func.allocate_stack(e.size as usize * size_operator.byte_size());
         let mem = Value::Memory(size_operator, format!("rbp-{s}"));
         func.push_instr(Instr::Lea(Value::Register(Register::Rax), mem));
+        Ok(Some(Value::Register(Register::Rax)))
+    }
+
+    fn generate_call(
+        &mut self,
+        func: &mut fasm::Function,
+        c: &Call,
+    ) -> Result<Option<Value>, CHSError> {
+        let cc = Register::get_syscall_call_convention();
+        let f = match &c.caller {
+            Expression::ConstExpression(ConstExpression::Symbol(sym)) => sym.clone(),
+            _ => todo!("Do other types of call"),
+        };
+        for (i, arg) in c.args.iter().enumerate() {
+            let src = self.generate_expression(func, arg)?.unwrap();
+            if i <= cc.len() {
+                let reg = cc[i];
+                let dst = match src {
+                    Value::Const(size, _) => Value::Register(size.register_for_size(reg)),
+                    Value::Memory(size, _) => Value::Register(size.register_for_size(reg)),
+                    _ => Value::Register(reg),
+                };
+                func.push_instr(Instr::Mov(dst, src));
+            } else {
+                func.push_instr(Instr::Push(src));
+            }
+        }
+        func.push_instr(Instr::Call(f));
+        // TODO: Make the expression contain the return type. For now it will always return on rax
+        Ok(Some(Value::Register(Register::Rax)))
+    }
+
+    fn generate_syscall(
+        &mut self,
+        func: &mut fasm::Function,
+        c: &Syscall,
+    ) -> Result<Option<Value>, CHSError> {
+        let cc = Register::get_syscall_call_convention_with_rax();
+        for (i, arg) in c.args.iter().enumerate().rev() {
+            let src = self.generate_expression(func, arg)?.unwrap();
+            if i <= cc.len() {
+                let reg = cc[i];
+                let dst = match src {
+                    Value::Const(size, _) => Value::Register(size.register_for_size(reg)),
+                    Value::Memory(size, _) => Value::Register(size.register_for_size(reg)),
+                    _ => Value::Register(reg),
+                };
+                func.push_instr(Instr::Mov(dst, src));
+            } else {
+                func.push_instr(Instr::Push(src));
+            }
+        }
+        func.push_instr(Instr::Syscall);
+        // TODO: Make the expression contain the return type. For now it will always return on rax
         Ok(Some(Value::Register(Register::Rax)))
     }
 }

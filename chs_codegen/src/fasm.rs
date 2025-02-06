@@ -71,10 +71,17 @@ impl SizeOperator {
             (SizeOperator::Qword, reg) if reg.is_64() => reg,
             (SizeOperator::Byte, reg) if reg.is_8() => reg,
             (SizeOperator::Qword, Register::Al) => Register::Rax,
+            (SizeOperator::Qword, Register::Bl) => Register::Rbx,
+            (SizeOperator::Qword, Register::Cl) => Register::Rcx,
+            (SizeOperator::Qword, Register::Dl) => Register::Rdx,
+            (SizeOperator::Qword, Register::R12L) => Register::R12,
+            (SizeOperator::Qword, Register::R13L) => Register::R13,
             (SizeOperator::Byte, Register::Rax) => Register::Al,
             (SizeOperator::Byte, Register::Rbx) => Register::Bl,
             (SizeOperator::Byte, Register::Rdi) => Register::Dil,
             (SizeOperator::Byte, Register::R12) => Register::R12L,
+            (SizeOperator::Byte, Register::R13) => Register::R13L,
+            (SizeOperator::Byte, Register::R14) => Register::R14L,
             _ => todo!("{self}, {reg}"),
         }
     }
@@ -127,6 +134,8 @@ pub enum Register {
     Sil,
     Dil,
     R12L,
+    R13L,
+    R14L,
 }
 
 impl fmt::Display for Register {
@@ -156,6 +165,8 @@ impl fmt::Display for Register {
             Sil => write!(f, "sil"),
             Dil => write!(f, "dil"),
             R12L => write!(f, "r12l"),
+            R13L => write!(f, "r13l"),
+            R14L => write!(f, "r14l"),
         }
     }
 }
@@ -164,6 +175,10 @@ impl Register {
     pub const fn get_syscall_call_convention() -> [Self; 6] {
         use Register::*;
         [Rdi, Rsi, Rdx, R10, R8, R9]
+    }
+    pub const fn get_syscall_call_convention_with_rax() -> [Self; 7]  {
+        use Register::*;
+        [Rax, Rdi, Rsi, Rdx, R10, R8, R9]
     }
     /// Excluding `rsp` and `rbp`
     pub const fn get_callee_saved() -> [Self; 5] {
@@ -198,6 +213,41 @@ impl Register {
     }
 }
 
+// #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+// /// Scale: A 2-bit constant factor that is either 1, 2, 4, or 8.
+// ///
+// /// Index: Any general purpose register.
+// ///
+// /// Base: Any general purpose register.
+// ///
+// /// Displacement: An integral offset. (normally limited to 32 bits even in 64-bit mode but can be 64-bits with a few select encodings)
+// pub enum Addr {
+//     Base(Register),
+//     BaseIndex(Register, Register),
+//     BaseDisplacement(Register, i32),
+//     BaseIndexDisplacement(Register, Register, i32),
+//     BaseIndexXScale(Register, Register, u8),
+//     IndexXScaleDisplacement(Register, u8, i32),
+//     BaseIndexXScaleDisplacement(Register, Register, u8, i32),
+//     Displacement(i32)
+// }
+
+// impl fmt::Display for Addr {
+//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+//         match self {
+//             Addr::Base(reg) => write!(f, "{reg}"),
+//             Addr::BaseIndex(reg1, reg2) => write!(f, "{reg1}+{reg2}"),
+//             Addr::BaseDisplacement(reg, dis) => if *dis > 0 { write!(f, "{reg}+{dis}")} else {write!(f, "{reg}{dis}")},
+//             Addr::BaseIndexDisplacement(reg1, reg2, dis) => if *dis > 0 { write!(f, "{reg1}{reg2}+{dis}")} else {write!(f, "{reg1}{reg2}{dis}")},
+//             Addr::BaseIndexXScale(reg1, reg2, s) =>  write!(f, "{reg1}+{reg2}*{s}"),
+//             Addr::IndexXScaleDisplacement(reg1, s, dis) => if *dis > 0 { write!(f, "{reg1}*{s}+{dis}")} else {write!(f, "{reg1}*{s}{dis}")},
+//             Addr::BaseIndexXScaleDisplacement(reg1, reg2, s, dis) =>
+//                 if *dis > 0 { write!(f, "{reg1}+{reg2}*{s}+{dis}")} else {write!(f, "{reg1}+{reg2}*{s}{dis}")},
+//             Addr::Displacement(_) => todo!(),
+//         }
+//     }
+// }
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Value {
     /// Scale: A 2-bit constant factor that is either 1, 2, 4, or 8.
@@ -216,6 +266,18 @@ pub enum Value {
 impl Value {
     pub fn is_register(&self) -> bool {
         matches!(self, Self::Register(..))
+    }
+}
+
+impl From<Register> for Value {
+    fn from(value: Register) -> Self {
+        Self::Register(value)
+    }
+}
+
+impl From<(SizeOperator, i64)> for Value {
+    fn from(value: (SizeOperator, i64)) -> Self {
+        Self::Const(value.0, value.1)
     }
 }
 
@@ -385,9 +447,9 @@ pub enum Instr {
 
     Test(Value, Value),
     Set(Cond, Value),
-    J(Cond, Value),
-    Jmp(Value),
-    Call(Value),
+    J(Cond, String),
+    Jmp(String), // Not general
+    Call(String),
     Ret,
 }
 
@@ -421,13 +483,7 @@ impl fmt::Display for Instr {
             Self::Set(cond, dst) => write!(f, "set{cond} {dst}"),
             Instr::J(cond, label) => write!(f, "j{cond} .{label}"), // local labels
             Instr::Jmp(label) => write!(f, "jmp .{label}"),         // local labels
-            Instr::Call(label) => {
-                if let Value::Label(..) = label {
-                    write!(f, "call _{label}")
-                } else {
-                    write!(f, "call {label}")
-                }
-            }
+            Instr::Call(label) => write!(f, "call _{label}"),
             Instr::Ret => write!(f, "ret"),
         }
     }
@@ -441,7 +497,7 @@ pub struct Block {
 }
 
 impl Block {
-    pub fn new(label: impl Into<String>) -> Self {
+    pub fn new(label: &str) -> Self {
         Self {
             label: label.into(),
             instrs: vec![],
@@ -491,7 +547,7 @@ impl Function {
         self.stack_allocated
     }
 
-    pub fn push_block(&mut self, label: impl Into<String>) -> &mut Block {
+    pub fn push_block(&mut self, label: &str) -> &mut Block {
         self.blocks.push(Block::new(label));
         self.blocks.last_mut().unwrap()
     }
