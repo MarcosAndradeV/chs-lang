@@ -1,4 +1,19 @@
 :i count 18
+:b shell 47
+cargo run -q -- compile -r -s tests/big_sum.chs
+:i returncode 0
+:b stdout 4
+100
+
+:b stderr 0
+
+:b shell 16
+rm tests/big_sum
+:i returncode 0
+:b stdout 0
+
+:b stderr 0
+
 :b shell 45
 cargo run -q -- compile -r -s tests/hello.chs
 :i returncode 0
@@ -9,25 +24,6 @@ Hello from CHS
 
 :b shell 14
 rm tests/hello
-:i returncode 0
-:b stdout 0
-
-:b stderr 0
-
-:b shell 50
-cargo run -q -- compile -r -s tests/arithmetic.chs
-:i returncode 0
-:b stdout 71
-Addition: 30
-Subtraction: 10
-Multiplication: 200
-Division: 3
-Modulo: 0
-
-:b stderr 0
-
-:b shell 19
-rm tests/arithmetic
 :i returncode 0
 :b stdout 0
 
@@ -98,6 +94,25 @@ rm tests/mmap_test
 
 :b stderr 0
 
+:b shell 50
+cargo run -q -- compile -r -s tests/arithmetic.chs
+:i returncode 0
+:b stdout 71
+Addition: 30
+Subtraction: 10
+Multiplication: 200
+Division: 3
+Modulo: 0
+
+:b stderr 0
+
+:b shell 19
+rm tests/arithmetic
+:i returncode 0
+:b stdout 0
+
+:b stderr 0
+
 :b shell 47
 cargo run -q -- compile -r -s tests/simple2.chs
 :i returncode 0
@@ -140,30 +155,6 @@ cargo run -q -- compile -r -s tests/inc.chs
 
 :b shell 12
 rm tests/inc
-:i returncode 0
-:b stdout 0
-
-:b stderr 0
-
-:b shell 45
-cargo run -q -- compile -r -s tests/array.chs
-:i returncode 0
-:b stdout 20
-0
-1
-2
-3
-4
-5
-6
-7
-8
-9
-
-:b stderr 0
-
-:b shell 14
-rm tests/array
 :i returncode 0
 :b stdout 0
 

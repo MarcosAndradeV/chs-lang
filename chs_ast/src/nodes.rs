@@ -133,6 +133,8 @@ pub enum Expression {
     Call(Box<Call>),
     Cast(Box<Cast>),
     Syscall(Box<Syscall>),
+    Array(Box<Array>),
+    Len(Box<Expression>),
     VarDecl(Box<VarDecl>),
     Assign(Box<Assign>),
     Group(Box<Self>),
@@ -200,7 +202,18 @@ impl chs_types::InferType for Expression {
                 }
                 c => chs_error!("{} Cannot call {}", call.loc, c),
             },
-
+            Expression::Len(e) => {
+                let arg = e.infer(hint, env)?;
+                match arg {
+                    CHSType::String => {}
+                    arg => chs_error!("Cannot get the len of {}", arg),
+                }
+                Ok(CHSType::Int)
+            }
+            Expression::Array(e) => {
+                assert!(e.size > 0);
+                Ok(CHSType::Pointer(Box::new(e.ttype.clone())))
+            }
             Expression::VarDecl(e) => {
                 if let Some(ref expect) = e.ttype {
                     let actual = e.value.infer(Some(expect), env)?;
@@ -304,7 +317,7 @@ impl chs_types::InferType for Expression {
                             right
                         );
                     }
-                    e.ttype = Some(CHSType::Boolean);
+                    e.ttype = Some(left);
                     Ok(CHSType::Boolean)
                 }
                 Operator::LAnd | Operator::LOr => {
@@ -547,6 +560,13 @@ pub struct Syscall {
     pub loc: Loc,
     pub arity: usize,
     pub args: Vec<Expression>,
+}
+
+#[derive(Debug)]
+pub struct Array {
+    pub loc: Loc,
+    pub ttype: CHSType,
+    pub size: u64,
 }
 
 #[derive(Debug)]
