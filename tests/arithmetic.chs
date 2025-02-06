@@ -12,15 +12,9 @@ fn main()
     print_int(30 / 10)
 
     puts("Modulo: ")
-    print_int(0) #5 % 10)
+    print_int(5 % 10)
 end
 
 fn puts(s: string)
-    _ := syscall(1, 1, s, strlen(s))
-end
-
-fn strlen(str: string) -> int
-    s: *char = str
-    while(*s != '\0') set s = s + 1 end
-    cast(int)s - cast(int)str
+    _ := syscall(1, 1, s, len s)
 end

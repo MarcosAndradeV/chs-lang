@@ -13,11 +13,5 @@ fn main()
 end
 
 fn print(msg: string)
-    _ := syscall(1, 1, msg, strlen(msg))
-end
-
-fn strlen(str: string) -> int
-    s: *char = str
-    while(*s != '\0') set s = s + 1 end
-    cast(int)s - cast(int)str
+    _ := syscall(1, 1, msg, len msg)
 end

@@ -317,7 +317,7 @@ impl chs_types::InferType for Expression {
                             right
                         );
                     }
-                    e.ttype = Some(left);
+                    e.ttype = Some(CHSType::Boolean);
                     Ok(CHSType::Boolean)
                 }
                 Operator::LAnd | Operator::LOr => {
