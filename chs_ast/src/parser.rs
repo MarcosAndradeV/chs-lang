@@ -132,6 +132,16 @@ impl Parser {
                         ttype: chs_type,
                     });
                 }
+                Keyword if token.val_eq("distinct") => {
+                    let token = self.expect_kind(Ident)?;
+                    let name = token.value;
+                    let chs_type = self.parse_type()?;
+                    self.module.type_decls.push(TypeDecl {
+                        loc: token.loc,
+                        name,
+                        ttype: CHSType::Distinct(chs_type.into()),
+                    });
+                }
                 _ => {
                     chs_error!(
                         "{} Invalid Expression on top level {}('{}')",
@@ -203,22 +213,8 @@ impl Parser {
             Keyword if token.val_eq("true") || token.val_eq("false") => {
                 Expression::from_literal_token(token)?
             }
-            Keyword if token.val_eq("len") => {
-                Expression::Len(Box::new(self.parse_expression(Precedence::Prefix)?))
-            }
-            Keyword if token.val_eq("array") => {
-                let loc = token.loc;
-                self.expect_kind(ParenOpen)?;
-                let ttype = self.parse_type()?;
-                self.expect_kind(Comma)?;
-                let size = self
-                    .expect_kind(Integer)?
-                    .value
-                    .parse::<u64>()
-                    .expect("TODO");
-                self.expect_kind(ParenClose)?;
-                Expression::Array(Box::new(Array { loc, ttype, size }))
-            }
+
+
             Keyword if token.val_eq("cast") => {
                 let loc = token.loc;
                 self.expect_kind(ParenOpen)?;
@@ -501,10 +497,6 @@ impl Parser {
                 self.next();
                 let (args, ret) = self.parse_fn_type_no_args()?;
                 CHSType::Function(args, Box::new(ret))
-            }
-            Keyword if ttoken.val_eq("distinct") => {
-                let ttype = self.parse_type()?;
-                CHSType::Distinct(Box::new(ttype))
             }
             _ => chs_error!("Type not implemented {}", ttoken),
         };
