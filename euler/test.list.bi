@@ -1,4 +1,19 @@
-:i count 6
+:i count 8
+:b shell 49
+cargo run -q -- compile -r -s euler/problem03.chs
+:i returncode 0
+:b stdout 5
+6857
+
+:b stderr 0
+
+:b shell 18
+rm euler/problem03
+:i returncode 0
+:b stdout 0
+
+:b stderr 0
+
 :b shell 49
 cargo run -q -- compile -r -s euler/problem02.chs
 :i returncode 0
