@@ -132,6 +132,7 @@ pub enum Expression {
     Unop(Box<Unop>),
     Call(Box<Call>),
     Cast(Box<Cast>),
+    Index(Box<Index>),
     Syscall(Box<Syscall>),
     Array(Box<Array>),
     Len(Box<Expression>),
@@ -161,6 +162,27 @@ impl chs_types::InferType for Expression {
             Expression::Cast(e) => {
                 e.casted.infer(Some(&e.ttype), env)?;
                 Ok(e.ttype.clone())
+            }
+            Expression::Index(e) => {
+                let actual = e.left.infer(None, env)?;
+                if actual.is_void_pointer() {
+                    chs_error!("TDO")
+                }
+                if !actual.is_pointer() {
+                    chs_error!("TDO")
+                }
+
+                let index = e.index.infer(None, env)?;
+                if !index.equivalent(&CHSType::Int, env) {
+                    chs_error!("TDO")
+                }
+
+                if let CHSType::Pointer(ptr) = actual {
+                    e.ttype = Some(*ptr.clone());
+                    Ok(*ptr)
+                } else {
+                    chs_error!("TDO")
+                }
             }
             Expression::Syscall(e) => {
                 if e.arity > 7 && e.arity == 0 {
@@ -539,6 +561,14 @@ pub struct Cast {
     pub loc: Loc,
     pub ttype: CHSType,
     pub casted: Expression,
+}
+
+#[derive(Debug)]
+pub struct Index {
+    pub loc: Loc,
+    pub left: Expression,
+    pub index: Expression,
+    pub ttype: Option<CHSType>,
 }
 
 #[derive(Debug)]

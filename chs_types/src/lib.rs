@@ -53,7 +53,7 @@ impl CHSType {
     }
 
     pub fn is_pointer(&self) -> bool {
-        matches!(self, Self::Pointer(..) | Self::String)
+        matches!(self, Self::Pointer(..))
     }
 
     pub fn is_void_pointer(&self) -> bool {

@@ -1,4 +1,4 @@
-:i count 18
+:i count 20
 :b shell 47
 cargo run -q -- compile -r -s tests/big_sum.chs
 :i returncode 0
@@ -155,6 +155,23 @@ cargo run -q -- compile -r -s tests/inc.chs
 
 :b shell 12
 rm tests/inc
+:i returncode 0
+:b stdout 0
+
+:b stderr 0
+
+:b shell 45
+cargo run -q -- compile -r -s tests/index.chs
+:i returncode 0
+:b stdout 9
+10
+20
+30
+
+:b stderr 0
+
+:b shell 14
+rm tests/index
 :i returncode 0
 :b stdout 0
 

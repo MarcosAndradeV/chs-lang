@@ -296,6 +296,22 @@ impl Parser {
                     left = call;
                     return Ok(left);
                 }
+                SquareOpen => {
+                    let ptoken = self.next();
+                    let expression = left;
+                    let index = self.parse_expression(Precedence::Lowest)?;
+                    self.expect_kind(SquareClose)?;
+                    let index = Expression::Index(
+                        Box::new(Index {
+                            loc: ptoken.loc,
+                            left: expression,
+                            index,
+                            ttype: None,
+                        })
+                    );
+                    left = index;
+                    // return Ok(index);
+                }
                 k if k.is_op() => {
                     let operator = Operator::from_token(ptoken, false)?;
                     if precedence < operator.precedence() {

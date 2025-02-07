@@ -16,3 +16,5 @@ cargo run -q -- compile -r -s tests/char.chs
 rm tests/char
 cargo run -q -- compile -r -s tests/inc.chs
 rm tests/inc
+cargo run -q -- compile -r -s tests/index.chs
+rm tests/index
