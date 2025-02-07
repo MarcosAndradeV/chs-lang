@@ -2,8 +2,8 @@ pub mod fasm;
 use std::collections::HashMap;
 
 use chs_ast::nodes::{
-    self, Assign, Binop, Call, ConstExpression, Expression, ExpressionList,
-    IfElseExpression, IfExpression, Operator, Syscall, TypedModule, Unop, WhileExpression,
+    self, Assign, Binop, Call, ConstExpression, Expression, ExpressionList, IfElseExpression,
+    IfExpression, Operator, Syscall, TypedModule, Unop, WhileExpression,
 };
 use chs_types::{CHSType, TypeMap};
 use chs_util::{CHSError, CHSResult};
@@ -568,13 +568,16 @@ impl FasmGenerator {
         }
     }
 
-    fn make_tvar(&mut self, func: &mut fasm::Function, right: &Expression, ttype: &Option<CHSType>) -> Result<Value, CHSError> {
+    fn make_tvar(
+        &mut self,
+        func: &mut fasm::Function,
+        right: &Expression,
+        ttype: &Option<CHSType>,
+    ) -> Result<Value, CHSError> {
         let r = self.temp_regs;
         let src = self.generate_expression(func, right)?.unwrap();
         let src = match src {
-            Value::Memory(..) => {
-                return Ok(src)
-            }
+            Value::Memory(..) => return Ok(src),
             Value::Const(_, n) if n > i32::MAX as i64 => {
                 let treg = Value::from(self.alloc_register());
                 func.push_instr(Instr::Mov(treg.clone(), src));
@@ -663,15 +666,15 @@ impl FasmGenerator {
         func: &mut fasm::Function,
         e: &IfExpression,
     ) -> Result<Option<Value>, CHSError> {
-        let IfExpression { loc:_, cond, body } = e;
+        let IfExpression { loc: _, cond, body } = e;
         let lafter = self.new_label();
-        let vcond = self.generate_expression(func, &cond)?.unwrap();
+        let vcond = self.generate_expression(func, cond)?.unwrap();
         if let Value::Register(Register::Rax | Register::Al) = vcond {
         } else {
             // func.push_raw_instr(format!("xor rax, rax"));
             func.push_raw_instr(format!("mov al, {vcond}"));
         }
-        func.push_raw_instr(format!("test al, al"));
+        func.push_raw_instr("test al, al".to_string());
         func.push_raw_instr(format!("jz .{lafter}"));
 
         self.scopes.push(HashMap::new());
@@ -697,13 +700,13 @@ impl FasmGenerator {
         } = e;
         let lafter = self.new_label();
         let lelse = self.new_label();
-        let vcond = self.generate_expression(func, &cond)?.unwrap();
+        let vcond = self.generate_expression(func, cond)?.unwrap();
         if let Value::Register(Register::Rax | Register::Al) = vcond {
         } else {
             // func.push_raw_instr(format!("xor rax, rax"));
             func.push_raw_instr(format!("mov al, {vcond}"));
         }
-        func.push_raw_instr(format!("test al, al"));
+        func.push_raw_instr("test al, al".to_string());
         func.push_raw_instr(format!("jz .{lelse}"));
 
         self.scopes.push(HashMap::new());
@@ -742,13 +745,13 @@ impl FasmGenerator {
         self.scopes.pop();
 
         func.push_block(&lcond);
-        let vcond = self.generate_expression(func, &cond)?.unwrap();
+        let vcond = self.generate_expression(func, cond)?.unwrap();
         if let Value::Register(Register::Rax | Register::Al) = vcond {
         } else {
             // func.push_raw_instr(format!("xor rax, rax"));
             func.push_raw_instr(format!("mov al, {vcond}"));
         }
-        func.push_raw_instr(format!("test al, al"));
+        func.push_raw_instr("test al, al".to_string());
         func.push_raw_instr(format!("jnz .{lbody}"));
         // match cond {
         //     Expression::Binop(e) if e.op == Operator::Eq => {

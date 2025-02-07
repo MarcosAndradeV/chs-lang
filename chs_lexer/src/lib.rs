@@ -338,8 +338,7 @@ impl Lexer {
                     b'\\' => buf.push('\\'),
                     b'0' => buf.push('\0'),
                     _ => {
-                        return self
-                            .make_token(TokenKind::Invalid, "Unsupported escape character.")
+                        return self.make_token(TokenKind::Invalid, "Unsupported escape character.")
                     }
                 }
                 self.read_char();
@@ -368,19 +367,15 @@ impl Lexer {
             self.read_char();
             match self.ch {
                 b'\"' => break self.read_char(),
-                b'\0' => {
-                    return self.make_token(TokenKind::Invalid, "Unclosed string literal")
-                }
+                b'\0' => return self.make_token(TokenKind::Invalid, "Unclosed string literal"),
                 b'\\' => {
                     match self.peek_char() {
                         b'n' => buf.push('\n'),
                         b'\\' => buf.push('\\'),
                         b'0' => buf.push('\0'),
                         _ => {
-                            return self.make_token(
-                                TokenKind::Invalid,
-                                "Unsupported escape character.",
-                            )
+                            return self
+                                .make_token(TokenKind::Invalid, "Unsupported escape character.")
                         }
                     }
                     self.read_char();
