@@ -1,0 +1,4 @@
+cargo run -q -- compile -r -s euler/problem01.chs
+rm euler/problem01
+cargo run -q -- compile -r -s euler/problem04.chs
+rm euler/problem04
