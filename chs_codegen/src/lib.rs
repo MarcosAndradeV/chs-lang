@@ -124,6 +124,10 @@ impl FasmGenerator {
                     value => func.push_instr(Instr::Mov(Value::Register(Register::Rax), value)),
                 }
             }
+            CHSType::Boolean => match last.expect("Expect last value") {
+                Value::Register(Register::Rax | Register::Al) => {}
+                value => func.push_instr(Instr::Mov(Value::Register(Register::Al), value)),
+            },
             _ => todo!("return other types"),
         }
 
@@ -292,8 +296,8 @@ impl FasmGenerator {
             ttype,
         } = binop;
         let size = SizeOperator::from_chstype(ttype.as_ref().unwrap(), &self.type_map)?;
-        let lhs = self.generate_expression(func, left)?.unwrap();
-        let rhs = self.generate_expression(func, right)?.unwrap();
+        let lhs = self.make_tvar(func, left, ttype)?;
+        let rhs = self.make_tvar(func, right, ttype)?;
         match op {
             Operator::Plus | Operator::Minus => {
                 use Value::*;
@@ -377,6 +381,16 @@ impl FasmGenerator {
                             _ => unreachable!(""),
                         }
                     }
+                    (Value::Memory(..), Value::Memory(..)) if lhs == rhs => match op {
+                        Operator::Div => Ok(Some(Value::from((size, 1)))),
+                        Operator::Mod => Ok(Some(Value::from((size, 0)))),
+                        Operator::Mult => {
+                            func.push_instr(Instr::Mov(Value::from(Register::Rax), lhs));
+                            func.push_instr(Instr::Mul(Value::from(Register::Rax)));
+                            Ok(Some(Value::from(Register::Rax)))
+                        }
+                        _ => unreachable!(""),
+                    },
                     (Value::Memory(..), Value::Memory(..)) => {
                         func.push_raw_instr("xor rdx, rdx");
                         func.push_instr(Instr::Mov(Value::from(Register::Rax), lhs));
@@ -390,17 +404,6 @@ impl FasmGenerator {
                             _ => unreachable!(""),
                         }
                     }
-                    (Value::Memory(..), Value::Memory(..)) if lhs == rhs => match op {
-                        Operator::Div => Ok(Some(Value::from((size, 1)))),
-                        Operator::Mod => Ok(Some(Value::from((size, 0)))),
-                        Operator::Mult => {
-                            func.push_instr(Instr::Mov(Value::from(Register::Rax), lhs));
-                            func.push_instr(Instr::Mul(Value::from(Register::Rax)));
-                            Ok(Some(Value::from(Register::Rax)))
-                        }
-                        _ => unreachable!(""),
-                    },
-                    (Value::Memory(..), Value::Memory(..)) => todo!(),
                     (Value::Register(reg), Value::Memory(..) | Value::Register(..)) => {
                         if *reg != Register::Rax {
                             func.push_instr(Instr::Mov(Value::from(Register::Rax), lhs));
@@ -412,7 +415,8 @@ impl FasmGenerator {
                             _ => unreachable!(""),
                         }
                     }
-                    (Value::Register(reg), Value::Const(..)) => {
+                    (Value::Register(reg), Value::Const(..))
+                    | (Value::Const(..), Value::Register(reg)) => {
                         if *reg != Register::Rax {
                             func.push_instr(Instr::Mov(Value::from(Register::Rax), lhs));
                         }
@@ -444,16 +448,17 @@ impl FasmGenerator {
                 }
                 (Value::Memory(..) | Value::Register(..), Value::Const(_, 0)) => Ok(Some(lhs)),
                 (Value::Const(_, 0), Value::Memory(..) | Value::Register(..)) => Ok(Some(rhs)),
-                (
-                    Value::Memory(..) | Value::Register(..),
-                    Value::Memory(..) | Value::Register(..),
-                ) => {
+                (Value::Memory(..), Value::Memory(..)) => {
                     func.push_instr(Instr::Mov(Value::from(Register::Al), lhs));
                     let r = size.register_for_size(self.alloc_register());
                     func.push_instr(Instr::Mov(Value::from(r), rhs));
                     func.push_instr(Instr::Or(Value::from(Register::Al), Value::from(r)));
                     self.free_register();
                     Ok(Some(Value::from(Register::Al)))
+                }
+                (Value::Register(..), Value::Register(..)) => {
+                    func.push_instr(Instr::Or(lhs.clone(), rhs));
+                    Ok(Some(lhs))
                 }
                 _ => todo!("{loc} Generation of {lhs} || {rhs}"),
             },
@@ -469,10 +474,31 @@ impl FasmGenerator {
                 | (Value::Const(s, 0), Value::Memory(..) | Value::Register(..)) => {
                     Ok(Some(Value::Const(*s, 0)))
                 }
-                (
-                    Value::Memory(..) | Value::Register(..),
-                    Value::Memory(..) | Value::Register(..),
-                ) => {
+                (Value::Register(_), _) => {
+                    let rhs = if !rhs.is_register() {
+                        let treg = size.register_for_size(self.alloc_register());
+                        func.push_instr(Instr::Mov(Value::from(treg), rhs));
+                        self.free_register();
+                        Value::from(treg)
+                    } else {
+                        rhs
+                    };
+                    func.push_instr(Instr::And(lhs.clone(), rhs));
+                    Ok(Some(lhs))
+                }
+                (_, Value::Register(_)) => {
+                    let lhs = if !lhs.is_register() {
+                        let treg = size.register_for_size(self.alloc_register());
+                        func.push_instr(Instr::Mov(Value::from(treg), lhs));
+                        self.free_register();
+                        Value::from(treg)
+                    } else {
+                        lhs
+                    };
+                    func.push_instr(Instr::And(rhs.clone(), lhs));
+                    Ok(Some(rhs))
+                }
+                (Value::Memory(..), Value::Memory(..)) => {
                     func.push_instr(Instr::Mov(Value::from(Register::Al), lhs));
                     let r = size.register_for_size(self.alloc_register());
                     func.push_instr(Instr::Mov(Value::from(r), rhs));
@@ -501,8 +527,8 @@ impl FasmGenerator {
                         _ => unreachable!(""),
                     },
                     (
-                        Value::Memory(..) | Value::Register(..) | Value::Const(..),
-                        Value::Memory(..) | Value::Register(..) | Value::Const(..),
+                        Value::Memory(..) | Value::Const(..),
+                        Value::Memory(..) | Value::Const(..),
                     ) => {
                         {
                             let rax = size.register_for_size(Register::Rax);
@@ -535,12 +561,39 @@ impl FasmGenerator {
                     _ => match op {
                         Operator::Eq => todo!("{loc} Generation of {lhs} == {rhs}"),
                         Operator::NEq => todo!("{loc} Generation of {lhs} != {rhs}"),
+                        Operator::Gt => todo!("{loc} Generation of {lhs} > {rhs}"),
+                        Operator::Lt => todo!("{loc} Generation of {lhs} < {rhs}"),
                         _ => unreachable!(),
                     },
                 }
             }
             _ => unreachable!("Not binop"),
         }
+    }
+
+    fn make_tvar(&mut self, func: &mut fasm::Function, right: &Expression, ttype: &Option<CHSType>) -> Result<Value, CHSError> {
+        let r = self.temp_regs;
+        let src = self.generate_expression(func, right)?.unwrap();
+        let src = match src {
+            Value::Memory(s, _) => {
+                return Ok(src)
+            }
+            Value::Const(_, n) if n > i32::MAX as i64 => {
+                let treg = Value::from(self.alloc_register());
+                func.push_instr(Instr::Mov(treg.clone(), src));
+                treg
+            }
+            Value::Const(..) => return Ok(src),
+            _ => src,
+        };
+        let size = SizeOperator::from_chstype(ttype.as_ref().unwrap(), &self.type_map)?;
+        let stack_pos = func.allocate_stack(size.byte_size());
+        let dst = Value::Memory(size, format!("rbp-{stack_pos}"));
+        func.push_instr(Instr::Mov(dst.clone(), src));
+        if self.temp_regs.abs_diff(r) > 0 {
+            self.free_all_registers();
+        }
+        Ok(dst)
     }
 
     fn generate_unop(
@@ -616,9 +669,12 @@ impl FasmGenerator {
         let IfExpression { loc, cond, body } = e;
         let lafter = self.new_label();
         let vcond = self.generate_expression(func, &cond)?.unwrap();
-        func.push_raw_instr(format!("xor rax, rax"));
-        func.push_raw_instr(format!("mov al, {vcond}"));
-        func.push_raw_instr(format!("test rax, rax"));
+        if let Value::Register(Register::Rax | Register::Al) = vcond {
+        } else {
+            // func.push_raw_instr(format!("xor rax, rax"));
+            func.push_raw_instr(format!("mov al, {vcond}"));
+        }
+        func.push_raw_instr(format!("test al, al"));
         func.push_raw_instr(format!("jz .{lafter}"));
 
         self.scopes.push(HashMap::new());
@@ -645,9 +701,12 @@ impl FasmGenerator {
         let lafter = self.new_label();
         let lelse = self.new_label();
         let vcond = self.generate_expression(func, &cond)?.unwrap();
-        func.push_raw_instr(format!("xor rax, rax"));
-        func.push_raw_instr(format!("mov al, {vcond}"));
-        func.push_raw_instr(format!("test rax, rax"));
+        if let Value::Register(Register::Rax | Register::Al) = vcond {
+        } else {
+            // func.push_raw_instr(format!("xor rax, rax"));
+            func.push_raw_instr(format!("mov al, {vcond}"));
+        }
+        func.push_raw_instr(format!("test al, al"));
         func.push_raw_instr(format!("jz .{lelse}"));
 
         self.scopes.push(HashMap::new());
@@ -689,9 +748,12 @@ impl FasmGenerator {
 
         func.push_block(&lcond);
         let vcond = self.generate_expression(func, &cond)?.unwrap();
-        func.push_raw_instr(format!("xor rax, rax"));
-        func.push_raw_instr(format!("mov al, {vcond}"));
-        func.push_raw_instr(format!("test rax, rax"));
+        if let Value::Register(Register::Rax | Register::Al) = vcond {
+        } else {
+            // func.push_raw_instr(format!("xor rax, rax"));
+            func.push_raw_instr(format!("mov al, {vcond}"));
+        }
+        func.push_raw_instr(format!("test al, al"));
         func.push_raw_instr(format!("jnz .{lbody}"));
         // match cond {
         //     Expression::Binop(e) if e.op == Operator::Eq => {
