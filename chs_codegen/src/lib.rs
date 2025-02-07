@@ -1,21 +1,19 @@
-#![allow(unused)]
 pub mod fasm;
 use std::collections::HashMap;
 
 use chs_ast::nodes::{
-    self, Array, Assign, Binop, Call, Cast, ConstExpression, Expression, ExpressionList,
+    self, Assign, Binop, Call, ConstExpression, Expression, ExpressionList,
     IfElseExpression, IfExpression, Operator, Syscall, TypedModule, Unop, WhileExpression,
 };
 use chs_types::{CHSType, TypeMap};
-use chs_util::{chs_error, CHSError, CHSResult};
+use chs_util::{CHSError, CHSResult};
 use fasm::{Cond, DataDef, DataDirective, DataExpr, Instr, Register, SizeOperator, Value};
 
 pub struct FasmGenerator {
     label_count: usize,
     str_count: usize,
-    bool_flag: bool,
-    scopes: Vec<HashMap<String, fasm::Value>>,
-    datadefs: Vec<fasm::DataDef>,
+    scopes: Vec<HashMap<String, Value>>,
+    datadefs: Vec<DataDef>,
     type_map: TypeMap,
     temp_regs: usize,
 }
@@ -31,7 +29,6 @@ impl FasmGenerator {
             type_map: type_defs,
             label_count: 0,
             str_count: 0,
-            bool_flag: false,
             scopes: vec![],
             datadefs: vec![],
             temp_regs: 0,
@@ -254,7 +251,7 @@ impl FasmGenerator {
                         func.push_raw_instr(format!("mov {s} [{treg}], {rhs}"));
                         self.free_register();
                     }
-                    (Value::Memory(size_operator, _), Value::Register(register)) => todo!(),
+                    (Value::Memory(..), Value::Register(_)) => todo!(),
                     _ => func.push_raw_instr(format!("mov [{lhs}], {rhs}")),
                 }
             }
@@ -327,14 +324,14 @@ impl FasmGenerator {
                         self.free_register();
                         Ok(Some(val))
                     }
-                    (Memory(..) | Const(..), Memory(..)) => {
+                    (Const(..), Memory(..)) => {
                         let val = Value::from(self.alloc_register());
                         func.push_instr(Instr::Mov(val.clone(), lhs));
                         func.push_instr(inst(val.clone(), rhs));
                         self.free_register();
                         Ok(Some(val))
                     }
-                    (Register(dst), Register(src)) => {
+                    (Register(..), Register(..)) => {
                         func.push_instr(inst(lhs.clone(), rhs));
                         Ok(Some(lhs))
                     }
@@ -575,7 +572,7 @@ impl FasmGenerator {
         let r = self.temp_regs;
         let src = self.generate_expression(func, right)?.unwrap();
         let src = match src {
-            Value::Memory(s, _) => {
+            Value::Memory(..) => {
                 return Ok(src)
             }
             Value::Const(_, n) if n > i32::MAX as i64 => {
@@ -602,7 +599,7 @@ impl FasmGenerator {
         unop: &Unop,
     ) -> Result<Option<Value>, CHSError> {
         let Unop {
-            loc,
+            loc: _,
             op,
             left,
             ttype,
@@ -611,22 +608,22 @@ impl FasmGenerator {
             Operator::Negate => {
                 let src = self.generate_expression(func, left)?.unwrap();
                 match src {
-                    Value::Memory(size_operator, _) => todo!(),
-                    Value::Register(register) => todo!(),
+                    Value::Memory(..) => todo!(),
+                    Value::Register(..) => todo!(),
                     Value::Const(s, n) => Ok(Some(Value::Const(s, -n))),
                     Value::Label(_) => todo!(),
                 }
             }
             Operator::LNot => todo!(),
             Operator::Refer => match left {
-                Expression::Binop(binop) => todo!(),
-                Expression::Unop(unop) => todo!(),
-                Expression::Call(call) => todo!(),
-                Expression::Cast(cast) => todo!(),
-                Expression::Syscall(syscall) => todo!(),
-                Expression::Array(array) => todo!(),
-                Expression::Len(expression) => todo!(),
-                Expression::Group(expression) => todo!(),
+                Expression::Binop(..) => todo!(),
+                Expression::Unop(..) => todo!(),
+                Expression::Call(..) => todo!(),
+                Expression::Cast(..) => todo!(),
+                Expression::Syscall(..) => todo!(),
+                Expression::Array(..) => todo!(),
+                Expression::Len(..) => todo!(),
+                Expression::Group(..) => todo!(),
                 Expression::ConstExpression(ConstExpression::Symbol(sym)) => {
                     let dst = Value::from(self.alloc_register());
                     func.push_instr(Instr::Lea(dst.clone(), self.get_var(sym)?.clone()));
@@ -666,7 +663,7 @@ impl FasmGenerator {
         func: &mut fasm::Function,
         e: &IfExpression,
     ) -> Result<Option<Value>, CHSError> {
-        let IfExpression { loc, cond, body } = e;
+        let IfExpression { loc:_, cond, body } = e;
         let lafter = self.new_label();
         let vcond = self.generate_expression(func, &cond)?.unwrap();
         if let Value::Register(Register::Rax | Register::Al) = vcond {
@@ -727,14 +724,12 @@ impl FasmGenerator {
         Ok(None)
     }
 
-    #[allow(unreachable_code)]
-    #[allow(unused)]
     fn generate_while(
         &mut self,
         func: &mut fasm::Function,
         e: &WhileExpression,
     ) -> Result<Option<Value>, CHSError> {
-        let WhileExpression { loc, cond, body } = e;
+        let WhileExpression { loc: _, cond, body } = e;
         let lcond = self.new_label();
         func.push_instr(Instr::Jmp(lcond.clone()));
         let lbody = self.new_label();
@@ -795,21 +790,13 @@ impl FasmGenerator {
         self.temp_regs = 0;
     }
 
+    #[allow(dead_code)]
     fn generate_expression_list(
         &mut self,
         _func: &mut fasm::Function,
         _e: &ExpressionList,
     ) -> CHSResult<Option<Value>> {
         todo!("Generation of expression list")
-    }
-
-    fn generate_array(&self, func: &mut fasm::Function, e: &Array) -> CHSResult<Option<Value>> {
-        let s = func.allocate_stack(0);
-        let size_operator = SizeOperator::from_chstype(&e.ttype, &self.type_map)?;
-        func.allocate_stack(e.size as usize * size_operator.byte_size());
-        let mem = Value::Memory(size_operator, format!("rbp-{s}"));
-        func.push_instr(Instr::Lea(Value::Register(Register::Rax), mem));
-        Ok(Some(Value::Register(Register::Rax)))
     }
 
     fn generate_call(
