@@ -1,6 +1,3 @@
-chs: release
-	cp -v target/release/chs .
-
 build:
 	cargo build --bin chs
 
@@ -26,6 +23,9 @@ update_euler: build
 	./rere.py update euler euler/test.list
 
 test_full: test test_euler
+
+chs: release
+	cp -v target/release/chs .
 
 help:
 	@echo "usage: make chs"
