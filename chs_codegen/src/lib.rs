@@ -206,6 +206,11 @@ impl FasmGenerator {
                 func.push_instr(Instr::Mov(treg.clone(), src));
                 treg
             }
+            Value::Const(_, n) if n > i32::MAX as i64 => {
+                let treg = Value::from(self.alloc_register());
+                func.push_instr(Instr::Mov(treg.clone(), src));
+                treg
+            }
             _ => src,
         };
 
