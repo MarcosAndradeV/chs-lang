@@ -53,5 +53,3 @@ dependencies = [
 [[package]]
 name = "my_cli"
 version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1da8ba27f688ae12544476fbcacc1f8ea79172b24fa500a80d353f61c608b7e0"
