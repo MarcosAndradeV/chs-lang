@@ -159,6 +159,13 @@ impl FasmGenerator {
                 });
                 Ok(Some(Value::Label(name)))
             }
+            Expression::Array(e) => {
+                let size = SizeOperator::from_chstype(&e.ttype, &self.type_map)?;
+                let dst = Value::from(self.alloc_register());
+                let stack_pos = func.allocate_stack(size.byte_size() * e.size as usize);
+                func.push_instr(Instr::Lea(dst.clone(), Value::Memory(size, format!("rbp-{stack_pos}"))));
+                Ok(Some(dst))
+            }
             Expression::Index(e) => {
                 let size = SizeOperator::from_chstype(e.ttype.as_ref().unwrap(), &self.type_map)?;
                 let dst = self.alloc_register();
@@ -302,12 +309,14 @@ impl FasmGenerator {
                         let dst2 = Value::Register(size.register_for_size(dst));
                         func.push_raw_instr(format!("mov {size} [{dst2}+{}], {rhs}", n * size.byte_size() as i64));
                     },
-                    (Value::Memory(_, addr), Value::Memory(_, offset_addr)) => {
+                    (Value::Memory(_, addr), Value::Memory(rs, offset_addr)) => {
                         let offset_reg = Value::Register(size.register_for_size(self.alloc_register()));
                         self.free_register();
                         func.push_raw_instr(format!("mov {offset_reg}, [{offset_addr}]"));
                         func.push_raw_instr(format!("mov {dst}, [{addr}]"));
                         let dst2 = Value::Register(size.register_for_size(dst));
+                        let rhs = rs.register_for_size(self.alloc_register());
+                        self.free_register();
                         func.push_raw_instr(format!("mov {size} [{dst2}+{}*{}], {rhs}", offset_reg, size.byte_size()));
                     },
                     (Value::Memory(_, addr), Value::Register(offset_reg)) => {
