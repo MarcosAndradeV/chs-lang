@@ -47,9 +47,4 @@ dependencies = [
  "chs_codegen",
  "chs_lexer",
  "chs_util",
- "my_cli",
 ]
-
-[[package]]
-name = "my_cli"
-version = "0.1.5"
