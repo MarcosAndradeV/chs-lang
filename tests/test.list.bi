@@ -153,9 +153,9 @@ rm tests/simple2
 :b shell 45
 cargo run -q -- compile -r -s tests/index.chs
 :i returncode 0
-:b stdout 8
+:b stdout 9
 10
-2
+20
 30
 
 :b stderr 0

@@ -98,7 +98,7 @@ impl FasmGenerator {
             let size = SizeOperator::from_chstype(&v, &self.type_map)?;
             let stack_pos = func.allocate_stack(size.byte_size());
 
-            let src = fasm::Value::Register(cc[i]);
+            let src = fasm::Value::Register(size.register_for_size(cc[i]));
             let dst = Value::Memory(size, format!("rbp-{}", stack_pos));
             func.push_instr(Instr::Mov(dst.clone(), src));
             scope.insert(name, dst);
@@ -306,26 +306,26 @@ impl FasmGenerator {
                 match (&lhs, &irhs) {
                     (Value::Memory(_, addr), Value::Const(_, n)) => {
                         func.push_raw_instr(format!("mov {dst}, [{addr}]"));
-                        let dst2 = Value::Register(size.register_for_size(dst));
-                        func.push_raw_instr(format!("mov {size} [{dst2}+{}], {rhs}", n * size.byte_size() as i64));
+                        // let dst2 = Value::Register(size.register_for_size(dst));
+                        func.push_raw_instr(format!("mov {size} [{dst}+{}], {rhs}", n * size.byte_size() as i64));
                     },
-                    (Value::Memory(_, addr), Value::Memory(rs, offset_addr)) => {
-                        let offset_reg = Value::Register(size.register_for_size(self.alloc_register()));
+                    (Value::Memory(_, addr), Value::Memory(_, offset_addr)) => {
+                        let offset_reg = self.alloc_register();
                         self.free_register();
                         func.push_raw_instr(format!("mov {offset_reg}, [{offset_addr}]"));
                         func.push_raw_instr(format!("mov {dst}, [{addr}]"));
-                        let dst2 = Value::Register(size.register_for_size(dst));
-                        let rhs = rs.register_for_size(self.alloc_register());
-                        self.free_register();
-                        func.push_raw_instr(format!("mov {size} [{dst2}+{}*{}], {rhs}", offset_reg, size.byte_size()));
+                        // func.push_raw_instr(format!("add {dst}, {}", e.index * size.byte_size()));
+                        // let dst2 = Value::Register(size.register_for_size(dst));
+                        let rhs = self.mov_to_reg_if_needed(func, rhs);
+                        func.push_raw_instr(format!("mov {size} [{dst}+{}*{}], {rhs}", offset_reg, size.byte_size()));
                     },
                     (Value::Memory(_, addr), Value::Register(offset_reg)) => {
                         let offset_reg2 = Value::Register(size.register_for_size(self.alloc_register()));
                         self.free_register();
                         func.push_raw_instr(format!("mov {offset_reg2}, {offset_reg}"));
                         func.push_raw_instr(format!("mov {dst}, [{addr}]"));
-                        let dst2 = Value::Register(size.register_for_size(dst));
-                        func.push_raw_instr(format!("mov {size} [{dst2}+{}*{}], {rhs}", offset_reg2, size.byte_size()));
+                        // let dst2 = Value::Register(size.register_for_size(dst));
+                        func.push_raw_instr(format!("mov {size} [{dst}+{}*{}], {rhs}", offset_reg2, size.byte_size()));
                     },
                     _ => chs_error!("{} Not allowed", e.loc)
                 }
@@ -345,6 +345,18 @@ impl FasmGenerator {
         }
 
         Ok(None)
+    }
+
+    fn mov_to_reg_if_needed(&mut self, func: &mut fasm::Function, v: Value) -> Value {
+        match v {
+            Value::Memory(size_operator, _) => {
+                let treg = size_operator.register_for_size(self.alloc_register());
+                self.free_register();
+                func.push_raw_instr(format!("mov {treg}, {v}"));
+                Value::Register(treg)
+            }
+            _ => v
+        }
     }
 
     fn get_var(&self, name: &str) -> CHSResult<&Value> {

@@ -166,7 +166,7 @@ impl chs_types::InferType for Expression {
             Expression::Index(e) => {
                 let actual = e.left.infer(None, env)?;
                 if actual.is_void_pointer() {
-                    chs_error!("TDO")
+                    chs_error!("{} Cannot deref a *void", e.loc)
                 }
                 if !actual.is_pointer() {
                     chs_error!("TDO")
