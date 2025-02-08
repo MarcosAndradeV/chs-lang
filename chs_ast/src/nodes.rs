@@ -378,6 +378,10 @@ impl chs_types::InferType for Expression {
                             e.ttype = Some(left.clone());
                             Ok(left)
                         }
+                        (CHSType::UInt, CHSType::UInt) => {
+                            e.ttype = Some(left.clone());
+                            Ok(left)
+                        }
                         _ => chs_error!("{} {} {} {}  is not defined.", e.loc, left, e.op, right),
                     }
                 }
@@ -389,6 +393,10 @@ impl chs_types::InferType for Expression {
                             chs_error!("{} {} {:?} {}  is not defined.", e.loc, left, e.op, right)
                         }
                         (CHSType::Int, CHSType::Int) => {
+                            e.ttype = Some(left.clone());
+                            Ok(left)
+                        }
+                        (CHSType::UInt, CHSType::UInt) => {
                             e.ttype = Some(left.clone());
                             Ok(left)
                         }

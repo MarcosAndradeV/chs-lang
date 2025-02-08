@@ -72,10 +72,17 @@ impl Parser {
             match token.kind {
                 Keyword if token.val_eq("use") => {
                     let loc = token.loc;
-                    let path = PathBuf::from(self.expect_kind(String)?.value);
+
+                    let mut path = PathBuf::from(self.expect_kind(String)?.value);
                     if !path.exists() {
-                        chs_error!("{} file \"{}\" cannot be found.", loc, path.display());
+                        let std = PathBuf::from("std/").join(&path);
+                        if !std.exists() {
+                            chs_error!("{} file \"{}\" cannot be found.", loc, path.display());
+                        } else {
+                            path = std;
+                        }
                     }
+
                     if root.is_some_and(|p| *p == path) {
                         chs_error!("{} Cannot import root file \"{}\" ", loc, path.display());
                     }
