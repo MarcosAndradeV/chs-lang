@@ -51,7 +51,7 @@ impl TypedModule {
 
         for f in &mut function_decls {
             env.locals_new();
-            env.locals_extend(f.args.iter().map(|(n, a)| (n, a)));
+            env.locals_extend(f.args.iter().map(|(n, a)| (n.as_str(), a)));
             if f.body.is_empty() {
                 let expect = &f.ret_type;
                 let actual = CHSType::Void;

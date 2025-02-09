@@ -89,9 +89,9 @@ impl TypeMap {
 
 #[derive(Debug)]
 pub struct TypeEnv<'a> {
-    type_decls: HashMap<&'a String, &'a CHSType>,
-    globals: HashMap<&'a String, &'a CHSType>,
-    locals: Vec<HashMap<&'a String, &'a CHSType>>,
+    type_decls: HashMap<&'a str, &'a CHSType>,
+    globals: HashMap<&'a str, &'a CHSType>,
+    locals: Vec<HashMap<&'a str, &'a CHSType>>,
 }
 
 impl Default for TypeEnv<'_> {
@@ -111,16 +111,16 @@ impl<'a> TypeEnv<'a> {
     pub fn type_decls_insert(&mut self, k: &'a String, v: &'a CHSType) -> Option<&CHSType> {
         self.type_decls.insert(k, v)
     }
-    pub fn type_decls_get(&self, k: &'a String) -> Option<&&CHSType> {
+    pub fn type_decls_get(&self, k: &'a str) -> Option<&&CHSType> {
         match self.type_decls.get(k) {
-            Some(CHSType::Alias(sym)) => self.type_decls.get(sym),
+            Some(CHSType::Alias(sym)) => self.type_decls.get(sym.as_str()),
             tt => tt,
         }
     }
     pub fn globals_insert(&mut self, k: &'a String, v: &'a CHSType) -> Option<&CHSType> {
         self.globals.insert(k, v)
     }
-    pub fn get(&self, k: &String) -> Option<&&CHSType> {
+    pub fn get(&self, k: &str) -> Option<&&CHSType> {
         for scope in self.locals.iter().rev() {
             let get = scope.get(k);
             match get {
@@ -137,7 +137,7 @@ impl<'a> TypeEnv<'a> {
             .expect("Expect at least one scope.")
             .insert(k, v)
     }
-    pub fn locals_extend(&mut self, iter: impl Iterator<Item = (&'a String, &'a CHSType)>) {
+    pub fn locals_extend(&mut self, iter: impl Iterator<Item = (&'a str, &'a CHSType)>) {
         self.locals
             .last_mut()
             .expect("Expect at least one scope.")
@@ -155,12 +155,12 @@ impl<'a> TypeEnv<'a> {
             globals: HashMap::from_iter(
                 self.globals
                     .into_iter()
-                    .map(|(k, v)| (k.clone(), v.clone())),
+                    .map(|(k, v)| (k.to_string(), v.clone())),
             ),
             type_decls: HashMap::from_iter(
                 self.type_decls
                     .into_iter()
-                    .map(|(k, v)| (k.clone(), v.clone())),
+                    .map(|(k, v)| (k.to_string(), v.clone())),
             ),
         }
     }
