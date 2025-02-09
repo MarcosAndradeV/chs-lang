@@ -72,14 +72,14 @@ pub struct TypeMap {
 }
 
 impl TypeMap {
-    pub fn get_type(&self, k: &String) -> Option<&CHSType> {
+    pub fn get_type(&self, k: &str) -> Option<&CHSType> {
         match self.type_decls.get(k) {
             Some(CHSType::Alias(sym)) => self.get_type(sym),
             other => other,
         }
     }
 
-    pub fn get_global(&self, k: &String) -> Option<&CHSType> {
+    pub fn get_global(&self, k: &str) -> Option<&CHSType> {
         match self.globals.get(k) {
             Some(CHSType::Alias(sym)) => self.get_type(sym),
             other => other,
