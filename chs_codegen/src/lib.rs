@@ -320,11 +320,12 @@ impl FasmGenerator {
                         func.push_raw_instr(format!("mov {size} [{dst}+{}*{}], {rhs}", offset_reg, size.byte_size()));
                     },
                     (Value::Memory(_, addr), Value::Register(offset_reg)) => {
-                        let offset_reg2 = Value::Register(size.register_for_size(self.alloc_register()));
+                        let offset_reg2 = self.alloc_register();
                         self.free_register();
                         func.push_raw_instr(format!("mov {offset_reg2}, {offset_reg}"));
                         func.push_raw_instr(format!("mov {dst}, [{addr}]"));
                         // let dst2 = Value::Register(size.register_for_size(dst));
+                        let rhs = self.mov_to_reg_if_needed(func, rhs);
                         func.push_raw_instr(format!("mov {size} [{dst}+{}*{}], {rhs}", offset_reg2, size.byte_size()));
                     },
                     _ => chs_error!("{} Not allowed", e.loc)
@@ -617,11 +618,11 @@ impl FasmGenerator {
                     ) => {
                         {
                             let rax = size.register_for_size(Register::Rax);
-                            let treg = size.register_for_size(self.alloc_register());
+                            let treg = self.mov_to_reg_if_needed(func, rhs);
+                            // func.push_instr(Instr::Mov(Value::from(treg), rhs));
+                            // self.free_register();
                             func.push_instr(Instr::Mov(Value::from(rax), lhs));
-                            func.push_instr(Instr::Mov(Value::from(treg), rhs));
-                            func.push_instr(Instr::Cmp(Value::from(rax), Value::from(treg)));
-                            self.free_register();
+                            func.push_instr(Instr::Cmp(Value::from(rax), treg));
                         }
                         {
                             let rcx = Register::Rcx;
