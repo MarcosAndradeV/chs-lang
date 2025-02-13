@@ -452,7 +452,7 @@ impl Expression {
     pub fn from_literal_token(token: Token) -> Result<Self, CHSError> {
         use chs_lexer::TokenKind::*;
         match token.kind {
-            Integer => {
+            IntegerNumber => {
                 let value: i64 = token
                     .value
                     .parse::<i64>()
@@ -467,11 +467,11 @@ impl Expression {
             Keyword if token.val_eq("false") => Ok(Self::ConstExpression(
                 ConstExpression::BooleanLiteral(false),
             )),
-            Ident => Ok(Self::ConstExpression(ConstExpression::Symbol(token.value))),
-            String => Ok(Self::ConstExpression(ConstExpression::StringLiteral(
+            Identifier => Ok(Self::ConstExpression(ConstExpression::Symbol(token.value))),
+            StringLiteral => Ok(Self::ConstExpression(ConstExpression::StringLiteral(
                 token.value,
             ))),
-            Character => {
+            CharacterLiteral => {
                 let value: char = token
                     .value
                     .parse::<char>()

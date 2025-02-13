@@ -71,7 +71,7 @@ fn compile(
     silent: bool,
     emit_asm: bool,
 ) -> CHSResult<()> {
-    let module = chs_ast::parse_file(file_path)?;
+    let module = chs_ast::parse_file(PathBuf::from(file_path))?;
 
     let typed_module = TypedModule::from_module(module)?;
 
@@ -132,7 +132,7 @@ fn compile(
 }
 
 fn check(file_path: String) -> CHSResult<()> {
-    let module = chs_ast::parse_file(file_path)?;
+    let module = chs_ast::parse_file(PathBuf::from(file_path))?;
 
     let typed_module = TypedModule::from_module(module)?;
 

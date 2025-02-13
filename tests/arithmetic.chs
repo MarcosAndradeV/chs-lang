@@ -12,7 +12,7 @@ fn main()
     print_int(30 / 10)
 
     puts("Modulo: ")
-    print_int(0) #5 % 10)
+    print_int(5 % 10)
 end
 
 fn puts(s: string)

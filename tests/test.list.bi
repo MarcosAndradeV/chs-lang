@@ -175,7 +175,7 @@ Addition: 30
 Subtraction: 10
 Multiplication: 200
 Division: 3
-Modulo: 0
+Modulo: 5
 
 :b stderr 0
 

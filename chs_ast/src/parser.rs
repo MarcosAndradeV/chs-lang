@@ -1,12 +1,10 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::nodes::{self, *};
-use chs_lexer::{Lexer, Token, TokenKind};
+use chs_lexer::{read_flie, Lexer, Token, TokenKind};
 use chs_types::CHSType;
 use chs_util::{chs_error, CHSResult, Loc};
 
-/// [Token] -> [Module]
-#[derive(Default)]
 pub struct Parser {
     lexer: Lexer,
     peeked: Option<Token>,
@@ -17,21 +15,21 @@ impl Parser {
     pub fn new(lexer: Lexer) -> Self {
         Self {
             module: Module {
-                file_path: lexer.get_filename().clone(),
+                file_path: lexer.get_filename().to_path_buf(),
                 ..Default::default()
             },
             lexer,
-            ..Default::default()
+            peeked: None
         }
     }
 
     fn next(&mut self) -> Token {
         loop {
             let token = self
-                .peeked
-                .take()
-                .unwrap_or_else(|| self.lexer.next_token());
-            if token.kind == TokenKind::Comment {
+                    .peeked
+                    .take()
+                    .unwrap_or_else(|| self.lexer.next());
+            if token.is_whitespace(true, true) {
                 continue;
             }
             return token;
@@ -42,10 +40,9 @@ impl Parser {
         let token = self.next();
         if token.kind != kind {
             chs_error!(
-                "{} Unexpected token {}('{}'), Expect: {}",
+                "{} Unexpected token {}, Expect: {:?}",
                 token.loc,
-                token.kind,
-                token.value,
+                token,
                 kind
             )
         }
@@ -59,21 +56,21 @@ impl Parser {
         self.peeked.as_ref().unwrap()
     }
 
-    pub fn parse(mut self, root: Option<&PathBuf>) -> CHSResult<Module> {
+    pub fn parse(mut self, root: Option<&Path>) -> CHSResult<Module> {
         use chs_lexer::TokenKind::*;
         loop {
             let token = self.next();
-            if token.kind.is_eof() {
+            if token.is_eof() {
                 break;
             }
-            if token.kind == Invalid {
+            if token.is_invalid() {
                 chs_error!("{} Invalid token '{}'", token.loc, token.value);
             }
             match token.kind {
                 Keyword if token.val_eq("use") => {
                     let loc = token.loc;
 
-                    let mut path = PathBuf::from(self.expect_kind(String)?.value);
+                    let mut path = PathBuf::from(self.expect_kind(StringLiteral)?.value);
                     if !path.exists() {
                         let std = PathBuf::from("std/").join(&path);
                         if !std.exists() {
@@ -97,8 +94,9 @@ impl Parser {
                     {
                         chs_error!("{} Cannot import file \"{}\" again.", loc, path.display());
                     }
-                    let mut p = Parser::new(Lexer::new(path.clone())?);
-                    p.module.imported_modules.push(UseModuleDecl { loc, path });
+                    let lexer = Lexer::new(read_flie(&path), path.clone());
+                    let mut p = Parser::new(lexer);
+                    p.module.imported_modules.push(UseModuleDecl { loc, path: path.clone() });
                     let m = p.parse(Some(self.lexer.get_filename()))?;
                     self.module.function_decls.extend(m.function_decls);
                     self.module.global_decls.extend(m.global_decls);
@@ -107,7 +105,7 @@ impl Parser {
                 }
                 Keyword if token.val_eq("fn") => {
                     let loc = token.loc;
-                    let token = self.expect_kind(Ident)?;
+                    let token = self.expect_kind(Identifier)?;
                     let name = token.value;
                     self.expect_kind(ParenOpen)?;
                     let (args, ret_type) = self.parse_fn_type()?;
@@ -130,13 +128,25 @@ impl Parser {
                     });
                 }
                 Keyword if token.val_eq("type") => {
-                    let token = self.expect_kind(Ident)?;
+                    let token = self.expect_kind(Identifier)?;
                     let name = token.value;
                     let chs_type = self.parse_type()?;
                     self.module.type_decls.push(TypeDecl {
                         loc: token.loc,
                         name,
                         ttype: chs_type,
+                    });
+                }
+                Keyword if token.val_eq("const") => {
+                    let token = self.expect_kind(Identifier)?;
+                    let name = token.value;
+                    let chs_type = self.parse_type()?;
+                    let value = self.parse_const_expression(Precedence::Lowest)?;
+                    self.module.const_decls.push(ConstDecl {
+                        loc: token.loc,
+                        name,
+                        ttype: chs_type,
+                        value,
                     });
                 }
                 _ => {
@@ -156,7 +166,7 @@ impl Parser {
         use chs_lexer::TokenKind::*;
         let token = self.next();
         let mut left: Expression = match token.kind {
-            Ident if self.peek().kind == Colon => {
+            Identifier if self.peek().kind == Colon => {
                 self.next();
                 let ttype = if self.peek().kind == Assign {
                     self.expect_kind(Assign)?;
@@ -206,7 +216,7 @@ impl Parser {
                     body,
                 })));
             }
-            String | Ident | Integer | Character => Expression::from_literal_token(token)?,
+            StringLiteral | Identifier | IntegerNumber | CharacterLiteral => Expression::from_literal_token(token)?,
             Keyword if token.val_eq("true") || token.val_eq("false") => {
                 Expression::from_literal_token(token)?
             }
@@ -219,7 +229,7 @@ impl Parser {
                 let ttype = self.parse_type()?;
                 self.expect_kind(Comma)?;
                 let size = self
-                    .expect_kind(Integer)?
+                    .expect_kind(IntegerNumber)?
                     .value
                     .parse::<u64>()
                     .expect("TODO");
@@ -280,10 +290,9 @@ impl Parser {
             }
             CurlyOpen => self.parse_init_list()?,
             _ => chs_error!(
-                "{} Unexpected token {}('{}')",
+                "{} Unexpected token {}",
                 token.loc,
-                token.kind,
-                token.value
+                token
             ),
         };
         loop {
@@ -367,7 +376,7 @@ impl Parser {
                         ttype: None,
                     }));
                 }
-                Ident => {
+                Identifier => {
                     self.next();
                     let ntoken = self.next();
                     self.peeked = Some(ntoken);
@@ -406,7 +415,7 @@ impl Parser {
                         body,
                     })));
                 }
-                Comma | Semicolon => {
+                Comma | SemiColon => {
                     self.next();
                     continue;
                 }
@@ -432,7 +441,7 @@ impl Parser {
                     self.next();
                     return Ok(args);
                 }
-                Comma | Semicolon => {
+                Comma | SemiColon => {
                     self.next();
                     continue;
                 }
@@ -466,7 +475,7 @@ impl Parser {
                     self.next();
                     continue;
                 }
-                Ident => {
+                Identifier => {
                     let token = self.next();
                     self.expect_kind(Colon)?;
                     let value = self.parse_type()?;
@@ -509,13 +518,13 @@ impl Parser {
         use chs_lexer::TokenKind::*;
         let ttoken = self.next();
         let ttype = match ttoken.kind {
-            Ident if ttoken.val_eq("int") => CHSType::Int,
-            Ident if ttoken.val_eq("uint") => CHSType::UInt,
-            Ident if ttoken.val_eq("void") => CHSType::Void,
-            Ident if ttoken.val_eq("bool") => CHSType::Boolean,
-            Ident if ttoken.val_eq("char") => CHSType::Char,
-            Ident if ttoken.val_eq("string") => CHSType::String,
-            Ident => CHSType::Alias(ttoken.value),
+            Identifier if ttoken.val_eq("int") => CHSType::Int,
+            Identifier if ttoken.val_eq("uint") => CHSType::UInt,
+            Identifier if ttoken.val_eq("void") => CHSType::Void,
+            Identifier if ttoken.val_eq("bool") => CHSType::Boolean,
+            Identifier if ttoken.val_eq("char") => CHSType::Char,
+            Identifier if ttoken.val_eq("string") => CHSType::String,
+            Identifier => CHSType::Alias(ttoken.value),
             Asterisk => {
                 let ttp = self.parse_type()?;
                 CHSType::Pointer(ttp.into())
@@ -529,8 +538,12 @@ impl Parser {
                 let ttype = self.parse_type()?;
                 CHSType::Distinct(Box::new(ttype))
             }
-            _ => chs_error!("Type not implemented {}", ttoken),
+            _ => chs_error!("{} Type not implemented {}", ttoken.loc, ttoken),
         };
         Ok(ttype)
+    }
+
+    fn parse_const_expression(&mut self, _lowest: Precedence) -> CHSResult<ConstExpression> {
+        todo!()
     }
 }
