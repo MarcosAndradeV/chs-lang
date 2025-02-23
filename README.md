@@ -38,8 +38,7 @@ The CHS compiler is currently functional, allowing for basic program compilation
 Install [Rust](https://www.rust-lang.org/) and [fasm](https://flatassembler.net/) make sure it's available in `$PATH`.
 
 ```console
-$ make release
-$ cp -v target/release/chs .
+$ make chs.
 ```
 
 ### Testing:
@@ -56,7 +55,7 @@ Usage: chs <COMMAND> [ARGS] [[-|--]FLAG]
 COMMANDS:
     help                                                    Print help message
     compile <INPUT> [--emit-asm]  [-o <OUTPUT>] [-r]  [-s]  Compiles the program.
-    check <INPUT>                                           Check the program not compile.
+    check <INPUT>                                           Check the program compile.
 ```
 
 ### Editor Support:
@@ -70,9 +69,10 @@ COMMANDS:
 - Hello, World:
     
 ```chs
+use "std.chs"
+
 fn main()
-  msg := "Hello, World\n"
-  syscall(1, 1, msg, len(msg))
+   puts("Hello from CHS\n")
 end
 ```
 
