@@ -19,9 +19,9 @@ pub struct Lexer {
 }
 
 impl Lexer {
-    pub const KEYWORDS: &[&'static str] = &[
+    pub const KEYWORDS: &'static [&'static str] = &[
         "fn", "end", "use", "set", "syscall", "if", "else", "while", "array", "cast", "const",
-        "type",
+        "type", "true", "false",
     ];
     pub fn new(data: Vec<u8>, file_path: PathBuf) -> Self {
         Self {
@@ -357,7 +357,19 @@ impl TokenKind {
         use TokenKind::*;
         matches!(
             self,
-            Bang | Plus | Minus | Asterisk | Slash | Eq | NotEq | Gt | Lt | Mod | Ampersand | Pipe | DoublePipe | DoubleAmpersand
+            Bang | Plus
+                | Minus
+                | Asterisk
+                | Slash
+                | Eq
+                | NotEq
+                | Gt
+                | Lt
+                | Mod
+                | Ampersand
+                | Pipe
+                | DoublePipe
+                | DoubleAmpersand
         )
     }
 }

@@ -1,7 +1,6 @@
-
 use std::path::PathBuf;
 
-use chs_lexer::{Lexer, read_flie};
+use chs_lexer::{read_flie, Lexer};
 use chs_util::CHSResult;
 use nodes::Module;
 use parser::Parser;

@@ -19,16 +19,13 @@ impl Parser {
                 ..Default::default()
             },
             lexer,
-            peeked: None
+            peeked: None,
         }
     }
 
     fn next(&mut self) -> Token {
         loop {
-            let token = self
-                    .peeked
-                    .take()
-                    .unwrap_or_else(|| self.lexer.next());
+            let token = self.peeked.take().unwrap_or_else(|| self.lexer.next());
             if token.is_whitespace(true, true) {
                 continue;
             }
@@ -96,7 +93,10 @@ impl Parser {
                     }
                     let lexer = Lexer::new(read_flie(&path), path.clone());
                     let mut p = Parser::new(lexer);
-                    p.module.imported_modules.push(UseModuleDecl { loc, path: path.clone() });
+                    p.module.imported_modules.push(UseModuleDecl {
+                        loc,
+                        path: path.clone(),
+                    });
                     let m = p.parse(Some(self.lexer.get_filename()))?;
                     self.module.function_decls.extend(m.function_decls);
                     self.module.global_decls.extend(m.global_decls);
@@ -216,7 +216,9 @@ impl Parser {
                     body,
                 })));
             }
-            StringLiteral | Identifier | IntegerNumber | CharacterLiteral => Expression::from_literal_token(token)?,
+            StringLiteral | Identifier | IntegerNumber | CharacterLiteral => {
+                Expression::from_literal_token(token)?
+            }
             Keyword if token.val_eq("true") || token.val_eq("false") => {
                 Expression::from_literal_token(token)?
             }
@@ -289,11 +291,7 @@ impl Parser {
                 Expression::Group(expr.into())
             }
             CurlyOpen => self.parse_init_list()?,
-            _ => chs_error!(
-                "{} Unexpected token {}",
-                token.loc,
-                token
-            ),
+            _ => chs_error!("{} Unexpected token {}", token.loc, token),
         };
         loop {
             let ptoken = self.peek();
@@ -306,6 +304,7 @@ impl Parser {
                             loc: ptoken.loc,
                             caller: left,
                             args,
+                            ttype: None,
                         }
                         .into(),
                     );
@@ -317,14 +316,12 @@ impl Parser {
                     let expression = left;
                     let index = self.parse_expression(Precedence::Lowest)?;
                     self.expect_kind(SquareClose)?;
-                    let index = Expression::Index(
-                        Box::new(Index {
-                            loc: ptoken.loc,
-                            left: expression,
-                            index,
-                            ttype: None,
-                        })
-                    );
+                    let index = Expression::Index(Box::new(Index {
+                        loc: ptoken.loc,
+                        left: expression,
+                        index,
+                        ttype: None,
+                    }));
                     left = index;
                     // return Ok(index);
                 }

@@ -320,6 +320,7 @@ impl fmt::Display for DataDef {
             .items
             .iter()
             .map(|expr| format!("{}", expr))
+            .filter(|expr| !expr.is_empty())
             .collect::<Vec<String>>()
             .join(", ");
         let mut limit = 0;
@@ -446,7 +447,7 @@ pub enum Instr {
     Xor(Value, Value),
 
     Cmp(Value, Value),
-    Cmove(Cond, Value, Value),
+    Cmov(Cond, Value, Value),
 
     Test(Value, Value),
     Set(Cond, Value),
@@ -481,7 +482,7 @@ impl fmt::Display for Instr {
             Self::Or(dst, src) => write!(f, "or {dst}, {src}"),
             Self::Xor(dst, src) => write!(f, "xor {dst}, {src}"),
             Self::Cmp(dst, src) => write!(f, "cmp {dst}, {src}"),
-            Self::Cmove(cond, dst, src) => write!(f, "cmov{cond} {dst}, {src}"),
+            Self::Cmov(cond, dst, src) => write!(f, "cmov{cond} {dst}, {src}"),
             Self::Test(dst, src) => write!(f, "test {dst}, {src}"),
             Self::Set(cond, dst) => write!(f, "set{cond} {dst}"),
             Instr::J(cond, label) => write!(f, "j{cond} .{label}"), // local labels
