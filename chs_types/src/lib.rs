@@ -65,7 +65,7 @@ impl CHSType {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct TypeMap {
     type_decls: HashMap<String, CHSType>,
     globals: HashMap<String, CHSType>,

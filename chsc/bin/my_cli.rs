@@ -82,13 +82,25 @@ impl MyCLI {
             }
         };
         let mut args = self.inputs.iter();
-        let req_flags: Rc<[&String]> = cmd.flags.iter().filter_map(|f| if f.1.required {Some(f.0)} else {None}).collect();
+        let req_flags: Rc<[&String]> = cmd
+            .flags
+            .iter()
+            .filter_map(|f| if f.1.required { Some(f.0) } else { None })
+            .collect();
         for flag in &self.flags {
             match cmd.flags.get(flag) {
-                Some(Flag { required: _, boolean: true, value: _ }) => {
+                Some(Flag {
+                    required: _,
+                    boolean: true,
+                    value: _,
+                }) => {
                     matched_flags.insert(flag.clone(), None);
                 }
-                Some(Flag { required: _, boolean:_, value }) => loop {
+                Some(Flag {
+                    required: _,
+                    boolean: _,
+                    value,
+                }) => loop {
                     match args.next() {
                         Some((n, v)) if cmd.args.get(n).is_some() => {
                             matched_args.insert(*n, v.clone());
@@ -208,7 +220,7 @@ impl MatchedArgs {
 struct Flag {
     required: bool,
     boolean: bool,
-    value: String
+    value: String,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -234,12 +246,26 @@ impl Cmd {
     }
 
     pub fn flag(mut self, name: &str, val: &str, required: bool) -> Self {
-        self.flags.insert(name.to_string(), Flag { required, boolean: false, value: val.to_string() });
+        self.flags.insert(
+            name.to_string(),
+            Flag {
+                required,
+                boolean: false,
+                value: val.to_string(),
+            },
+        );
         self
     }
 
     pub fn flag_bool(mut self, name: &str) -> Self {
-        self.flags.insert(name.to_string(), Flag { required: false, boolean: true, value: String::new() });
+        self.flags.insert(
+            name.to_string(),
+            Flag {
+                required: false,
+                boolean: true,
+                value: String::new(),
+            },
+        );
         self
     }
 

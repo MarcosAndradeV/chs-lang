@@ -1,7 +1,6 @@
-use std::{fmt, path::PathBuf};
-
 use chs_lexer::Token;
 use chs_util::{chs_error, CHSError, CHSResult, Loc};
+use std::{fmt, path::PathBuf};
 
 use chs_types::{CHSType, InferType, TypeEnv, TypeMap};
 
@@ -19,7 +18,7 @@ pub struct Module {
 pub struct TypedModule {
     pub file_path: PathBuf,
     pub function_decls: Vec<FunctionDecl>,
-    pub type_defs: TypeMap,
+    pub type_map: TypeMap,
 }
 
 impl TypedModule {
@@ -88,7 +87,7 @@ impl TypedModule {
         Ok(TypedModule {
             file_path,
             function_decls,
-            type_defs,
+            type_map: type_defs,
         })
     }
 }
@@ -204,26 +203,30 @@ impl chs_types::InferType for Expression {
                 }
                 Ok(CHSType::Int)
             }
-            Expression::Call(call) => match call.caller.infer(hint, env)? {
-                CHSType::Function(ref mut fn_args, ret_type) => {
-                    if fn_args.len() != call.args.len() {
-                        chs_error!("{} Arity mismatch function call", call.loc);
-                    }
-                    for (expect, actual) in fn_args.iter_mut().zip(call.args.iter_mut()) {
-                        let actual = actual.infer(hint, env)?;
-                        if !expect.equivalent(&actual, env) {
-                            chs_error!(
-                                "{} Argument type mismatch. Expect: {}  Actual: {}",
-                                call.loc,
-                                expect,
-                                actual
-                            );
+            Expression::Call(call) => {
+                let mut chstype = call.caller.infer(hint, env)?;
+                match chstype {
+                    CHSType::Function(ref mut fn_args, ref ret_type) => {
+                        if fn_args.len() != call.args.len() {
+                            chs_error!("{} Arity mismatch function call", call.loc);
                         }
+                        for (expect, actual) in fn_args.iter_mut().zip(call.args.iter_mut()) {
+                            let actual = actual.infer(hint, env)?;
+                            if !expect.equivalent(&actual, env) {
+                                chs_error!(
+                                    "{} Argument type mismatch. Expect: {}  Actual: {}",
+                                    call.loc,
+                                    expect,
+                                    actual
+                                );
+                            }
+                        }
+                        call.ttype = Some(chstype.clone());
+                        Ok(*(ret_type).clone())
                     }
-                    Ok(*ret_type.clone())
+                    c => chs_error!("{} Cannot call {}", call.loc, c),
                 }
-                c => chs_error!("{} Cannot call {}", call.loc, c),
-            },
+            }
             Expression::Len(e) => {
                 let arg = e.infer(hint, env)?;
                 match arg {
@@ -591,6 +594,7 @@ pub struct Call {
     pub loc: Loc,
     pub caller: Expression,
     pub args: Vec<Expression>,
+    pub ttype: Option<CHSType>,
 }
 
 #[derive(Debug)]
