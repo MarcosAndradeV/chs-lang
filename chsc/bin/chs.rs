@@ -31,7 +31,7 @@ fn main() {
         .add_cmd(
             "check",
             Cmd::new()
-                .help("Check the program not compile.")
+                .help("Typecheck the program.")
                 .arg("INPUT", 0),
         );
     match cl.get_matches() {
