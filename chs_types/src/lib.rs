@@ -9,8 +9,6 @@ pub enum CHSType {
     Char,
     Boolean,
     String,
-    Alias(String),
-    Distinct(Box<Self>),
     Pointer(Box<Self>),
     Function(Vec<Self>, Box<Self>),
 }
@@ -24,8 +22,6 @@ impl fmt::Display for CHSType {
             CHSType::Char => write!(f, "char"),
             CHSType::Boolean => write!(f, "bool"),
             CHSType::String => write!(f, "string"),
-            CHSType::Alias(s) => write!(f, "{s}"),
-            CHSType::Distinct(t) => write!(f, "distinct {t}"),
             CHSType::Pointer(t) => write!(f, "*{t}"),
             CHSType::Function(args, ret_type) => write!(
                 f,
@@ -40,14 +36,11 @@ impl fmt::Display for CHSType {
 }
 
 impl CHSType {
-    pub fn equivalent(&self, other: &Self, env: &TypeEnv) -> bool {
+    pub fn equivalent(&self, other: &Self) -> bool {
         match (self, other) {
             (a, b) if a == b => true,
-            (CHSType::Alias(a), CHSType::Alias(b)) => a == b,
             (CHSType::Pointer(a), CHSType::Pointer(b)) => a.is_void() || b.is_void(),
             (CHSType::Pointer(a), CHSType::String) if **a == CHSType::Char => true,
-            (CHSType::Alias(a), b) => env.get(a).is_some_and(|a| a.equivalent(b, env)),
-            (a, CHSType::Alias(b)) => env.get(b).is_some_and(|b| b.equivalent(a, env)),
             _ => false,
         }
     }
@@ -73,17 +66,11 @@ pub struct TypeMap {
 
 impl TypeMap {
     pub fn get_type(&self, k: &str) -> Option<&CHSType> {
-        match self.type_decls.get(k) {
-            Some(CHSType::Alias(sym)) => self.get_type(sym),
-            other => other,
-        }
+        self.type_decls.get(k)
     }
 
     pub fn get_global(&self, k: &str) -> Option<&CHSType> {
-        match self.globals.get(k) {
-            Some(CHSType::Alias(sym)) => self.get_type(sym),
-            other => other,
-        }
+        self.globals.get(k)
     }
 }
 
@@ -112,10 +99,7 @@ impl<'a> TypeEnv<'a> {
         self.type_decls.insert(k, v)
     }
     pub fn type_decls_get(&self, k: &'a str) -> Option<&&CHSType> {
-        match self.type_decls.get(k) {
-            Some(CHSType::Alias(sym)) => self.type_decls.get(sym.as_str()),
-            tt => tt,
-        }
+        self.type_decls.get(k)
     }
     pub fn globals_insert(&mut self, k: &'a String, v: &'a CHSType) -> Option<&CHSType> {
         self.globals.insert(k, v)
@@ -124,7 +108,6 @@ impl<'a> TypeEnv<'a> {
         for scope in self.locals.iter().rev() {
             let get = scope.get(k);
             match get {
-                Some(CHSType::Alias(sym)) => return self.type_decls_get(sym), // return self.get(sym),
                 Some(_) => return get,
                 _ => (),
             }

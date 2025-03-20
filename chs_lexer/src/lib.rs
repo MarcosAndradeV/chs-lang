@@ -16,6 +16,7 @@ pub struct Lexer {
     pub pos: usize,
     pub loc: Loc,
     peeked: Option<Token>,
+    file_path: PathBuf,
 }
 
 impl Lexer {
@@ -26,9 +27,10 @@ impl Lexer {
     pub fn new(data: Vec<u8>, file_path: PathBuf) -> Self {
         Self {
             data,
-            loc: Loc::new(file_path, 1, 1),
+            loc: Loc::new(1, 1),
             pos: 0,
             peeked: None,
+            file_path,
         }
     }
     fn advance(&mut self) -> u8 {
@@ -48,7 +50,7 @@ impl Lexer {
     }
 
     pub fn get_filename(&self) -> &Path {
-        self.loc.filepath.as_path()
+        self.file_path.as_path()
     }
 
     pub fn peek(&mut self) -> &Token {

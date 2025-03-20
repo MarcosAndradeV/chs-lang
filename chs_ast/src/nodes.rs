@@ -54,7 +54,7 @@ impl TypedModule {
             if f.body.is_empty() {
                 let expect = &f.ret_type;
                 let actual = CHSType::Void;
-                if !expect.equivalent(&actual, &env) {
+                if !expect.equivalent(&actual) {
                     chs_error!(
                         "Return type mismatch. Expect: {}  Actual: {}",
                         expect,
@@ -69,7 +69,7 @@ impl TypedModule {
                     let t = expr.infer(Some(&f.ret_type), &mut env)?;
                     let expect = &f.ret_type;
                     let actual = t;
-                    if !expect.equivalent(&actual, &env) {
+                    if !expect.equivalent(&actual) {
                         chs_error!(
                             "Return type mismatch. Expect: {}  Actual: {}",
                             expect,
@@ -172,7 +172,7 @@ impl chs_types::InferType for Expression {
                 }
 
                 let index = e.index.infer(None, env)?;
-                if !index.equivalent(&CHSType::Int, env) {
+                if !index.equivalent(&CHSType::Int) {
                     chs_error!("TDO")
                 }
 
@@ -191,7 +191,7 @@ impl chs_types::InferType for Expression {
                     let actual = actual.infer(hint, env)?;
                     if i == 0 {
                         let expect = CHSType::Int;
-                        if !expect.equivalent(&actual, env) {
+                        if !expect.equivalent(&actual) {
                             chs_error!(
                                 "{} Syscall first argument type mismatch. Expect: {}  Actual: {}",
                                 e.loc,
@@ -212,7 +212,7 @@ impl chs_types::InferType for Expression {
                         }
                         for (expect, actual) in fn_args.iter_mut().zip(call.args.iter_mut()) {
                             let actual = actual.infer(hint, env)?;
-                            if !expect.equivalent(&actual, env) {
+                            if !expect.equivalent(&actual) {
                                 chs_error!(
                                     "{} Argument type mismatch. Expect: {}  Actual: {}",
                                     call.loc,
@@ -242,7 +242,7 @@ impl chs_types::InferType for Expression {
             Expression::VarDecl(e) => {
                 if let Some(ref expect) = e.ttype {
                     let actual = e.value.infer(Some(expect), env)?;
-                    if !expect.equivalent(&actual, env) {
+                    if !expect.equivalent(&actual) {
                         chs_error!(
                             "{} Type of variable `{}` not match. Expect: {} Actual: {}",
                             e.loc,
@@ -260,7 +260,7 @@ impl chs_types::InferType for Expression {
             Expression::Assign(e) => {
                 let expect = e.assigned.infer(hint, env)?;
                 let actual = e.value.infer(hint, env)?;
-                if !expect.equivalent(&actual, env) {
+                if !expect.equivalent(&actual) {
                     chs_error!(
                         "{} Argument type mismatch. Expect: {}  Actual: {}",
                         e.loc,
@@ -274,7 +274,7 @@ impl chs_types::InferType for Expression {
             Expression::IfExpression(e) => {
                 let expect = e.cond.infer(hint, env)?;
                 let actual = CHSType::Boolean;
-                if !expect.equivalent(&actual, env) {
+                if !expect.equivalent(&actual) {
                     chs_error!(
                         "{} Argument type mismatch. Expect: {}  Actual: {}",
                         e.loc,
@@ -292,7 +292,7 @@ impl chs_types::InferType for Expression {
             Expression::IfElseExpression(e) => {
                 let expect = e.cond.infer(hint, env)?;
                 let actual = CHSType::Boolean;
-                if !expect.equivalent(&actual, env) {
+                if !expect.equivalent(&actual) {
                     chs_error!(
                         "{} Argument type mismatch. Expect: {}  Actual: {}",
                         e.loc,
@@ -315,7 +315,7 @@ impl chs_types::InferType for Expression {
             Expression::WhileExpression(e) => {
                 let expect = e.cond.infer(hint, env)?;
                 let actual = CHSType::Boolean;
-                if !expect.equivalent(&actual, env) {
+                if !expect.equivalent(&actual) {
                     chs_error!(
                         "{} Argument type mismatch. Expect: {}  Actual: {}",
                         e.loc,
@@ -334,7 +334,7 @@ impl chs_types::InferType for Expression {
                 Operator::Eq | Operator::NEq | Operator::Gt | Operator::Lt => {
                     let left = e.left.infer(hint, env)?;
                     let right = e.right.infer(hint, env)?;
-                    if !left.equivalent(&right, env) {
+                    if !left.equivalent(&right) {
                         chs_error!(
                             "{} Argument type mismatch. Expect: {}  Actual: {}",
                             e.loc,
@@ -348,7 +348,7 @@ impl chs_types::InferType for Expression {
                 Operator::LAnd | Operator::LOr => {
                     let left = e.left.infer(hint, env)?;
                     let right = e.right.infer(hint, env)?;
-                    if !left.equivalent(&right, env) {
+                    if !left.equivalent(&right) {
                         chs_error!("{} {} {} {} is not defined.", e.loc, left, e.op, right);
                     }
                     e.ttype = Some(CHSType::Boolean);
@@ -417,7 +417,7 @@ impl chs_types::InferType for Expression {
                 match e.op {
                     Operator::LNot => {
                         let actual = CHSType::Boolean;
-                        if !expect.equivalent(&actual, env) {
+                        if !expect.equivalent(&actual) {
                             chs_error!(
                                 "{} Argument type mismatch. Expect: {}  Actual: {}",
                                 e.loc,

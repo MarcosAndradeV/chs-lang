@@ -51,14 +51,6 @@ impl SizeOperator {
             | chs_types::CHSType::String
             | chs_types::CHSType::Int
             | chs_types::CHSType::UInt => Ok(Self::Qword),
-            chs_types::CHSType::Alias(k) => {
-                if let Some(ttype) = type_map.get_type(k) {
-                    Self::from_chstype(ttype, type_map)
-                } else {
-                    chs_error!("Type not found")
-                }
-            }
-            chs_types::CHSType::Distinct(chstype) => Self::from_chstype(chstype, type_map),
             chs_types::CHSType::Char | chs_types::CHSType::Boolean => Ok(Self::Byte),
             chs_types::CHSType::Void => {
                 chs_error!("Cannot get size form void. Bug in type checker")
