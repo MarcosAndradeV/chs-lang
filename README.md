@@ -55,7 +55,7 @@ Usage: chs <COMMAND> [ARGS] [[-|--]FLAG]
 COMMANDS:
     help                                                    Print help message
     compile <INPUT> [--emit-asm]  [-o <OUTPUT>] [-r]  [-s]  Compiles the program.
-    check <INPUT>                                           Typecheck the program.
+    check <INPUT>                                           Check the program compile.
 ```
 
 ### Editor Support:
