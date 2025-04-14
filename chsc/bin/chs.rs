@@ -33,6 +33,12 @@ fn main() {
             Cmd::new()
                 .help("Typecheck the program.")
                 .arg("INPUT", 0),
+        )
+        .add_cmd(
+            "run",
+            Cmd::new()
+                .help("Run the program with the VM.")
+                .arg("INPUT", 0),
         );
     match cl.get_matches() {
         Some(("help", ..)) => cl.usage(),
@@ -60,8 +66,22 @@ fn main() {
                 eprintln!("No file provided")
             }
         }
+        Some(("run", _, args)) => {
+            if let Some(file_path) = args.get(0).cloned() {
+                if let Err(err) = run(file_path) {
+                    eprintln!("{err}")
+                }
+            } else {
+                eprintln!("No file provided")
+            }
+        }
         _ => cl.usage(),
     }
+}
+
+fn run(file_path: String) -> CHSResult<()> {
+    let module = chs_ast::parse_file(PathBuf::from(file_path))?;
+    Ok(())
 }
 
 fn compile(

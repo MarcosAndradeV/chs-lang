@@ -1,4 +1,4 @@
-use std::{collections::HashMap, env, process::exit, rc::Rc};
+use std::{collections::HashMap, env, rc::Rc};
 
 /// A simple CLI.
 /// `inputs` are anything that does not starts with `-` and `flags` are anything that does starts with `-`
@@ -28,8 +28,10 @@ impl MyCLI {
         let mut inputs = vec![];
         let mut i = 0;
         for arg in args {
-            if arg.starts_with("-") {
-                flags.push(arg);
+            if arg.starts_with("--") {
+                flags.push(arg[2..].to_string());
+            } else if arg.starts_with("-") {
+                flags.push(arg[1..].to_string());
             } else {
                 inputs.push((i, arg));
                 i += 1;
@@ -52,8 +54,10 @@ impl MyCLI {
         let mut flags = vec![];
         let mut inputs = vec![];
         for (i, arg) in args.enumerate() {
-            if arg.starts_with("-") {
-                flags.push(arg);
+            if arg.starts_with("--") {
+                flags.push(arg[2..].to_string());
+            } else if arg.starts_with("-") {
+                flags.push(arg[1..].to_string());
             } else {
                 inputs.push((i as u64, arg));
             }
@@ -78,7 +82,7 @@ impl MyCLI {
             Some(c) => c,
             None => {
                 eprintln!("ERROR: Unknown subcommand `{subcommand}`");
-                exit(-1);
+                return None;
             }
         };
         let mut args = self.inputs.iter();
@@ -112,20 +116,20 @@ impl MyCLI {
                         }
                         None => {
                             eprintln!("ERROR: flag `{flag}` expects a argument <{value}>");
-                            exit(-1);
+                            return None;
                         }
                     }
                 },
                 None => {
                     eprintln!("ERROR: Unknown flag `{flag}`");
-                    exit(-1);
+                    return None;
                 }
             }
         }
 
         if matched_flags.len() < req_flags.len() {
             eprintln!("ERROR: Missing required flags {req_flags:?}");
-            exit(-1);
+            return None;
         }
 
         for (n, v) in args {
@@ -133,7 +137,7 @@ impl MyCLI {
                 Some(_) => (),
                 None => {
                     eprintln!("ERROR: Unexpected positional argument `{v}` at position {n}");
-                    exit(-1);
+                    return None;
                 }
             }
             matched_args.insert(*n, v.clone());
@@ -190,7 +194,7 @@ impl MatchedFlags {
         self.0.get(k).is_some()
     }
 
-    pub fn insert(&mut self, k: String, v: Option<String>) -> Option<Option<String>> {
+    fn insert(&mut self, k: String, v: Option<String>) -> Option<Option<String>> {
         self.0.insert(k, v)
     }
 
@@ -241,7 +245,7 @@ impl Cmd {
     }
 
     pub fn arg(mut self, name: &str, pos: u64) -> Self {
-        self.args.insert(pos, name.to_string());
+        assert!(self.args.insert(pos, name.to_string()).is_none(), "Positon must be unique");
         self
     }
 
@@ -280,10 +284,11 @@ impl Cmd {
         let mut iter = self.flags.iter().collect::<Vec<_>>();
         iter.sort();
         for (fname, flag) in iter {
+            let s = if fname.len() > 1 { "--" } else { "-" };
             if flag.boolean {
-                args.push_str(&format!(" [{fname}] "));
+                args.push_str(&format!(" [{s}{fname}] "));
             } else {
-                args.push_str(&format!(" [{fname} "));
+                args.push_str(&format!(" [{s}{fname} "));
                 args.push_str(&format!("<{}>]", flag.value));
             }
         }

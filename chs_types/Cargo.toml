@@ -1,7 +1,7 @@
 [package]
 name = "chs_types"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
 chs_util = {path = "../chs_util"}

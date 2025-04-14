@@ -32,7 +32,7 @@ impl FasmGenerator {
         }
     }
     pub fn generate(m: TypedModule) -> CHSResult<Module> {
-        let mut gen = FasmGenerator::new(m.type_map);
+        let mut fgen = FasmGenerator::new(m.type_map);
         let mut fasm_module = Module::new(m.file_path.with_extension("asm"));
 
         let func = fasm_module.push_function(fasm::Function::new("print_int"));
@@ -73,11 +73,11 @@ impl FasmGenerator {
         func.push_raw_instr("ret");
 
         for decl in m.function_decls {
-            let func = gen.generate_function(decl)?;
+            let func = fgen.generate_function(decl)?;
             fasm_module.push_function(func);
         }
 
-        for data in gen.data_defs {
+        for data in fgen.data_defs {
             fasm_module.push_data(data);
         }
 
