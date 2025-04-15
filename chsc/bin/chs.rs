@@ -23,7 +23,7 @@ fn main() {
             Cmd::new()
                 .help("Compiles the program.")
                 .arg("INPUT", 0)
-                .flag("-o", "OUTPUT", false)
+                .flag("o", "OUTPUT", false)
                 .flag_bool("r")
                 .flag_bool("s")
                 .flag_bool("emit-asm"),
@@ -46,7 +46,7 @@ fn main() {
             if let Some(file_path) = args.get(0).cloned() {
                 if let Err(err) = compile(
                     file_path,
-                    flags.get("-o").cloned(),
+                    flags.get("o").cloned(),
                     flags.is_present("r"),
                     flags.is_present("s"),
                     flags.is_present("emit-asm"),
@@ -103,12 +103,12 @@ fn compile(
     if !silent {
         println!("[INFO] Generating {}", fasm_path.display());
     }
-    let output_path = match outpath {
-        Some(a) => PathBuf::from(a),
-        None => fasm_path.with_extension(""),
+    let fasm_output_path = match outpath {
+        Some(ref a) => PathBuf::from(a).with_extension("o"),
+        None => fasm_path.with_extension("o"),
     };
     let mut fasm_proc = process::Command::new("fasm");
-    fasm_proc.arg(fasm_path).arg(&output_path);
+    fasm_proc.arg(fasm_path).arg(&fasm_output_path);
 
     if silent {
         fasm_proc.stdout(Stdio::null());
@@ -123,26 +123,48 @@ fn compile(
         chs_error!(String::from_utf8_lossy(&result.stderr));
     }
 
+    let gcc_output_path = match outpath {
+        Some(a) => PathBuf::from(a),
+        None => fasm_path.with_extension(""),
+    };
+
+    let mut gcc_proc = process::Command::new("gcc");
+    gcc_proc.arg("-static").arg("-o").arg(&gcc_output_path).arg(&fasm_output_path);
+
+    if silent {
+        gcc_proc.stdout(Stdio::null());
+    }
+
+    let result = gcc_proc
+        .spawn()
+        .expect("Failed to spawn gcc process")
+        .wait_with_output()
+        .expect("Failed to wait for gcc");
+    if !result.status.success() {
+        chs_error!(String::from_utf8_lossy(&result.stderr));
+    }
+
     if !emit_asm {
         let mut rm_proc = process::Command::new("rm")
             .arg(fasm_path)
+            .arg(fasm_output_path)
             .spawn()
             .expect("Failed to spawn rm process");
 
-        let result = rm_proc.wait_with_output().expect("Failed to wait for fasm");
+        let result = rm_proc.wait_with_output().expect("Failed to wait for rm");
         if !result.status.success() {
             chs_error!("Failed {}", String::from_utf8_lossy(&result.stderr));
         }
     }
 
     if run {
-        let mut run_proc = process::Command::new(format!("./{}", output_path.display()))
+        let mut run_proc = process::Command::new(format!("./{}", gcc_output_path.display()))
             .spawn()
-            .expect("Failed to spawn rm process");
+            .expect("Failed to spawn run process");
 
         let result = run_proc
             .wait_with_output()
-            .expect("Failed to wait for fasm");
+            .expect("Failed to wait for run");
         if !result.status.success() {
             chs_error!("Failed {}", String::from_utf8_lossy(&result.stderr));
         }

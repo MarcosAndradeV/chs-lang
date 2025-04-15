@@ -113,6 +113,7 @@ impl Parser {
                         self.module.global_decls.push(GlobalDecl {
                             loc: loc.clone(),
                             name: name.clone(),
+                            extrn: false,
                             ttype: fn_type,
                         });
                         self.module.function_decls.push(FunctionDecl {
@@ -121,6 +122,23 @@ impl Parser {
                             args,
                             ret_type,
                             body,
+                        });
+                    }
+                    Keyword if token.val_eq("extern") => {
+                        let loc = token.loc;
+                        let ident_token = self.expect_kind(Identifier)?;
+                        let name = ident_token.value;
+                        self.expect_kind(ParenOpen)?;
+                        let (args, ret_type) = self.parse_fn_type_iterative()?;
+                        let fn_type = CHSType::Function(
+                            args.iter().map(|(_, t)| t.clone()).collect(),
+                            Box::new(ret_type.clone()),
+                        );
+                        self.module.global_decls.push(GlobalDecl {
+                            loc: loc.clone(),
+                            name: name.clone(),
+                            extrn: true,
+                            ttype: fn_type,
                         });
                     }
                     Keyword if token.val_eq("type") => {
