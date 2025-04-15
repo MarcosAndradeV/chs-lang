@@ -111,7 +111,7 @@ impl<'a> TypeEnv<'a> {
     pub fn type_decls_get(&self, k: &'a str) -> Option<&&CHSType> {
         self.type_decls.get(k)
     }
-    pub fn globals_insert(&mut self, k: &'a String, v: &'a CHSType) -> Option<&CHSType> {
+    pub fn globals_insert(&mut self, k: &'a str, v: &'a CHSType) -> Option<&CHSType> {
         self.globals.insert(k, v)
     }
     pub fn get(&self, k: &str) -> Option<&&CHSType> {
@@ -124,7 +124,7 @@ impl<'a> TypeEnv<'a> {
         }
         self.globals.get(k)
     }
-    pub fn locals_insert(&mut self, k: &'a String, v: &'a CHSType) -> Option<&CHSType> {
+    pub fn locals_insert(&mut self, k: &'a str, v: &'a CHSType) -> Option<&CHSType> {
         self.locals
             .last_mut()
             .expect("Expect at least one scope.")

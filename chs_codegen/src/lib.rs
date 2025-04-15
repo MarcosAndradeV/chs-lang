@@ -13,6 +13,7 @@ use chs_util::{chs_error, CHSError, CHSResult};
 use fasm::{Cond, DataDef, DataDirective, DataExpr, Instr, Register, SizeOperator, Value};
 use nodes::VarDecl;
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 #[derive(Default)]
 pub struct FasmGenerator {
@@ -32,7 +33,8 @@ impl FasmGenerator {
         }
     }
     pub fn generate(m: TypedModule) -> CHSResult<Module> {
-        let mut fasm_module = Module::new(m.file_path.with_extension("asm"), m.type_map.get_extern());
+        let file_path = PathBuf::from(&m.raw_module.file_path);
+        let mut fasm_module = Module::new(file_path.with_extension("asm"), m.type_map.get_extern());
         let mut fgen = FasmGenerator::new(m.type_map);
         fasm_module.link_with_c(true);
 
@@ -86,7 +88,7 @@ impl FasmGenerator {
     }
 
     fn generate_function(&mut self, func_decl: FunctionDecl) -> CHSResult<Function> {
-        let mut func = Function::new(func_decl.name);
+        let mut func = Function::new(func_decl.name.source.as_ref());
         func.push_block("");
         // func.set_prelude(false);
         // func.push_raw_instr("push rbp");
@@ -194,7 +196,7 @@ impl FasmGenerator {
 
     fn generate_binop(&mut self, func: &mut Function, binop: &Binop) -> CHSResult<()> {
         let Binop {
-            loc,
+            token,
             op,
             left,
             right,
@@ -296,7 +298,7 @@ impl FasmGenerator {
     }
 
     fn generate_var_decl(&mut self, func: &mut Function, e: &VarDecl) -> CHSResult<()> {
-        if e.name.as_str() == "_" {
+        if e.token.source.as_ref() == "_" {
             self.generate_expression(func, &e.value)?;
             func.push_raw_instr("pop rax");
             return Ok(());
@@ -308,7 +310,7 @@ impl FasmGenerator {
         func.push_raw_instr("pop rax");
         func.push_raw_instr(format!("mov [rbp-{stack_pos}], rax"));
         self.scopes.last_mut().unwrap().insert(
-            e.name.clone(),
+            e.token.source.to_string(),
             Value::Memory(size, format!("rbp-{stack_pos}")),
         );
         Ok(())
@@ -338,7 +340,7 @@ impl FasmGenerator {
     }
 
     fn generate_if(&mut self, func: &mut Function, e: &IfExpression) -> Result<(), CHSError> {
-        let IfExpression { loc: _, cond, body } = e;
+        let IfExpression { token: _, cond, body } = e;
         self.label_count += 1;
         let label_after = format!("L{}", self.label_count);
         self.generate_expression(func, cond)?;
@@ -357,7 +359,7 @@ impl FasmGenerator {
     }
 
     fn generate_if_else(&mut self, func: &mut Function, e: &IfElseExpression) -> Result<(), CHSError> {
-        let IfElseExpression { loc: _, cond, body, else_body } = e;
+        let IfElseExpression { token: _, cond, body, else_body } = e;
         self.label_count += 1;
         let label_else = format!("L{}", self.label_count);
         self.label_count += 1;
@@ -386,7 +388,7 @@ impl FasmGenerator {
     }
 
     fn generate_while(&mut self, func: &mut Function, e: &WhileExpression) -> Result<(), CHSError> {
-        let WhileExpression { loc, cond, body } = e;
+        let WhileExpression { token, cond, body } = e;
 
         self.label_count += 1;
         let label_cond = format!("L{}", self.label_count);

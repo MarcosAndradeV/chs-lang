@@ -9,7 +9,7 @@ use std::{
     process::{self, exit, ExitCode, Stdio},
 };
 
-use chs_ast::nodes::TypedModule;
+use chs_ast::{nodes::TypedModule, parser::Parser, RawModule};
 use chs_codegen::FasmGenerator;
 use chs_util::{chs_error, CHSError, CHSResult};
 
@@ -27,18 +27,6 @@ fn main() {
                 .flag_bool("r")
                 .flag_bool("s")
                 .flag_bool("emit-asm"),
-        )
-        .add_cmd(
-            "check",
-            Cmd::new()
-                .help("Typecheck the program.")
-                .arg("INPUT", 0),
-        )
-        .add_cmd(
-            "run",
-            Cmd::new()
-                .help("Run the program with the VM.")
-                .arg("INPUT", 0),
         );
     match cl.get_matches() {
         Some(("help", ..)) => cl.usage(),
@@ -57,31 +45,8 @@ fn main() {
                 eprintln!("No file provided")
             }
         }
-        Some(("check", _, args)) => {
-            if let Some(file_path) = args.get(0).cloned() {
-                if let Err(err) = check(file_path) {
-                    eprintln!("{err}")
-                }
-            } else {
-                eprintln!("No file provided")
-            }
-        }
-        Some(("run", _, args)) => {
-            if let Some(file_path) = args.get(0).cloned() {
-                if let Err(err) = run(file_path) {
-                    eprintln!("{err}")
-                }
-            } else {
-                eprintln!("No file provided")
-            }
-        }
         _ => cl.usage(),
     }
-}
-
-fn run(file_path: String) -> CHSResult<()> {
-    let module = chs_ast::parse_file(PathBuf::from(file_path))?;
-    Ok(())
 }
 
 fn compile(
@@ -91,7 +56,10 @@ fn compile(
     silent: bool,
     emit_asm: bool,
 ) -> CHSResult<()> {
-    let module = chs_ast::parse_file(PathBuf::from(file_path))?;
+
+    let raw_module = RawModule::new(chs_ast::read_flie(&file_path), file_path);
+
+    let module = Parser::new(&raw_module).parse()?;
 
     let typed_module = TypedModule::from_module(module)?;
 
@@ -169,19 +137,6 @@ fn compile(
             chs_error!("Failed {}", String::from_utf8_lossy(&result.stderr));
         }
     }
-
-    Ok(())
-}
-
-fn check(file_path: String) -> CHSResult<()> {
-    let module = chs_ast::parse_file(PathBuf::from(file_path))?;
-
-    let typed_module = TypedModule::from_module(module)?;
-
-    println!(
-        "Module \"{}\" is type checked.",
-        typed_module.file_path.display()
-    );
 
     Ok(())
 }

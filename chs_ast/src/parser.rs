@@ -1,36 +1,29 @@
-use std::path::{Path, PathBuf};
-
-use crate::nodes::{self, *};
-use chs_lexer::{read_flie, Lexer, Token, TokenKind};
+use crate::{
+    nodes::{self, *},
+    RawModule,
+};
+use chs_lexer::{Lexer, Token, TokenKind};
 use chs_types::CHSType;
-use chs_util::{chs_error, CHSResult, Loc};
+use chs_util::{chs_error, CHSResult};
 
-pub struct Parser {
-    lexer: Lexer,
+pub struct Parser<'src> {
+    module: &'src RawModule,
+    lexer: Lexer<'src>,
     peeked: Option<Token>,
-    module: Module,
 }
 
-impl Parser {
-    pub fn new(lexer: Lexer) -> Self {
+impl<'src> Parser<'src> {
+    pub fn new(module: &'src RawModule) -> Self {
+        let lexer = Lexer::new(&module.source);
         Self {
-            module: Module {
-                file_path: lexer.get_filename().to_path_buf(),
-                ..Default::default()
-            },
+            module,
             lexer,
             peeked: None,
         }
     }
 
     fn next(&mut self) -> Token {
-        loop {
-            let token = self.peeked.take().unwrap_or_else(|| self.lexer.next());
-            if token.is_whitespace(true, true) {
-                continue;
-            }
-            return token;
-        }
+        self.peeked.take().unwrap_or_else(|| self.lexer.next())
     }
 
     fn expect_kind(&mut self, kind: TokenKind) -> CHSResult<Token> {
@@ -39,7 +32,7 @@ impl Parser {
             chs_error!(
                 "{} Unexpected token {}, Expect: {:?}",
                 token.loc,
-                token,
+                token.source,
                 kind
             )
         }
@@ -54,137 +47,82 @@ impl Parser {
     }
 
     /// Top-level parser loop.
-    /// (When an import is encountered, it “iteratively” parses that file.)
-    pub fn parse(mut self, root: Option<&Path>) -> CHSResult<Module> {
+    pub fn parse(mut self) -> CHSResult<Module<'src>> {
         use chs_lexer::TokenKind::*;
+        let mut global_decls: Vec<GlobalDecl> = vec![];
+        let mut function_decls: Vec<FunctionDecl> = vec![];
         while {
             let token = self.next();
             if token.is_eof() {
                 false
             } else {
                 if token.is_invalid() {
-                    chs_error!("{} Invalid token '{}'", token.loc, token.value);
+                    chs_error!("{} Invalid token '{}'", token.loc, token.source);
                 }
                 match token.kind {
-                    Keyword if token.val_eq("use") => {
-                        let loc = token.loc;
-                        let mut path = PathBuf::from(self.expect_kind(StringLiteral)?.value);
-                        if !path.exists() {
-                            let std = PathBuf::from("std/").join(&path);
-                            if !std.exists() {
-                                chs_error!("{} file \"{}\" cannot be found.", loc, path.display());
-                            } else {
-                                path = std;
-                            }
-                        }
-                        if root.is_some_and(|p| *p == path) {
-                            chs_error!("{} Cannot import root file \"{}\" ", loc, path.display());
-                        }
-                        if path == *self.lexer.get_filename() {
-                            chs_error!("{} Cannot import self \"{}\" ", loc, path.display());
-                        }
-                        if self.module.imported_modules.iter().any(|im| im.path == path) {
-                            chs_error!("{} Cannot import file \"{}\" again.", loc, path.display());
-                        }
-                        let lexer = Lexer::new(read_flie(&path), path.clone());
-                        let mut p = Parser::new(lexer);
-                        p.module.imported_modules.push(UseModuleDecl {
-                            loc,
-                            path: path.clone(),
-                        });
-                        // Iteratively parse the imported module (without relying on recursion)
-                        let imported_module = p.parse(Some(self.lexer.get_filename()))?;
-                        self.module.function_decls.extend(imported_module.function_decls);
-                        self.module.global_decls.extend(imported_module.global_decls);
-                        self.module.type_decls.extend(imported_module.type_decls);
-                        self.module.imported_modules.extend(imported_module.imported_modules);
-                    }
-                    Keyword if token.val_eq("fn") => {
-                        let loc = token.loc;
+                    KeywordFn => {
                         let ident_token = self.expect_kind(Identifier)?;
-                        let name = ident_token.value;
-                        self.expect_kind(ParenOpen)?;
+                        self.expect_kind(OpenParen)?;
                         let (args, ret_type) = self.parse_fn_type_iterative()?;
-                        let body = self.parse_expr_list_iterative(|tk| tk.val_eq("end"))?;
+                        let body = self.parse_expr_list_iterative(|tk| tk.kind == KeywordEnd)?;
                         let fn_type = CHSType::Function(
                             args.iter().map(|(_, t)| t.clone()).collect(),
                             Box::new(ret_type.clone()),
                         );
-                        self.module.global_decls.push(GlobalDecl {
-                            loc: loc.clone(),
-                            name: name.clone(),
+                        global_decls.push(GlobalDecl {
+                            name: ident_token.clone(),
                             extrn: false,
                             ttype: fn_type,
                         });
-                        self.module.function_decls.push(FunctionDecl {
-                            loc,
-                            name,
+                        function_decls.push(FunctionDecl {
+                            name: ident_token,
                             args,
                             ret_type,
                             body,
                         });
                     }
-                    Keyword if token.val_eq("extern") => {
-                        let loc = token.loc;
+                    KeywordExtern => {
                         let ident_token = self.expect_kind(Identifier)?;
-                        let name = ident_token.value;
-                        self.expect_kind(ParenOpen)?;
+                        self.expect_kind(OpenParen)?;
                         let (args, ret_type) = self.parse_fn_type_iterative()?;
                         let fn_type = CHSType::Function(
                             args.iter().map(|(_, t)| t.clone()).collect(),
                             Box::new(ret_type.clone()),
                         );
-                        self.module.global_decls.push(GlobalDecl {
-                            loc: loc.clone(),
-                            name: name.clone(),
+                        global_decls.push(GlobalDecl {
+                            name: ident_token,
                             extrn: true,
                             ttype: fn_type,
                         });
                     }
-                    Keyword if token.val_eq("type") => {
-                        let ident_token = self.expect_kind(Identifier)?;
-                        let name = ident_token.value;
-                        let chs_type = self.parse_type_iterative()?;
-                        self.module.type_decls.push(TypeDecl {
-                            loc: ident_token.loc,
-                            name,
-                            ttype: chs_type,
-                        });
-                    }
-                    Keyword if token.val_eq("const") => {
-                        let ident_token = self.expect_kind(Identifier)?;
-                        let name = ident_token.value;
-                        let chs_type = self.parse_type_iterative()?;
-                        let value = self.parse_const_expression_iterative()?;
-                        self.module.const_decls.push(ConstDecl {
-                            loc: ident_token.loc,
-                            name,
-                            ttype: chs_type,
-                            value,
-                        });
-                    }
                     _ => {
                         chs_error!(
-                            "{} Invalid Expression on top level {}('{}')",
+                            "{} Invalid Expression on top level `{}`",
                             token.loc,
-                            token.kind,
-                            token.value
+                            token.source
                         )
                     }
                 }
                 true
             }
         } {}
-        Ok(self.module)
+        Ok(Module {
+            raw_module: self.module,
+            imported_modules: Default::default(),
+            type_decls: Default::default(),
+            global_decls,
+            function_decls
+        })
     }
 
-    /// An iterative (stack‐based) expression parser.
-    /// (This uses a while loop plus operator/operand stacks rather than recursive calls.)
-    fn parse_expression_iterative(&mut self, lowest_precedence: Precedence) -> CHSResult<Expression> {
+    fn parse_expression_iterative(
+        &mut self,
+        lowest_precedence: Precedence,
+    ) -> CHSResult<Expression> {
         // Operand stack
         let mut expr_stack: Vec<Expression> = Vec::new();
         // Operator stack: each operator paired with its token location.
-        let mut op_stack: Vec<(Operator, Loc)> = Vec::new();
+        let mut op_stack: Vec<(Operator, Token)> = Vec::new();
 
         // First parse a “primary” expression (which itself may be built iteratively).
         expr_stack.push(self.parse_primary_iterative()?);
@@ -193,26 +131,27 @@ impl Parser {
             let ptoken = self.peek().clone();
             // Handle non-binary postfix operators such as function calls or indexing:
             match ptoken.kind {
-                TokenKind::ParenOpen => {
+                TokenKind::OpenParen => {
                     // Function call: consume the '(' then parse arguments.
                     self.next(); // consume ParenOpen
-                    let args = self.parse_expr_list_iterative(|tk| tk.kind == TokenKind::ParenClose)?;
+                    let args =
+                        self.parse_expr_list_iterative(|tk| tk.kind == TokenKind::CloseParen)?;
                     let caller = expr_stack.pop().unwrap();
                     expr_stack.push(Expression::Call(Box::new(Call {
-                        loc: ptoken.loc,
+                        token: ptoken,
                         caller,
                         args,
                         ttype: None,
                     })));
                     continue;
                 }
-                TokenKind::SquareOpen => {
+                TokenKind::OpenSquare => {
                     self.next(); // consume '['
                     let index = self.parse_expression_iterative(Precedence::Lowest)?;
-                    self.expect_kind(TokenKind::SquareClose)?;
+                    self.expect_kind(TokenKind::CloseSquare)?;
                     let left = expr_stack.pop().unwrap();
                     expr_stack.push(Expression::Index(Box::new(Index {
-                        loc: ptoken.loc,
+                        token: ptoken,
                         left,
                         index,
                         ttype: None,
@@ -223,12 +162,12 @@ impl Parser {
             }
 
             // Check for a binary operator
-            if ptoken.kind.is_op() {
+            if ptoken.kind.is_binop() {
                 let operator = Operator::from_token(&ptoken, false)?;
                 if operator.precedence() > lowest_precedence {
-                    op_stack.push((operator, ptoken.loc));
+                    op_stack.push((operator, ptoken));
                     self.next(); // consume operator
-                    // Parse next primary expression as the right-hand side.
+                                 // Parse next primary expression as the right-hand side.
                     expr_stack.push(self.parse_primary_iterative()?);
                     // After pushing, combine operators if the next operator has lower precedence.
                     while let Some(&(ref top_op, _)) = op_stack.last() {
@@ -242,11 +181,11 @@ impl Parser {
                         if op_stack.is_empty() || expr_stack.len() < 2 {
                             break;
                         }
-                        let (op, loc) = op_stack.pop().unwrap();
+                        let (op, token) = op_stack.pop().unwrap();
                         let right = expr_stack.pop().unwrap();
                         let left = expr_stack.pop().unwrap();
                         expr_stack.push(Expression::Binop(Box::new(Binop {
-                            loc,
+                            token,
                             op,
                             left,
                             right,
@@ -259,14 +198,14 @@ impl Parser {
             break;
         }
         // Combine any remaining operators.
-        while let Some((op, loc)) = op_stack.pop() {
+        while let Some((op, token)) = op_stack.pop() {
             if expr_stack.len() < 2 {
-                chs_error!("Insufficient operands for operator at {}", loc);
+                chs_error!("Insufficient operands for operator at {}", token.source);
             }
             let right = expr_stack.pop().unwrap();
             let left = expr_stack.pop().unwrap();
             expr_stack.push(Expression::Binop(Box::new(Binop {
-                loc,
+                token,
                 op,
                 left,
                 right,
@@ -274,7 +213,10 @@ impl Parser {
             })));
         }
         if expr_stack.len() != 1 {
-            chs_error!("Error combining expression, remaining stack: {:?}", expr_stack);
+            chs_error!(
+                "Error combining expression, remaining stack: {:?}",
+                expr_stack
+            );
         }
         Ok(expr_stack.pop().unwrap())
     }
@@ -282,7 +224,7 @@ impl Parser {
     // Helper: if the next token is an operator, return it without consuming.
     fn peek_if_op(&mut self) -> Option<&Token> {
         let token = self.peek();
-        if token.kind.is_op() {
+        if token.kind.is_binop() {
             Some(token)
         } else {
             None
@@ -305,81 +247,69 @@ impl Parser {
                     Some(chstype)
                 };
                 let value = self.parse_expression_iterative(Precedence::Lowest)?;
-                let name = token.value;
                 Ok(Expression::VarDecl(Box::new(VarDecl {
-                    loc: token.loc,
-                    name,
+                    token,
                     ttype,
                     value,
                 })))
             }
-            Keyword if token.val_eq("set") => {
-                let loc = token.loc;
+            KeywordSet => {
                 let assigned = self.parse_expression_iterative(Precedence::Lowest)?;
                 self.expect_kind(Assign)?;
                 let value = self.parse_expression_iterative(Precedence::Lowest)?;
                 Ok(Expression::Assign(Box::new(nodes::Assign {
-                    loc,
+                    token,
                     assigned,
                     value,
                     ttype: None,
                 })))
             }
-            Keyword if token.val_eq("if") => {
-                let loc = token.loc;
-                self.expect_kind(ParenOpen)?;
+            KeywordIf => {
+                self.expect_kind(OpenParen)?;
                 let cond = self.parse_expression_iterative(Precedence::Lowest)?;
-                self.expect_kind(ParenClose)?;
-                self.parse_if_expression_iterative(loc, cond)
+                self.expect_kind(CloseParen)?;
+                self.parse_if_expression_iterative(token, cond)
             }
-            Keyword if token.val_eq("while") => {
-                let loc = token.loc;
-                self.expect_kind(ParenOpen)?;
+            KeywordWhile => {
+                self.expect_kind(OpenParen)?;
                 let cond = self.parse_expression_iterative(Precedence::Lowest)?;
-                self.expect_kind(ParenClose)?;
-                let body = self.parse_expr_list_iterative(|t| t.val_eq("end"))?;
+                self.expect_kind(CloseParen)?;
+                let body = self.parse_expr_list_iterative(|t| t.kind == TokenKind::KeywordEnd)?;
                 Ok(Expression::WhileExpression(Box::new(WhileExpression {
-                    loc,
+                    token,
                     cond,
                     body,
                 })))
             }
-            StringLiteral | Identifier | IntegerNumber | CharacterLiteral => {
-                Expression::from_literal_token(token)
-            }
-            Keyword if token.val_eq("true") || token.val_eq("false") => {
-                Expression::from_literal_token(token)
-            }
-            Keyword if token.val_eq("len") => {
-                let expr = self.parse_expression_iterative(Precedence::Prefix)?;
-                Ok(Expression::Len(Box::new(expr)))
-            }
-            Keyword if token.val_eq("array") => {
-                let loc = token.loc;
-                self.expect_kind(ParenOpen)?;
+            IntegerNumber | CharacterLiteral => Expression::from_literal_token(token),
+            KeywordTrue => Ok(Expression::ConstExpression(
+                ConstExpression::BooleanLiteral(true),
+            )),
+            KeywordFalse => Ok(Expression::ConstExpression(
+                ConstExpression::BooleanLiteral(true),
+            )),
+            Identifier => Ok(Expression::ConstExpression(ConstExpression::Symbol(
+                token.source.to_string(),
+            ))),
+            StringLiteral => Ok(Expression::ConstExpression(ConstExpression::StringLiteral(
+                token.source.to_string(),
+            ))),
+            KeywordCast => {
+                self.expect_kind(OpenParen)?;
                 let ttype = self.parse_type_iterative()?;
-                self.expect_kind(Comma)?;
-                let size = self
-                    .expect_kind(IntegerNumber)?
-                    .value
-                    .parse::<u64>()
-                    .expect("Invalid array size");
-                self.expect_kind(ParenClose)?;
-                Ok(Expression::Array(Box::new(Array { loc, ttype, size })))
-            }
-            Keyword if token.val_eq("cast") => {
-                let loc = token.loc;
-                self.expect_kind(ParenOpen)?;
-                let ttype = self.parse_type_iterative()?;
-                self.expect_kind(ParenClose)?;
+                self.expect_kind(CloseParen)?;
                 let casted = self.parse_expression_iterative(Precedence::Prefix)?;
-                Ok(Expression::Cast(Box::new(Cast { loc, ttype, casted })))
+                Ok(Expression::Cast(Box::new(Cast {
+                    token,
+                    ttype,
+                    casted,
+                })))
             }
-            Keyword if token.val_eq("syscall") => {
+            KeywordSyscall => {
                 let ptoken = self.next();
-                let args = self.parse_expr_list_iterative(|tk| tk.kind == ParenClose)?;
+                let args = self.parse_expr_list_iterative(|tk| tk.kind == CloseParen)?;
                 Ok(Expression::Syscall(Box::new(Syscall {
-                    loc: ptoken.loc,
+                    token: ptoken,
                     arity: args.len(),
                     args,
                 })))
@@ -389,78 +319,78 @@ impl Parser {
                 let expr = self.parse_expression_iterative(Precedence::Prefix)?;
                 Ok(Expression::Unop(Box::new(Unop {
                     op: Operator::from_token(&token, true)?,
-                    loc: token.loc,
+                    token,
                     left: expr,
                     ttype: None,
                 })))
             }
-            ParenOpen if self.peek().kind == ParenClose => {
-                self.next(); // consume ParenClose
-                Ok(Expression::ConstExpression(ConstExpression::Void))
-            }
-            ParenOpen => {
+            OpenParen => {
                 let expr = self.parse_expression_iterative(Precedence::Lowest)?;
-                self.expect_kind(ParenClose)?;
+                self.expect_kind(CloseParen)?;
                 Ok(Expression::Group(Box::new(expr)))
             }
-            CurlyOpen => self.parse_init_list_iterative(),
-            _ => chs_error!("{} Unexpected token {}", token.loc, token),
+            // CurlyOpen => self.parse_init_list_iterative(),
+            _ => chs_error!("{} Unexpected token {}", token.loc, token.source),
         }
     }
 
     /// Iterative version of parsing an initialization list.
-    fn parse_init_list_iterative(&mut self) -> CHSResult<Expression> {
-        use chs_lexer::TokenKind::*;
-        let mut exprs = vec![];
-        loop {
-            let ptoken = self.peek();
-            match ptoken.kind {
-                CurlyClose => {
-                    let loc = self.next().loc;
-                    return Ok(Expression::ExpressionList(ExpressionList {
-                        loc,
-                        exprs,
-                        ttype: None,
-                    }));
-                }
-                Identifier => {
-                    // In this example we simply advance the token stream.
-                    self.next();
-                    let ntoken = self.next();
-                    self.peeked = Some(ntoken);
-                }
-                Comma => {
-                    self.next();
-                    continue;
-                }
-                _ => {}
-            }
-            let value = self.parse_expression_iterative(Precedence::Lowest)?;
-            exprs.push(value);
-        }
-    }
+    // fn parse_init_list_iterative(&mut self) -> CHSResult<Expression> {
+    //     use chs_lexer::TokenKind::*;
+    //     let mut exprs = vec![];
+    //     loop {
+    //         let ptoken = self.peek();
+    //         match ptoken.kind {
+    //             CurlyClose => {
+    //                 let loc = self.next().loc;
+    //                 return Ok(Expression::ExpressionList(ExpressionList {
+    //                     loc,
+    //                     exprs,
+    //                     ttype: None,
+    //                 }));
+    //             }
+    //             Identifier => {
+    //                 // In this example we simply advance the token stream.
+    //                 self.next();
+    //                 let ntoken = self.next();
+    //                 self.peeked = Some(ntoken);
+    //             }
+    //             Comma => {
+    //                 self.next();
+    //                 continue;
+    //             }
+    //             _ => {}
+    //         }
+    //         let value = self.parse_expression_iterative(Precedence::Lowest)?;
+    //         exprs.push(value);
+    //     }
+    // }
 
     /// Iterative version of parsing an if-expression.
-    fn parse_if_expression_iterative(&mut self, loc: Loc, cond: Expression) -> CHSResult<Expression> {
+    fn parse_if_expression_iterative(
+        &mut self,
+        token: Token,
+        cond: Expression,
+    ) -> CHSResult<Expression> {
         use chs_lexer::TokenKind::*;
         let mut body = vec![];
         loop {
             let ptoken = self.peek();
             match ptoken.kind {
-                Keyword if ptoken.val_eq("else") => {
+                KeywordElse => {
                     self.next();
-                    let else_body = self.parse_expr_list_iterative(|t| t.val_eq("end"))?;
+                    let else_body = self.parse_expr_list_iterative(|t| t.kind == KeywordEnd)?;
                     return Ok(Expression::IfElseExpression(Box::new(IfElseExpression {
-                        loc,
+                        token,
                         cond,
                         body,
                         else_body,
                     })));
                 }
-                Keyword if ptoken.val_eq("end") => {
+                KeywordEnd => {
                     self.next();
                     return Ok(Expression::IfExpression(Box::new(IfExpression {
-                        loc,
+                        token,
                         cond,
                         body,
                     })));
@@ -513,7 +443,7 @@ impl Parser {
         loop {
             let ptoken = self.peek();
             match ptoken.kind {
-                ParenClose => {
+                CloseParen => {
                     self.next();
                     if self.peek().kind == Arrow {
                         self.next();
@@ -529,7 +459,7 @@ impl Parser {
                     let token = self.next();
                     self.expect_kind(Colon)?;
                     let value = self.parse_type_iterative()?;
-                    list.push((token.value, value));
+                    list.push((token.source.to_string(), value));
                 }
                 _ => chs_error!("Unexpected token in function type"),
             }
@@ -541,32 +471,23 @@ impl Parser {
         use chs_lexer::TokenKind::*;
         let ttoken = self.next();
         let ttype = match ttoken.kind {
-            Identifier if ttoken.val_eq("int") => CHSType::Int,
-            Identifier if ttoken.val_eq("uint") => CHSType::UInt,
-            Identifier if ttoken.val_eq("void") => CHSType::Void,
-            Identifier if ttoken.val_eq("bool") => CHSType::Boolean,
-            Identifier if ttoken.val_eq("char") => CHSType::Char,
-            Identifier if ttoken.val_eq("string") => CHSType::String,
+            Identifier if ttoken.source.as_ref() == "int" => CHSType::Int,
+            Identifier if ttoken.source.as_ref() == "uint" => CHSType::UInt,
+            Identifier if ttoken.source.as_ref() == "void" => CHSType::Void,
+            Identifier if ttoken.source.as_ref() == "bool" => CHSType::Boolean,
+            Identifier if ttoken.source.as_ref() == "char" => CHSType::Char,
+            Identifier if ttoken.source.as_ref() == "string" => CHSType::String,
             Asterisk => {
                 let ttp = self.parse_type_iterative()?;
                 CHSType::Pointer(Box::new(ttp))
             }
-            Keyword if ttoken.val_eq("fn") => {
+            KeywordFn => {
                 self.next();
                 let (args, ret) = self.parse_fn_type_iterative()?;
-                CHSType::Function(
-                    args.into_iter().map(|(_, t)| t).collect(),
-                    Box::new(ret),
-                )
+                CHSType::Function(args.into_iter().map(|(_, t)| t).collect(), Box::new(ret))
             }
-            _ => chs_error!("{} Type not implemented {}", ttoken.loc, ttoken),
+            _ => chs_error!("{} Type not implemented {}", ttoken.loc, ttoken.source),
         };
         Ok(ttype)
-    }
-
-    /// Placeholder for const-expression parsing.
-    fn parse_const_expression_iterative(&mut self) -> CHSResult<ConstExpression> {
-        // You would build an iterative version similar to parse_expression_iterative.
-        todo!()
     }
 }

@@ -1,14 +1,26 @@
-use std::path::PathBuf;
-
-use chs_lexer::{read_flie, Lexer};
-use chs_util::CHSResult;
-use nodes::Module;
-use parser::Parser;
-
 pub mod nodes;
 pub mod parser;
 
-pub fn parse_file(file_path: PathBuf) -> CHSResult<Module> {
-    let lexer = Lexer::new(read_flie(&file_path), file_path);
-    Parser::new(lexer).parse(None)
+#[derive(Debug)]
+pub struct RawModule {
+    source: String,
+    pub file_path: String,
+}
+
+impl RawModule {
+    pub fn new(source: String, file_path: String) -> Self {
+        Self { source, file_path }
+    }
+}
+
+
+use std::{fs, path::Path, process::exit};
+pub fn read_flie<P: AsRef<Path>>(file_path: P) -> String {
+    match fs::read_to_string(file_path) {
+        Ok(ok) => ok,
+        Err(err) => {
+            eprintln!("[ERROR] Cannot read file: {err}");
+            exit(-1);
+        }
+    }
 }

@@ -4,32 +4,33 @@ use std::{fmt, path::PathBuf};
 
 use chs_types::{CHSType, InferType, TypeEnv, TypeMap};
 
-#[derive(Debug, Default)]
-pub struct Module {
-    pub file_path: PathBuf,
+use crate::RawModule;
+
+#[derive(Debug)]
+pub struct Module<'src> {
+    pub raw_module: &'src RawModule,
     pub imported_modules: Vec<UseModuleDecl>,
     pub type_decls: Vec<TypeDecl>,
     pub global_decls: Vec<GlobalDecl>,
     pub function_decls: Vec<FunctionDecl>,
-    pub const_decls: Vec<ConstDecl>, // WTF?
 }
 
+
 #[derive(Debug)]
-pub struct TypedModule {
-    pub file_path: PathBuf,
+pub struct TypedModule<'src> {
+    pub raw_module: &'src RawModule,
     pub function_decls: Vec<FunctionDecl>,
     pub type_map: TypeMap,
 }
 
-impl TypedModule {
+impl<'src> TypedModule<'src> {
     pub fn from_module(m: Module) -> CHSResult<TypedModule> {
         let Module {
-            file_path,
+            raw_module,
             imported_modules: _,
             type_decls,
             global_decls,
             mut function_decls,
-            const_decls: _,
         } = m;
         // TODO: Look for type redefinition
         let mut env = TypeEnv::new();
@@ -44,10 +45,10 @@ impl TypedModule {
 
         for decl in &global_decls {
             if decl.extrn {
-                env.externs_insert(&decl.name);
+                env.externs_insert(decl.name.source.as_ref());
             }
-            if env.globals_insert(&decl.name, &decl.ttype).is_some() {
-                chs_error!("{} Redefinition of {}", decl.loc, decl.name)
+            if env.globals_insert(decl.name.source.as_ref(), &decl.ttype).is_some() {
+                chs_error!("{} Redefinition of {}", decl.name.loc, decl.name.source.as_ref())
             }
         }
 
@@ -88,7 +89,7 @@ impl TypedModule {
 
         let type_defs = env.into_type_defs();
         Ok(TypedModule {
-            file_path,
+            raw_module,
             function_decls,
             type_map: type_defs,
         })
@@ -156,7 +157,7 @@ impl chs_types::InferType for Expression {
             Expression::ExpressionList(e) => {
                 chs_error!(
                     "{} Cannot infer the type of expression list. Not implemented yet :(",
-                    e.loc
+                    e.token.loc
                 )
             }
             Expression::ConstExpression(e) => e.infer(hint, env),
@@ -168,7 +169,7 @@ impl chs_types::InferType for Expression {
             Expression::Index(e) => {
                 let actual = e.left.infer(None, env)?;
                 if actual.is_void_pointer() {
-                    chs_error!("{} Cannot deref a *void", e.loc)
+                    chs_error!("{} Cannot deref a *void", e.token.loc)
                 }
                 if !actual.is_pointer() {
                     chs_error!("TDO")
@@ -188,7 +189,7 @@ impl chs_types::InferType for Expression {
             }
             Expression::Syscall(e) => {
                 if e.arity > 7 && e.arity == 0 {
-                    chs_error!("{} Syscall arity mismatch", e.loc);
+                    chs_error!("{} Syscall arity mismatch", e.token.loc);
                 }
                 for (i, actual) in e.args.iter_mut().enumerate() {
                     let actual = actual.infer(hint, env)?;
@@ -197,7 +198,7 @@ impl chs_types::InferType for Expression {
                         if !expect.equivalent(&actual) {
                             chs_error!(
                                 "{} Syscall first argument type mismatch. Expect: {}  Actual: {}",
-                                e.loc,
+                                e.token.loc,
                                 expect,
                                 actual
                             );
@@ -211,14 +212,14 @@ impl chs_types::InferType for Expression {
                 match chstype {
                     CHSType::Function(ref mut fn_args, ref ret_type) => {
                         if fn_args.len() != call.args.len() {
-                            chs_error!("{} Arity mismatch function call", call.loc);
+                            chs_error!("{} Arity mismatch function call", call.token.loc);
                         }
                         for (expect, actual) in fn_args.iter_mut().zip(call.args.iter_mut()) {
                             let actual = actual.infer(hint, env)?;
                             if !expect.equivalent(&actual) {
                                 chs_error!(
                                     "{} Argument type mismatch. Expect: {}  Actual: {}",
-                                    call.loc,
+                                    call.token.loc,
                                     expect,
                                     actual
                                 );
@@ -227,7 +228,7 @@ impl chs_types::InferType for Expression {
                         call.ttype = Some(chstype.clone());
                         Ok(*(ret_type).clone())
                     }
-                    c => chs_error!("{} Cannot call {}", call.loc, c),
+                    c => chs_error!("{} Cannot call {}", call.token.loc, c),
                 }
             }
             Expression::Len(e) => {
@@ -248,8 +249,8 @@ impl chs_types::InferType for Expression {
                     if !expect.equivalent(&actual) {
                         chs_error!(
                             "{} Type of variable `{}` not match. Expect: {} Actual: {}",
-                            e.loc,
-                            e.name,
+                            e.token.loc,
+                            e.token.source,
                             expect,
                             actual
                         );
@@ -257,7 +258,7 @@ impl chs_types::InferType for Expression {
                 } else {
                     e.ttype = Some(e.value.infer(None, env)?);
                 }
-                env.locals_insert(&e.name, e.ttype.as_ref().unwrap());
+                env.locals_insert(e.token.source.as_ref(), e.ttype.as_ref().unwrap());
                 Ok(CHSType::Void)
             }
             Expression::Assign(e) => {
@@ -266,7 +267,7 @@ impl chs_types::InferType for Expression {
                 if !expect.equivalent(&actual) {
                     chs_error!(
                         "{} Argument type mismatch. Expect: {}  Actual: {}",
-                        e.loc,
+                        e.token.loc,
                         expect,
                         actual
                     );
@@ -280,7 +281,7 @@ impl chs_types::InferType for Expression {
                 if !expect.equivalent(&actual) {
                     chs_error!(
                         "{} Argument type mismatch. Expect: {}  Actual: {}",
-                        e.loc,
+                        e.token.loc,
                         expect,
                         actual
                     );
@@ -298,7 +299,7 @@ impl chs_types::InferType for Expression {
                 if !expect.equivalent(&actual) {
                     chs_error!(
                         "{} Argument type mismatch. Expect: {}  Actual: {}",
-                        e.loc,
+                        e.token.loc,
                         expect,
                         actual
                     );
@@ -321,7 +322,7 @@ impl chs_types::InferType for Expression {
                 if !expect.equivalent(&actual) {
                     chs_error!(
                         "{} Argument type mismatch. Expect: {}  Actual: {}",
-                        e.loc,
+                        e.token.loc,
                         expect,
                         actual
                     );
@@ -340,7 +341,7 @@ impl chs_types::InferType for Expression {
                     if !left.equivalent(&right) {
                         chs_error!(
                             "{} Argument type mismatch. Expect: {}  Actual: {}",
-                            e.loc,
+                            e.token.loc,
                             left,
                             right
                         );
@@ -352,7 +353,7 @@ impl chs_types::InferType for Expression {
                     let left = e.left.infer(hint, env)?;
                     let right = e.right.infer(hint, env)?;
                     if !left.equivalent(&right) {
-                        chs_error!("{} {} {} {} is not defined.", e.loc, left, e.op, right);
+                        chs_error!("{} {} {} {} is not defined.", e.token.loc, left, e.op, right);
                     }
                     e.ttype = Some(CHSType::Boolean);
                     Ok(CHSType::Boolean)
@@ -362,7 +363,7 @@ impl chs_types::InferType for Expression {
                     let right = e.right.infer(hint, env)?;
                     match (&left, &right) {
                         (CHSType::Pointer(..), CHSType::Pointer(..)) => {
-                            chs_error!("{} {} {} {} is not defined.", e.loc, left, e.op, right);
+                            chs_error!("{} {} {} {} is not defined.", e.token.loc, left, e.op, right);
                         }
                         (CHSType::Int, CHSType::Pointer(..)) => {
                             e.ttype = Some(right.clone());
@@ -388,7 +389,7 @@ impl chs_types::InferType for Expression {
                             e.ttype = Some(left.clone());
                             Ok(left)
                         }
-                        _ => chs_error!("{} {} {} {}  is not defined.", e.loc, left, e.op, right),
+                        _ => chs_error!("{} {} {} {}  is not defined.", e.token.loc, left, e.op, right),
                     }
                 }
                 Operator::Div | Operator::Mod | Operator::Mult => {
@@ -396,7 +397,7 @@ impl chs_types::InferType for Expression {
                     let right = e.right.infer(hint, env)?;
                     match (&left, &right) {
                         (a, b) if a.is_pointer() || b.is_pointer() => {
-                            chs_error!("{} {} {:?} {}  is not defined.", e.loc, left, e.op, right)
+                            chs_error!("{} {} {:?} {}  is not defined.", e.token.loc, left, e.op, right)
                         }
                         (CHSType::Int, CHSType::Int) => {
                             e.ttype = Some(left.clone());
@@ -406,11 +407,11 @@ impl chs_types::InferType for Expression {
                             e.ttype = Some(left.clone());
                             Ok(left)
                         }
-                        _ => chs_error!("{} {} {} {}  is not defined.", e.loc, left, e.op, right),
+                        _ => chs_error!("{} {} {} {}  is not defined.", e.token.loc, left, e.op, right),
                     }
                 }
-                Operator::Or => chs_error!("{} {} is not defined.", e.loc, e.op),
-                Operator::And => chs_error!("{} {} is not defined.", e.loc, e.op),
+                Operator::Or => chs_error!("{} {} is not defined.", e.token.loc, e.op),
+                Operator::And => chs_error!("{} {} is not defined.", e.token.loc, e.op),
                 Operator::Negate | Operator::LNot | Operator::Refer | Operator::Deref => {
                     unreachable!("Not a binary operator")
                 }
@@ -423,7 +424,7 @@ impl chs_types::InferType for Expression {
                         if !expect.equivalent(&actual) {
                             chs_error!(
                                 "{} Argument type mismatch. Expect: {}  Actual: {}",
-                                e.loc,
+                                e.token.loc,
                                 expect,
                                 actual
                             );
@@ -460,26 +461,16 @@ impl Expression {
         match token.kind {
             IntegerNumber => {
                 let value: i64 = token
-                    .value
+                    .source
                     .parse::<i64>()
                     .expect("No integer token. Probably a lexer error.");
                 Ok(Self::ConstExpression(ConstExpression::IntegerLiteral(
                     value,
                 )))
             }
-            Keyword if token.val_eq("true") => {
-                Ok(Self::ConstExpression(ConstExpression::BooleanLiteral(true)))
-            }
-            Keyword if token.val_eq("false") => Ok(Self::ConstExpression(
-                ConstExpression::BooleanLiteral(false),
-            )),
-            Identifier => Ok(Self::ConstExpression(ConstExpression::Symbol(token.value))),
-            StringLiteral => Ok(Self::ConstExpression(ConstExpression::StringLiteral(
-                token.value,
-            ))),
             CharacterLiteral => {
                 let value: char = token
-                    .value
+                    .source
                     .parse::<char>()
                     .expect("No char token. Probably a lexer error.");
                 Ok(Self::ConstExpression(ConstExpression::CharLiteral(
@@ -503,8 +494,7 @@ pub struct UseModuleDecl {
 
 #[derive(Debug)]
 pub struct FunctionDecl {
-    pub loc: Loc,
-    pub name: String,
+    pub name: Token,
     pub args: Vec<(String, CHSType)>,
     pub ret_type: CHSType,
     pub body: Vec<Expression>,
@@ -527,15 +517,14 @@ pub struct TypeDecl {
 
 #[derive(Debug)]
 pub struct GlobalDecl {
-    pub loc: Loc,
-    pub name: String,
+    pub name: Token,
     pub extrn: bool,
     pub ttype: CHSType,
 }
 
 #[derive(Debug)]
 pub struct Assign {
-    pub loc: Loc,
+    pub token: Token,
     pub assigned: Expression,
     pub value: Expression,
     pub ttype: Option<CHSType>,
@@ -543,14 +532,14 @@ pub struct Assign {
 
 #[derive(Debug)]
 pub struct IfExpression {
-    pub loc: Loc,
+    pub token: Token,
     pub cond: Expression,
     pub body: Vec<Expression>,
 }
 
 #[derive(Debug)]
 pub struct IfElseExpression {
-    pub loc: Loc,
+    pub token: Token,
     pub cond: Expression,
     pub body: Vec<Expression>,
     pub else_body: Vec<Expression>,
@@ -558,29 +547,28 @@ pub struct IfElseExpression {
 
 #[derive(Debug)]
 pub struct WhileExpression {
-    pub loc: Loc,
+    pub token: Token,
     pub cond: Expression,
     pub body: Vec<Expression>,
 }
 
 #[derive(Debug)]
 pub struct VarDecl {
-    pub loc: Loc,
-    pub name: String,
+    pub token: Token,
     pub value: Expression,
     pub ttype: Option<CHSType>,
 }
 
 #[derive(Debug)]
 pub struct Cast {
-    pub loc: Loc,
+    pub token: Token,
     pub ttype: CHSType,
     pub casted: Expression,
 }
 
 #[derive(Debug)]
 pub struct Index {
-    pub loc: Loc,
+    pub token: Token,
     pub left: Expression,
     pub index: Expression,
     pub ttype: Option<CHSType>,
@@ -588,14 +576,14 @@ pub struct Index {
 
 #[derive(Debug)]
 pub struct ExpressionList {
-    pub loc: Loc,
+    pub token: Token,
     pub exprs: Vec<Expression>,
     pub ttype: Option<CHSType>,
 }
 
 #[derive(Debug)]
 pub struct Call {
-    pub loc: Loc,
+    pub token: Token,
     pub caller: Expression,
     pub args: Vec<Expression>,
     pub ttype: Option<CHSType>,
@@ -603,7 +591,7 @@ pub struct Call {
 
 #[derive(Debug)]
 pub struct Syscall {
-    pub loc: Loc,
+    pub token: Token,
     pub arity: usize,
     pub args: Vec<Expression>,
 }
@@ -617,7 +605,7 @@ pub struct Array {
 
 #[derive(Debug)]
 pub struct Binop {
-    pub loc: Loc,
+    pub token: Token,
     pub op: Operator,
     pub left: Expression,
     pub right: Expression,
@@ -626,7 +614,7 @@ pub struct Binop {
 
 #[derive(Debug)]
 pub struct Unop {
-    pub loc: Loc,
+    pub token: Token,
     pub op: Operator,
     pub left: Expression,
     pub ttype: Option<CHSType>,
