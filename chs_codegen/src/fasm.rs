@@ -1,6 +1,6 @@
 use std::{fmt, path::PathBuf};
 
-use chs_util::{chs_error, CHSResult};
+use chs_util::{CHSResult, chs_error};
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -479,7 +479,7 @@ impl fmt::Display for Instr {
             Self::Set(cond, dst) => write!(f, "set{cond} {dst}"),
             Instr::J(cond, label) => write!(f, "j{cond} .{label}"), // local labels
             Instr::Jmp(label) => write!(f, "jmp .{label}"),         // local labels
-            Instr::Call(label) => write!(f, "call _{label}"),
+            Instr::Call(label) => write!(f, "call {label}"),
             Instr::Ret => write!(f, "ret"),
         }
     }
@@ -586,7 +586,7 @@ impl fmt::Display for Function {
             return Ok(());
         }
         writeln!(f, ";; function",)?;
-        writeln!(f, "_{}:", self.name)?;
+        writeln!(f, "{}:", self.name)?;
 
         if self.prologe {
             writeln!(f, "\tpush rbp")?;
@@ -616,6 +616,8 @@ impl fmt::Display for Function {
 /// Represents a single fasm file
 #[derive(Debug, Default, Clone)]
 pub struct Module {
+    link_with_c: bool,
+    extrn: Vec<String>,
     out_path: PathBuf,
     start: Block,
     functions: Vec<Function>,
@@ -623,9 +625,11 @@ pub struct Module {
 }
 
 impl Module {
-    pub fn new(out_path: PathBuf) -> Module {
+    pub fn new(out_path: PathBuf, extrn: Vec<String>) -> Module {
         let start = Block::new("");
         Module {
+            link_with_c: false,
+            extrn,
             out_path,
             start,
             ..Default::default()
@@ -649,29 +653,44 @@ impl Module {
     pub fn out_path(&self) -> &PathBuf {
         &self.out_path
     }
+
+    pub fn link_with_c(&mut self, arg: bool) {
+        self.link_with_c = arg;
+    }
 }
 
 impl fmt::Display for Module {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        writeln!(f, "format ELF64 executable")?;
-        writeln!(f, "entry _start")?;
-
-        writeln!(f, "segment executable")?;
-        writeln!(f, "_start:")?;
-        for instr in self.start.instrs.iter() {
-            writeln!(f, "\t{}", instr)?;
+        if self.link_with_c {
+            writeln!(f, "format ELF64")?;
+            writeln!(f, "section \".text\" executable")?;
+            writeln!(f, "public main")?;
+            for e in &self.extrn {
+                let _ = writeln!(f, "extrn {e}");
+            }
+        } else {
+            writeln!(f, "format ELF64 executable")?;
+            writeln!(f, "entry _start")?;
+            writeln!(f, "segment executable")?;
+            // for instr in self.start.instrs.iter() {
+            //     writeln!(f, "\t{}", instr)?;
+            // }
+            writeln!(f, "\tcall _main")?;
+            writeln!(f, "\tmov rax, 60")?;
+            writeln!(f, "\tmov rdi, 0")?;
+            writeln!(f, "\tsyscall")?;
         }
-        writeln!(f, "\tcall _main")?;
-        writeln!(f, "\tmov rax, 60")?;
-        writeln!(f, "\tmov rdi, 0")?;
-        writeln!(f, "\tsyscall")?;
 
         for func in self.functions.iter() {
             writeln!(f, "{}", func)?;
         }
 
         if !self.data.is_empty() {
-            writeln!(f, "segment readable writable")?;
+            if self.link_with_c {
+                writeln!(f, "section \".data\" writable")?;
+            } else {
+                writeln!(f, "segment readable writable")?;
+            }
         }
         for data in self.data.iter() {
             writeln!(f, "{}", data)?;

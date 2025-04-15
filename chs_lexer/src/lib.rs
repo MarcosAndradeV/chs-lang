@@ -22,7 +22,7 @@ pub struct Lexer {
 impl Lexer {
     pub const KEYWORDS: &'static [&'static str] = &[
         "fn", "end", "use", "set", "syscall", "if", "else", "while", "array", "cast", "const",
-        "type", "true", "false",
+        "type", "true", "false", "extern",
     ];
     pub fn new(data: Vec<u8>, file_path: PathBuf) -> Self {
         Self {

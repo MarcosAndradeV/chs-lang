@@ -43,6 +43,9 @@ impl TypedModule {
         env.globals_insert(&var_name, &function);
 
         for decl in &global_decls {
+            if decl.extrn {
+                env.externs_insert(&decl.name);
+            }
             if env.globals_insert(&decl.name, &decl.ttype).is_some() {
                 chs_error!("{} Redefinition of {}", decl.loc, decl.name)
             }
@@ -526,6 +529,7 @@ pub struct TypeDecl {
 pub struct GlobalDecl {
     pub loc: Loc,
     pub name: String,
+    pub extrn: bool,
     pub ttype: CHSType,
 }
 

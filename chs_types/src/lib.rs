@@ -62,6 +62,7 @@ impl CHSType {
 pub struct TypeMap {
     type_decls: HashMap<String, CHSType>,
     globals: HashMap<String, CHSType>,
+    externs: Vec<String>,
 }
 
 impl TypeMap {
@@ -72,6 +73,10 @@ impl TypeMap {
     pub fn get_global(&self, k: &str) -> Option<&CHSType> {
         self.globals.get(k)
     }
+
+    pub fn get_extern(&self) -> Vec<String> {
+        self.externs.clone()
+    }
 }
 
 #[derive(Debug)]
@@ -79,6 +84,7 @@ pub struct TypeEnv<'a> {
     type_decls: HashMap<&'a str, &'a CHSType>,
     globals: HashMap<&'a str, &'a CHSType>,
     locals: Vec<HashMap<&'a str, &'a CHSType>>,
+    externs: Vec<&'a str>,
 }
 
 impl Default for TypeEnv<'_> {
@@ -93,7 +99,11 @@ impl<'a> TypeEnv<'a> {
             type_decls: HashMap::new(),
             globals: HashMap::new(),
             locals: vec![],
+            externs: vec![],
         }
+    }
+    pub fn externs_insert(&mut self, k: &'a str) {
+        self.externs.push(k);
     }
     pub fn type_decls_insert(&mut self, k: &'a String, v: &'a CHSType) -> Option<&CHSType> {
         self.type_decls.insert(k, v)
@@ -145,11 +155,15 @@ impl<'a> TypeEnv<'a> {
                     .into_iter()
                     .map(|(k, v)| (k.to_string(), v.clone())),
             ),
+            externs: self
+                .externs
+                .into_iter()
+                .map(|k| k.to_string()).collect(),
         }
     }
 }
 
 pub trait InferType {
     fn infer<'a>(&'a mut self, hint: Option<&CHSType>, env: &mut TypeEnv<'a>)
-        -> CHSResult<CHSType>;
+    -> CHSResult<CHSType>;
 }

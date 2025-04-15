@@ -32,8 +32,9 @@ impl FasmGenerator {
         }
     }
     pub fn generate(m: TypedModule) -> CHSResult<Module> {
+        let mut fasm_module = Module::new(m.file_path.with_extension("asm"), m.type_map.get_extern());
         let mut fgen = FasmGenerator::new(m.type_map);
-        let mut fasm_module = Module::new(m.file_path.with_extension("asm"));
+        fasm_module.link_with_c(true);
 
         let func = fasm_module.push_function(fasm::Function::new("print_int"));
         func.set_prelude(false);
