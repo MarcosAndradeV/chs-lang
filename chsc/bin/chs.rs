@@ -24,9 +24,9 @@ fn main() {
                 .help("Compiles the program.")
                 .arg("INPUT", 0)
                 .flag("-o", "OUTPUT", false)
-                .flag_bool("-r")
-                .flag_bool("-s")
-                .flag_bool("--emit-asm"),
+                .flag_bool("r")
+                .flag_bool("s")
+                .flag_bool("emit-asm"),
         )
         .add_cmd(
             "check",
@@ -47,9 +47,9 @@ fn main() {
                 if let Err(err) = compile(
                     file_path,
                     flags.get("-o").cloned(),
-                    flags.is_present("-r"),
-                    flags.is_present("-s"),
-                    flags.is_present("--emit-asm"),
+                    flags.is_present("r"),
+                    flags.is_present("s"),
+                    flags.is_present("emit-asm"),
                 ) {
                     eprintln!("{err}");
                 }
