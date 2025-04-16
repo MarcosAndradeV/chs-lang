@@ -1,99 +1,21 @@
 use chs_lexer::Token;
-use chs_util::{chs_error, CHSError, CHSResult, Loc};
-use std::{fmt, path::PathBuf};
+use chs_util::{chs_error, CHSError, Loc};
+use std::fmt;
 
-use chs_types::{CHSType, InferType, TypeEnv, TypeMap};
+use chs_types::{CHSType, TypeMapLoc};
 
 use crate::RawModule;
 
 #[derive(Debug)]
 pub struct Module<'src> {
     pub raw_module: &'src RawModule,
-    pub imported_modules: Vec<UseModuleDecl>,
-    pub type_decls: Vec<TypeDecl>,
-    pub global_decls: Vec<GlobalDecl>,
-    pub function_decls: Vec<FunctionDecl>,
+    pub items: Vec<ModuleItem>
 }
-
 
 #[derive(Debug)]
-pub struct TypedModule<'src> {
-    pub raw_module: &'src RawModule,
-    pub function_decls: Vec<FunctionDecl>,
-    pub type_map: TypeMap,
-}
-
-impl<'src> TypedModule<'src> {
-    pub fn from_module(m: Module) -> CHSResult<TypedModule> {
-        let Module {
-            raw_module,
-            imported_modules: _,
-            type_decls,
-            global_decls,
-            mut function_decls,
-        } = m;
-        // TODO: Look for type redefinition
-        let mut env = TypeEnv::new();
-        for decl in &type_decls {
-            if env.type_decls_insert(&decl.name, &decl.ttype).is_some() {
-                chs_error!("{} Redefinition of {}", decl.loc, decl.name)
-            }
-        }
-        let var_name = "print_int".to_string();
-        let function = CHSType::Function(vec![CHSType::Int], Box::new(CHSType::Void));
-        env.globals_insert(&var_name, &function);
-
-        for decl in &global_decls {
-            if decl.extrn {
-                env.externs_insert(decl.name.source.as_ref());
-            }
-            if env.globals_insert(decl.name.source.as_ref(), &decl.ttype).is_some() {
-                chs_error!("{} Redefinition of {}", decl.name.loc, decl.name.source.as_ref())
-            }
-        }
-
-        for f in &mut function_decls {
-            env.locals_new();
-            env.locals_extend(f.args.iter().map(|(n, a)| (n.as_str(), a)));
-            if f.body.is_empty() {
-                let expect = &f.ret_type;
-                let actual = CHSType::Void;
-                if !expect.equivalent(&actual) {
-                    chs_error!(
-                        "Return type mismatch. Expect: {}  Actual: {}",
-                        expect,
-                        actual
-                    );
-                }
-                continue;
-            }
-            let len = f.body.len() - 1;
-            for (i, expr) in f.body.iter_mut().enumerate() {
-                if i >= len {
-                    let t = expr.infer(Some(&f.ret_type), &mut env)?;
-                    let expect = &f.ret_type;
-                    let actual = t;
-                    if !expect.equivalent(&actual) {
-                        chs_error!(
-                            "Return type mismatch. Expect: {}  Actual: {}",
-                            expect,
-                            actual
-                        );
-                    }
-                } else {
-                    expr.infer(None, &mut env)?;
-                }
-            }
-            env.locals_pop();
-        }
-
-        let type_defs = env.into_type_defs();
-        Ok(TypedModule {
-            raw_module,
-            function_decls,
-            type_map: type_defs,
-        })
-    }
+pub enum ModuleItem {
+    Function(FunctionDecl),
+    ExternFunction(ExternFunctionDecl),
 }
 
 #[derive(Debug)]
@@ -104,27 +26,6 @@ pub enum ConstExpression {
     StringLiteral(String),
     CharLiteral(u8),
     Void,
-}
-
-impl chs_types::InferType for ConstExpression {
-    fn infer(
-        &mut self,
-        hint: Option<&CHSType>,
-        env: &mut chs_types::TypeEnv,
-    ) -> CHSResult<CHSType> {
-        _ = hint;
-        match self {
-            ConstExpression::Symbol(sym) => match env.get(sym) {
-                Some(t) => Ok((*t).clone()),
-                None => chs_error!("variable not found {}", sym),
-            },
-            ConstExpression::IntegerLiteral(_) => Ok(CHSType::Int),
-            ConstExpression::BooleanLiteral(_) => Ok(CHSType::Boolean),
-            ConstExpression::StringLiteral(_) => Ok(CHSType::String),
-            ConstExpression::CharLiteral(_) => Ok(CHSType::Char),
-            ConstExpression::Void => Ok(CHSType::Void),
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -145,314 +46,6 @@ pub enum Expression {
     IfExpression(Box<IfExpression>),
     IfElseExpression(Box<IfElseExpression>),
     WhileExpression(Box<WhileExpression>),
-}
-
-impl chs_types::InferType for Expression {
-    fn infer<'a>(
-        &'a mut self,
-        hint: Option<&CHSType>,
-        env: &mut chs_types::TypeEnv<'a>,
-    ) -> CHSResult<CHSType> {
-        match self {
-            Expression::ExpressionList(e) => {
-                chs_error!(
-                    "{} Cannot infer the type of expression list. Not implemented yet :(",
-                    e.token.loc
-                )
-            }
-            Expression::ConstExpression(e) => e.infer(hint, env),
-            Expression::Group(e) => e.infer(hint, env),
-            Expression::Cast(e) => {
-                e.casted.infer(Some(&e.ttype), env)?;
-                Ok(e.ttype.clone())
-            }
-            Expression::Index(e) => {
-                let actual = e.left.infer(None, env)?;
-                if actual.is_void_pointer() {
-                    chs_error!("{} Cannot deref a *void", e.token.loc)
-                }
-                if !actual.is_pointer() {
-                    chs_error!("TDO")
-                }
-
-                let index = e.index.infer(None, env)?;
-                if !index.equivalent(&CHSType::Int) {
-                    chs_error!("TDO")
-                }
-
-                if let CHSType::Pointer(ptr) = actual {
-                    e.ttype = Some(*ptr.clone());
-                    Ok(*ptr)
-                } else {
-                    chs_error!("TDO")
-                }
-            }
-            Expression::Syscall(e) => {
-                if e.arity > 7 && e.arity == 0 {
-                    chs_error!("{} Syscall arity mismatch", e.token.loc);
-                }
-                for (i, actual) in e.args.iter_mut().enumerate() {
-                    let actual = actual.infer(hint, env)?;
-                    if i == 0 {
-                        let expect = CHSType::Int;
-                        if !expect.equivalent(&actual) {
-                            chs_error!(
-                                "{} Syscall first argument type mismatch. Expect: {}  Actual: {}",
-                                e.token.loc,
-                                expect,
-                                actual
-                            );
-                        }
-                    }
-                }
-                Ok(CHSType::Int)
-            }
-            Expression::Call(call) => {
-                let mut chstype = call.caller.infer(hint, env)?;
-                match chstype {
-                    CHSType::Function(ref mut fn_args, ref ret_type) => {
-                        if fn_args.len() != call.args.len() {
-                            chs_error!("{} Arity mismatch function call", call.token.loc);
-                        }
-                        for (expect, actual) in fn_args.iter_mut().zip(call.args.iter_mut()) {
-                            let actual = actual.infer(hint, env)?;
-                            if !expect.equivalent(&actual) {
-                                chs_error!(
-                                    "{} Argument type mismatch. Expect: {}  Actual: {}",
-                                    call.token.loc,
-                                    expect,
-                                    actual
-                                );
-                            }
-                        }
-                        call.ttype = Some(chstype.clone());
-                        Ok(*(ret_type).clone())
-                    }
-                    c => chs_error!("{} Cannot call {}", call.token.loc, c),
-                }
-            }
-            Expression::Len(e) => {
-                let arg = e.infer(hint, env)?;
-                match arg {
-                    CHSType::String => {}
-                    arg => chs_error!("Cannot get the len of {}", arg),
-                }
-                Ok(CHSType::Int)
-            }
-            Expression::Array(e) => {
-                assert!(e.size > 0);
-                Ok(CHSType::Pointer(Box::new(e.ttype.clone())))
-            }
-            Expression::VarDecl(e) => {
-                if let Some(ref expect) = e.ttype {
-                    let actual = e.value.infer(Some(expect), env)?;
-                    if !expect.equivalent(&actual) {
-                        chs_error!(
-                            "{} Type of variable `{}` not match. Expect: {} Actual: {}",
-                            e.token.loc,
-                            e.token.source,
-                            expect,
-                            actual
-                        );
-                    }
-                } else {
-                    e.ttype = Some(e.value.infer(None, env)?);
-                }
-                env.locals_insert(e.token.source.as_ref(), e.ttype.as_ref().unwrap());
-                Ok(CHSType::Void)
-            }
-            Expression::Assign(e) => {
-                let expect = e.assigned.infer(hint, env)?;
-                let actual = e.value.infer(hint, env)?;
-                if !expect.equivalent(&actual) {
-                    chs_error!(
-                        "{} Argument type mismatch. Expect: {}  Actual: {}",
-                        e.token.loc,
-                        expect,
-                        actual
-                    );
-                }
-                e.ttype = Some(expect);
-                Ok(CHSType::Void)
-            }
-            Expression::IfExpression(e) => {
-                let expect = e.cond.infer(hint, env)?;
-                let actual = CHSType::Boolean;
-                if !expect.equivalent(&actual) {
-                    chs_error!(
-                        "{} Argument type mismatch. Expect: {}  Actual: {}",
-                        e.token.loc,
-                        expect,
-                        actual
-                    );
-                }
-                env.locals_new();
-                for expr in &mut e.body {
-                    expr.infer(hint, env)?;
-                }
-                env.locals_pop();
-                Ok(CHSType::Void)
-            }
-            Expression::IfElseExpression(e) => {
-                let expect = e.cond.infer(hint, env)?;
-                let actual = CHSType::Boolean;
-                if !expect.equivalent(&actual) {
-                    chs_error!(
-                        "{} Argument type mismatch. Expect: {}  Actual: {}",
-                        e.token.loc,
-                        expect,
-                        actual
-                    );
-                }
-                env.locals_new();
-                for expr in &mut e.body {
-                    expr.infer(hint, env)?;
-                }
-                env.locals_pop();
-                env.locals_new();
-                for expr in &mut e.else_body {
-                    expr.infer(hint, env)?;
-                }
-                env.locals_pop();
-                Ok(CHSType::Void)
-            }
-            Expression::WhileExpression(e) => {
-                let expect = e.cond.infer(hint, env)?;
-                let actual = CHSType::Boolean;
-                if !expect.equivalent(&actual) {
-                    chs_error!(
-                        "{} Argument type mismatch. Expect: {}  Actual: {}",
-                        e.token.loc,
-                        expect,
-                        actual
-                    );
-                }
-                env.locals_new();
-                for expr in &mut e.body {
-                    expr.infer(hint, env)?;
-                }
-                env.locals_pop();
-                Ok(CHSType::Void)
-            }
-            Expression::Binop(e) => match e.op {
-                Operator::Eq | Operator::NEq | Operator::Gt | Operator::Lt => {
-                    let left = e.left.infer(hint, env)?;
-                    let right = e.right.infer(hint, env)?;
-                    if !left.equivalent(&right) {
-                        chs_error!(
-                            "{} Argument type mismatch. Expect: {}  Actual: {}",
-                            e.token.loc,
-                            left,
-                            right
-                        );
-                    }
-                    e.ttype = Some(left);
-                    Ok(CHSType::Boolean)
-                }
-                Operator::LAnd | Operator::LOr => {
-                    let left = e.left.infer(hint, env)?;
-                    let right = e.right.infer(hint, env)?;
-                    if !left.equivalent(&right) {
-                        chs_error!("{} {} {} {} is not defined.", e.token.loc, left, e.op, right);
-                    }
-                    e.ttype = Some(CHSType::Boolean);
-                    Ok(CHSType::Boolean)
-                }
-                Operator::Plus | Operator::Minus => {
-                    let left = e.left.infer(hint, env)?;
-                    let right = e.right.infer(hint, env)?;
-                    match (&left, &right) {
-                        (CHSType::Pointer(..), CHSType::Pointer(..)) => {
-                            chs_error!("{} {} {} {} is not defined.", e.token.loc, left, e.op, right);
-                        }
-                        (CHSType::Int, CHSType::Pointer(..)) => {
-                            e.ttype = Some(right.clone());
-                            Ok(right)
-                        }
-                        (CHSType::Pointer(..), CHSType::Int) => {
-                            e.ttype = Some(left.clone());
-                            Ok(left)
-                        }
-                        (CHSType::String, CHSType::Int) => {
-                            e.ttype = Some(CHSType::Pointer(Box::new(CHSType::Char)));
-                            Ok(CHSType::Pointer(Box::new(CHSType::Char)))
-                        }
-                        (CHSType::Int, CHSType::String) => {
-                            e.ttype = Some(CHSType::Pointer(Box::new(CHSType::Char)));
-                            Ok(CHSType::Pointer(Box::new(CHSType::Char)))
-                        }
-                        (CHSType::Int, CHSType::Int) => {
-                            e.ttype = Some(left.clone());
-                            Ok(left)
-                        }
-                        (CHSType::UInt, CHSType::UInt) => {
-                            e.ttype = Some(left.clone());
-                            Ok(left)
-                        }
-                        _ => chs_error!("{} {} {} {}  is not defined.", e.token.loc, left, e.op, right),
-                    }
-                }
-                Operator::Div | Operator::Mod | Operator::Mult => {
-                    let left = e.left.infer(hint, env)?;
-                    let right = e.right.infer(hint, env)?;
-                    match (&left, &right) {
-                        (a, b) if a.is_pointer() || b.is_pointer() => {
-                            chs_error!("{} {} {:?} {}  is not defined.", e.token.loc, left, e.op, right)
-                        }
-                        (CHSType::Int, CHSType::Int) => {
-                            e.ttype = Some(left.clone());
-                            Ok(left)
-                        }
-                        (CHSType::UInt, CHSType::UInt) => {
-                            e.ttype = Some(left.clone());
-                            Ok(left)
-                        }
-                        _ => chs_error!("{} {} {} {}  is not defined.", e.token.loc, left, e.op, right),
-                    }
-                }
-                Operator::Or => chs_error!("{} {} is not defined.", e.token.loc, e.op),
-                Operator::And => chs_error!("{} {} is not defined.", e.token.loc, e.op),
-                Operator::Negate | Operator::LNot | Operator::Refer | Operator::Deref => {
-                    unreachable!("Not a binary operator")
-                }
-            },
-            Expression::Unop(e) => {
-                let expect = e.left.infer(hint, env)?;
-                match e.op {
-                    Operator::LNot => {
-                        let actual = CHSType::Boolean;
-                        if !expect.equivalent(&actual) {
-                            chs_error!(
-                                "{} Argument type mismatch. Expect: {}  Actual: {}",
-                                e.token.loc,
-                                expect,
-                                actual
-                            );
-                        }
-                        e.ttype = Some(actual.clone());
-                        Ok(actual)
-                    }
-                    Operator::Negate => {
-                        e.ttype = Some(expect.clone());
-                        Ok(expect)
-                    }
-                    Operator::Deref => {
-                        if let CHSType::Pointer(ptr) = expect {
-                            e.ttype = Some(*ptr.clone());
-                            Ok(*ptr)
-                        } else {
-                            chs_error!("Cannot deref `{}` type", expect)
-                        }
-                    }
-                    Operator::Refer => {
-                        e.ttype = Some(expect.clone());
-                        Ok(CHSType::Pointer(Box::new(expect)))
-                    }
-                    _ => unreachable!("Not a unary operator"),
-                }
-            }
-        }
-    }
 }
 
 impl Expression {
@@ -487,39 +80,18 @@ impl Expression {
 }
 
 #[derive(Debug)]
-pub struct UseModuleDecl {
-    pub loc: Loc,
-    pub path: PathBuf,
-}
-
-#[derive(Debug)]
 pub struct FunctionDecl {
     pub name: Token,
+    pub fn_type: CHSType,
     pub args: Vec<(String, CHSType)>,
     pub ret_type: CHSType,
     pub body: Vec<Expression>,
 }
 
 #[derive(Debug)]
-pub struct ConstDecl {
-    pub loc: Loc,
-    pub name: String,
-    pub value: ConstExpression,
-    pub ttype: CHSType,
-}
-
-#[derive(Debug)]
-pub struct TypeDecl {
-    pub loc: Loc,
-    pub name: String,
-    pub ttype: CHSType,
-}
-
-#[derive(Debug)]
-pub struct GlobalDecl {
+pub struct ExternFunctionDecl {
     pub name: Token,
-    pub extrn: bool,
-    pub ttype: CHSType,
+    pub fn_type: CHSType
 }
 
 #[derive(Debug)]
@@ -527,7 +99,7 @@ pub struct Assign {
     pub token: Token,
     pub assigned: Expression,
     pub value: Expression,
-    pub ttype: Option<CHSType>,
+    pub ttype: Option<TypeMapLoc>,
 }
 
 #[derive(Debug)]

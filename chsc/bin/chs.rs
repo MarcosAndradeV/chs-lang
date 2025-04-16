@@ -9,8 +9,8 @@ use std::{
     process::{self, exit, ExitCode, Stdio},
 };
 
-use chs_ast::{nodes::TypedModule, parser::Parser, RawModule};
-use chs_codegen::FasmGenerator;
+use chs_ast::{ parser::Parser, RawModule};
+use chs_codegen::fasm;
 use chs_util::{chs_error, CHSError, CHSResult};
 
 use my_cli::{Cmd, MyCLI};
@@ -61,12 +61,10 @@ fn compile(
 
     let module = Parser::new(&raw_module).parse()?;
 
-    let typed_module = TypedModule::from_module(module)?;
+    let fasm_code = fasm::Module::new();
 
-    let fasm_code = FasmGenerator::generate(typed_module)?;
-
-    let fasm_path = fasm_code.out_path();
-    let mut out_file = File::create(fasm_path).map_err(|err| CHSError(err.to_string()))?;
+    let fasm_path = PathBuf::from(&raw_module.file_path).with_extension("asm");
+    let mut out_file = File::create(&fasm_path).map_err(|err| CHSError(err.to_string()))?;
     write!(out_file, "{}", fasm_code).map_err(|err| CHSError(err.to_string()))?;
     if !silent {
         println!("[INFO] Generating {}", fasm_path.display());
@@ -76,7 +74,7 @@ fn compile(
         None => fasm_path.with_extension("o"),
     };
     let mut fasm_proc = process::Command::new("fasm");
-    fasm_proc.arg(fasm_path).arg(&fasm_output_path);
+    fasm_proc.arg(&fasm_path).arg(&fasm_output_path);
 
     if silent {
         fasm_proc.stdout(Stdio::null());

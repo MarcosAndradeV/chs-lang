@@ -1,6 +1,5 @@
-use std::{fmt, path::PathBuf};
+use std::fmt;
 
-use chs_util::{CHSResult, chs_error};
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -39,23 +38,6 @@ impl SizeOperator {
 
     pub fn bit_size(&self) -> usize {
         self.byte_size() * 8
-    }
-
-    pub fn from_chstype(
-        ttype: &chs_types::CHSType,
-        type_map: &chs_types::TypeMap,
-    ) -> CHSResult<Self> {
-        match ttype {
-            chs_types::CHSType::Pointer(_)
-            | chs_types::CHSType::Function(_, _)
-            | chs_types::CHSType::String
-            | chs_types::CHSType::Int
-            | chs_types::CHSType::UInt => Ok(Self::Qword),
-            chs_types::CHSType::Char | chs_types::CHSType::Boolean => Ok(Self::Byte),
-            chs_types::CHSType::Void => {
-                chs_error!("Cannot get size form void. Bug in type checker")
-            }
-        }
     }
 
     pub fn register_for_size(&self, reg: Register) -> Register {
@@ -617,21 +599,16 @@ impl fmt::Display for Function {
 #[derive(Debug, Default, Clone)]
 pub struct Module {
     link_with_c: bool,
-    extrn: Vec<String>,
-    out_path: PathBuf,
     start: Block,
     functions: Vec<Function>,
+    extrn: Vec<String>,
     data: Vec<DataDef>,
 }
 
 impl Module {
-    pub fn new(out_path: PathBuf, extrn: Vec<String>) -> Module {
-        let start = Block::new("");
+    pub fn new() -> Module {
         Module {
-            link_with_c: false,
-            extrn,
-            out_path,
-            start,
+            start: Block::new(""),
             ..Default::default()
         }
     }
@@ -648,10 +625,6 @@ impl Module {
 
     pub fn push_raw_instr_to_start(&mut self, instr: impl Into<String>) {
         self.start.push_instr(Instr::Raw(instr.into()));
-    }
-
-    pub fn out_path(&self) -> &PathBuf {
-        &self.out_path
     }
 
     pub fn link_with_c(&mut self, arg: bool) {

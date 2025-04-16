@@ -49,8 +49,7 @@ impl<'src> Parser<'src> {
     /// Top-level parser loop.
     pub fn parse(mut self) -> CHSResult<Module<'src>> {
         use chs_lexer::TokenKind::*;
-        let mut global_decls: Vec<GlobalDecl> = vec![];
-        let mut function_decls: Vec<FunctionDecl> = vec![];
+        let mut items: Vec<ModuleItem> = vec![];
         while {
             let token = self.next();
             if token.is_eof() {
@@ -69,17 +68,14 @@ impl<'src> Parser<'src> {
                             args.iter().map(|(_, t)| t.clone()).collect(),
                             Box::new(ret_type.clone()),
                         );
-                        global_decls.push(GlobalDecl {
-                            name: ident_token.clone(),
-                            extrn: false,
-                            ttype: fn_type,
-                        });
-                        function_decls.push(FunctionDecl {
+                        let function_decl = FunctionDecl {
                             name: ident_token,
+                            fn_type,
                             args,
                             ret_type,
                             body,
-                        });
+                        };
+                        items.push(ModuleItem::Function(function_decl));
                     }
                     KeywordExtern => {
                         self.expect_kind(KeywordFn)?;
@@ -87,14 +83,14 @@ impl<'src> Parser<'src> {
                         self.expect_kind(OpenParen)?;
                         let (args, ret_type) = self.parse_fn_type_iterative()?;
                         let fn_type = CHSType::Function(
-                            args.iter().map(|(_, t)| t.clone()).collect(),
-                            Box::new(ret_type.clone()),
+                            args.into_iter().map(|(_, t)| t).collect(),
+                            Box::new(ret_type),
                         );
-                        global_decls.push(GlobalDecl {
+                        let function_decl = ExternFunctionDecl {
                             name: ident_token,
-                            extrn: true,
-                            ttype: fn_type,
-                        });
+                            fn_type
+                        };
+                        items.push(ModuleItem::ExternFunction(function_decl));
                     }
                     _ => {
                         chs_error!(
@@ -109,10 +105,7 @@ impl<'src> Parser<'src> {
         } {}
         Ok(Module {
             raw_module: self.module,
-            imported_modules: Default::default(),
-            type_decls: Default::default(),
-            global_decls,
-            function_decls
+            items
         })
     }
 
