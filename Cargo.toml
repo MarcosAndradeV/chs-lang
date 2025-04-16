@@ -4,7 +4,8 @@ members = [
     "chs_lexer",
     "chs_ast",
     "chs_types",
-    "chs_util", "chs_codegen",
+    "chs_util",
+    "chs_codegen", "test_maker",
 ]
 resolver = "2"
 

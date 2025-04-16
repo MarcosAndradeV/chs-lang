@@ -48,3 +48,7 @@ dependencies = [
  "chs_lexer",
  "chs_util",
 ]
+
+[[package]]
+name = "test_maker"
+version = "0.1.0"
