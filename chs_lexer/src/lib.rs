@@ -73,7 +73,7 @@ impl<'src> Lexer<'src> {
                 // b'\'' => self.lex_char(),
 
                 // b'.' => Token::from_u8(loc, TokenKind::Dot, ch),
-                // b',' => Token::from_u8(loc, TokenKind::Comma, ch),
+                b',' => return Token::new(TokenKind::Comma, loc, &self.source[begin..self.pos]),
                 b';' => {
                     return Token::new(TokenKind::SemiColon, loc, &self.source[begin..self.pos]);
                 }
@@ -189,7 +189,7 @@ impl<'src> Lexer<'src> {
             }
             self.advance();
         }
-        Token::new(kind, loc, &self.source[begin+1..self.pos-1])
+        Token::new(kind, loc, &buffer)
     }
 
     pub fn loc(&self) -> Loc {
