@@ -326,11 +326,11 @@ mod tests {
     fn test_lexer_kinds() {
         let source = "fn main() end";
         let mut lex = Lexer::new(source);
-        assert!(lex.next().kind == TokenKind::Keyword);
+        assert!(lex.next().kind == TokenKind::KeywordFn);
         assert!(lex.next().kind == TokenKind::Identifier);
         assert!(lex.next().kind == TokenKind::OpenParen);
         assert!(lex.next().kind == TokenKind::CloseParen);
-        assert!(lex.next().kind == TokenKind::Keyword);
+        assert!(lex.next().kind == TokenKind::KeywordEnd);
     }
 
     #[test]
