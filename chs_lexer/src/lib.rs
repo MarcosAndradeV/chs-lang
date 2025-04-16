@@ -61,10 +61,10 @@ impl<'src> Lexer<'src> {
                 //     self.advance();
                 //     Token::from_string(loc, TokenKind::NotEq, "!=".to_string())
                 // }
-                // b'|' if self.read_char() == b'|' => {
-                //     self.advance();
-                //     Token::from_string(loc, TokenKind::DoublePipe, "!=".to_string())
-                // }
+                b'|' if self.read_char() == b'|' => {
+                    self.advance();
+                    return Token::new(TokenKind::DoublePipe, loc, &self.source[begin..self.pos]);
+                }
                 b'a'..=b'z' | b'A'..=b'Z' | b'_' => {
                     return self.lex_identfier_or_keyword(begin);
                 }
@@ -105,8 +105,6 @@ impl<'src> Lexer<'src> {
                 // b'{' => Token::from_u8(loc, TokenKind::CurlyOpen, ch),
                 // b'}' => Token::from_u8(loc, TokenKind::CurlyClose, ch),
 
-                // b'[' => Token::from_u8(loc, TokenKind::SquareOpen, ch),
-                // b']' => Token::from_u8(loc, TokenKind::SquareClose, ch),
                 ch if ch.is_ascii_whitespace() => continue,
                 0 => return Token::new(TokenKind::EOF, self.loc, &self.source[begin..begin]),
                 _ => return Token::new(TokenKind::Invalid, loc, &self.source[begin..self.pos]),
