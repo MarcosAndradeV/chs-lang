@@ -82,6 +82,7 @@ impl<'src> Parser<'src> {
                         });
                     }
                     KeywordExtern => {
+                        self.expect_kind(KeywordFn)?;
                         let ident_token = self.expect_kind(Identifier)?;
                         self.expect_kind(OpenParen)?;
                         let (args, ret_type) = self.parse_fn_type_iterative()?;
@@ -461,7 +462,7 @@ impl<'src> Parser<'src> {
                     let value = self.parse_type_iterative()?;
                     list.push((token.source.to_string(), value));
                 }
-                _ => chs_error!("Unexpected token in function type"),
+                _ => chs_error!("{} Unexpected token in function type `{}`", ptoken.loc, ptoken.source),
             }
         }
     }
