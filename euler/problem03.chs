@@ -1,4 +1,4 @@
-fn main()
+fn main() -> int
     fac := 2
     n := 600851475143
     while(n > 1)
@@ -9,4 +9,5 @@ fn main()
         end
     end
     print_int(fac)
+    0
 end

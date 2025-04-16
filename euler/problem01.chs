@@ -1,4 +1,4 @@
-fn main()
+fn main() -> int
     acc := 0
     i := 0
     while(i < 1000)
@@ -8,4 +8,5 @@ fn main()
         set i = i + 1
     end
     print_int(acc)
+    0
 end

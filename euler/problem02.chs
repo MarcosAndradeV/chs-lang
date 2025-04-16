@@ -1,4 +1,4 @@
-fn main()
+fn main() -> int
     a := 1
     b := 2
     acc := 0
@@ -9,4 +9,5 @@ fn main()
         set a = c
     end
     print_int(acc)
+    0
 end

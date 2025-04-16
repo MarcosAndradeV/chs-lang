@@ -1,4 +1,4 @@
-fn main()
+fn main() -> int
     acc := 0
     a := 999
     while(a > 100)
@@ -15,6 +15,7 @@ fn main()
         set a = a - 1
     end
     print_int(acc)
+    0
 end
 
 fn is_pal(i: int) -> bool
