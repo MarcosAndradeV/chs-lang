@@ -37,25 +37,36 @@ The CHS compiler is currently functional, allowing for basic program compilation
 
 Install [Rust](https://www.rust-lang.org/) and [fasm](https://flatassembler.net/) make sure it's available in `$PATH`.
 
-```console
-$ make chs.
+```bash
+cargo build --release --bin chs
+cp -v target/release .
 ```
 
 ### Testing:
 
-```console
-$ ./rere.py replay test.list
+```bash
+cargo run --bin test_maker
+# Usage: test_maker [OPTIONS] <TASK>
+# Options:
+#   --test-folder <FOLDER> Set test folder. Default: ./tests
+#   --test-file <FILE>     Switch to single file mode
+# Tasks:
+#   --record, -r           Record tests
+#   --replay, -p           Replay tests
+#   --write, -w            Write tests
+#   --reset                Reset tests
+#   --help, -h             Print this help message
 ```
+
 
 ### Usage:
 
-```console
-$ ./chs
-Usage: chs <COMMAND> [ARGS] [[-|--]FLAG]
-COMMANDS:
-    help                                                    Print help message
-    compile <INPUT> [--emit-asm]  [-o <OUTPUT>] [-r]  [-s]  Compiles the program.
-    check <INPUT>                                           Check the program compile.
+```bash
+./chs
+# Usage: target/debug/chs <COMMAND> [ARGS] [[-|--]FLAG]
+# COMMANDS:
+#     help                                                    Print help message
+#     compile <INPUT> [--emit-asm]  [-o <OUTPUT>] [-r]  [-s]  Compiles the program.
 ```
 
 ### Editor Support:
@@ -67,12 +78,10 @@ COMMANDS:
 ### Examples
 
 - Hello, World:
-    
-```chs
-use "std.chs"
 
+```chs
 fn main()
-   puts("Hello from CHS\n")
+  puts("Hello from CHS")
 end
 ```
 
