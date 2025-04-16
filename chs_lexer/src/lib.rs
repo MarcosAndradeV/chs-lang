@@ -79,15 +79,15 @@ impl<'src> Lexer<'src> {
                 }
                 b':' => return Token::new(TokenKind::Colon, loc, &self.source[begin..self.pos]),
                 b'=' => return Token::new(TokenKind::Assign, loc, &self.source[begin..self.pos]),
+                b'<' => return Token::new(TokenKind::Lt, loc, &self.source[begin..self.pos]),
+                b'>' => return Token::new(TokenKind::Gt, loc, &self.source[begin..self.pos]),
 
                 b'!' => return Token::new(TokenKind::Bang, loc, &self.source[begin..self.pos]),
                 b'+' => return Token::new(TokenKind::Plus, loc, &self.source[begin..self.pos]),
                 b'-' => return Token::new(TokenKind::Minus, loc, &self.source[begin..self.pos]),
                 b'*' => return Token::new(TokenKind::Asterisk, loc, &self.source[begin..self.pos]),
                 b'/' => return Token::new(TokenKind::Slash, loc, &self.source[begin..self.pos]),
-                // b'>' => Token::from_u8(loc, TokenKind::Gt, ch),
-                // b'<' => Token::from_u8(loc, TokenKind::Lt, ch),
-                // b'%' => Token::from_u8(loc, TokenKind::Mod, ch),
+                b'%' => return Token::new(TokenKind::Mod, loc, &self.source[begin..self.pos]),
                 // b'&' => Token::from_u8(loc, TokenKind::Ampersand, ch),
                 // b'|' => Token::from_u8(loc, TokenKind::Pipe, ch),
                 b'(' => {
