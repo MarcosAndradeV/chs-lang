@@ -9,7 +9,7 @@ use std::{
     process::{self, exit, ExitCode, Stdio},
 };
 
-use chs_ast::{ parser::Parser, RawModule};
+use chs_ast::{ hir::HIRModule, parser::Parser, RawModule};
 use chs_codegen::fasm;
 use chs_util::{return_chs_error, CHSError, CHSResult};
 
@@ -61,6 +61,8 @@ fn compile(
     let raw_module = RawModule::new(chs_ast::read_flie(&file_path), file_path);
 
     let module = Parser::new(&raw_module).parse()?;
+
+    let module = HIRModule::from_ast_module(module);
 
     dbg!(module);
     todo!();
