@@ -1,6 +1,5 @@
 use std::fmt;
 
-
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SizeOperator {
@@ -206,7 +205,7 @@ pub enum Addr {
     BaseIndexXScale(Register, Register, u8),
     IndexXScaleDisplacement(Register, u8, i32),
     BaseIndexXScaleDisplacement(Register, Register, u8, i32),
-    Displacement(i32)
+    Displacement(i32),
 }
 
 impl fmt::Display for Addr {
@@ -214,12 +213,35 @@ impl fmt::Display for Addr {
         match self {
             Addr::Base(reg) => write!(f, "{reg}"),
             Addr::BaseIndex(reg1, reg2) => write!(f, "{reg1}+{reg2}"),
-            Addr::BaseDisplacement(reg, dis) => if *dis > 0 { write!(f, "{reg}+{dis}")} else {write!(f, "{reg}{dis}")},
-            Addr::BaseIndexDisplacement(reg1, reg2, dis) => if *dis > 0 { write!(f, "{reg1}{reg2}+{dis}")} else {write!(f, "{reg1}{reg2}{dis}")},
-            Addr::BaseIndexXScale(reg1, reg2, s) =>  write!(f, "{reg1}+{reg2}*{s}"),
-            Addr::IndexXScaleDisplacement(reg1, s, dis) => if *dis > 0 { write!(f, "{reg1}*{s}+{dis}")} else {write!(f, "{reg1}*{s}{dis}")},
-            Addr::BaseIndexXScaleDisplacement(reg1, reg2, s, dis) =>
-                if *dis > 0 { write!(f, "{reg1}+{reg2}*{s}+{dis}")} else {write!(f, "{reg1}+{reg2}*{s}{dis}")},
+            Addr::BaseDisplacement(reg, dis) => {
+                if *dis > 0 {
+                    write!(f, "{reg}+{dis}")
+                } else {
+                    write!(f, "{reg}{dis}")
+                }
+            }
+            Addr::BaseIndexDisplacement(reg1, reg2, dis) => {
+                if *dis > 0 {
+                    write!(f, "{reg1}{reg2}+{dis}")
+                } else {
+                    write!(f, "{reg1}{reg2}{dis}")
+                }
+            }
+            Addr::BaseIndexXScale(reg1, reg2, s) => write!(f, "{reg1}+{reg2}*{s}"),
+            Addr::IndexXScaleDisplacement(reg1, s, dis) => {
+                if *dis > 0 {
+                    write!(f, "{reg1}*{s}+{dis}")
+                } else {
+                    write!(f, "{reg1}*{s}{dis}")
+                }
+            }
+            Addr::BaseIndexXScaleDisplacement(reg1, reg2, s, dis) => {
+                if *dis > 0 {
+                    write!(f, "{reg1}+{reg2}*{s}+{dis}")
+                } else {
+                    write!(f, "{reg1}+{reg2}*{s}{dis}")
+                }
+            }
             Addr::Displacement(_) => todo!(),
         }
     }

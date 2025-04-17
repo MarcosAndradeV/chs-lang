@@ -9,7 +9,9 @@ use std::{
     process::{self, exit, ExitCode, Stdio},
 };
 
-use chs_ast::{ mir::MIRModule, hir::HIRModule, typechecker::TypeChecker, parser::Parser, RawModule};
+use chs_ast::{
+    hir::HIRModule, mir::MIRModule, parser::Parser, typechecker::TypeChecker, RawModule,
+};
 use chs_codegen::mir::MIRTranslator;
 use chs_util::{return_chs_error, CHSError, CHSResult};
 
@@ -57,7 +59,6 @@ fn compile(
     silent: bool,
     emit_asm: bool,
 ) -> CHSResult<()> {
-
     let raw_module = RawModule::new(chs_ast::read_flie(&file_path), file_path);
 
     let module = Parser::new(&raw_module).parse()?;
@@ -104,7 +105,11 @@ fn compile(
     };
 
     let mut gcc_proc = process::Command::new("gcc");
-    gcc_proc.arg("-static").arg("-o").arg(&gcc_output_path).arg(&fasm_output_path);
+    gcc_proc
+        .arg("-static")
+        .arg("-o")
+        .arg(&gcc_output_path)
+        .arg(&fasm_output_path);
 
     if silent {
         gcc_proc.stdout(Stdio::null());
@@ -137,9 +142,7 @@ fn compile(
             .spawn()
             .expect("Failed to spawn run process");
 
-        let result = run_proc
-            .wait_with_output()
-            .expect("Failed to wait for run");
+        let result = run_proc.wait_with_output().expect("Failed to wait for run");
         if !result.status.success() {
             return_chs_error!("Failed {}", String::from_utf8_lossy(&result.stderr));
         }

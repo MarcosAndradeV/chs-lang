@@ -50,10 +50,7 @@ impl fmt::Display for Loc {
 
 impl Loc {
     pub fn new(line: usize, col: usize) -> Self {
-        Self {
-            line,
-            col,
-        }
+        Self { line, col }
     }
 
     pub fn next_column(&mut self) {

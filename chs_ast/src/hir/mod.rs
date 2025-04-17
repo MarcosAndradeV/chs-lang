@@ -9,19 +9,18 @@ use crate::nodes::Operator;
 #[derive(Debug)]
 pub struct HIROperator {
     pub span: Span<String>,
-    pub op: Operator
+    pub op: Operator,
 }
 
 impl HIROperator {
-
     fn from_ast_op(token: Token, op: Operator) -> HIROperator {
         Self {
             span: Span::from(token),
-            op
+            op,
         }
     }
 
-    pub fn get_type_of_op(&self, lty: &CHSType, rty: &CHSType) -> CHSResult<CHSType>{
+    pub fn get_type_of_op(&self, lty: &CHSType, rty: &CHSType) -> CHSResult<CHSType> {
         self.op.get_type_of_op(lty, rty)
     }
 }
@@ -180,20 +179,21 @@ pub enum HIRExpr {
         arity: usize,
         args: Vec<HIRExpr>,
     },
-    Return { span: Span<()>, expr: Option<Box<HIRExpr>> }
+    Return {
+        span: Span<()>,
+        expr: Option<Box<HIRExpr>>,
+    },
 }
 
 impl chs_types::CHSInfer for HIRExpr {
     fn infer(&self, _env: &chs_types::TypeEnv) -> CHSType {
         match self {
-            HIRExpr::Literal(l) => {
-                match l {
-                    HIRLiteral::Int(_) => CHSType::Int,
-                    HIRLiteral::Bool(_) => CHSType::Boolean,
-                    HIRLiteral::Str(_) => CHSType::String,
-                    HIRLiteral::Char(_) => CHSType::Char,
-                    HIRLiteral::Void => CHSType::Void,
-                }
+            HIRExpr::Literal(l) => match l {
+                HIRLiteral::Int(_) => CHSType::Int,
+                HIRLiteral::Bool(_) => CHSType::Boolean,
+                HIRLiteral::Str(_) => CHSType::String,
+                HIRLiteral::Char(_) => CHSType::Char,
+                HIRLiteral::Void => CHSType::Void,
             },
             HIRExpr::Identifier(_) => todo!(),
             HIRExpr::Binary { .. } => todo!(),
@@ -204,16 +204,21 @@ impl chs_types::CHSInfer for HIRExpr {
             HIRExpr::Assign { .. } => todo!(),
             HIRExpr::VarDecl { .. } => todo!(),
             HIRExpr::Block(..) => todo!(),
-            HIRExpr::If { else_branch: Some(else_branch) , .. } => {
-                else_branch.infer(_env)
-            },
-            HIRExpr::If { .. } => {
-                CHSType::Void
-            },
+            HIRExpr::If {
+                else_branch: Some(else_branch),
+                ..
+            } => else_branch.infer(_env),
+            HIRExpr::If { .. } => CHSType::Void,
             HIRExpr::While { .. } => todo!(),
             HIRExpr::Syscall { .. } => todo!(),
-            HIRExpr::Return{ span: _, expr: Some(e) } => e.infer(_env),
-            HIRExpr::Return{ span: _, expr: None } => CHSType::Void,
+            HIRExpr::Return {
+                span: _,
+                expr: Some(e),
+            } => e.infer(_env),
+            HIRExpr::Return {
+                span: _,
+                expr: None,
+            } => CHSType::Void,
         }
     }
 }
@@ -297,9 +302,9 @@ impl HIRExpr {
                     expressions: w.body.into_iter().map(HIRExpr::from_ast_expr).collect(),
                 },
             },
-            nodes::Expression::ReturnExpression(r) => HIRExpr::Return{
+            nodes::Expression::ReturnExpression(r) => HIRExpr::Return {
                 span: Span::from(r.token),
-                expr: r.expr.map(|e| HIRExpr::from_ast_expr(e).into())
+                expr: r.expr.map(|e| HIRExpr::from_ast_expr(e).into()),
             },
         }
     }

@@ -1,7 +1,7 @@
-pub mod nodes;
-pub mod parser;
 pub mod hir;
 pub mod mir;
+pub mod nodes;
+pub mod parser;
 pub mod typechecker;
 
 #[derive(Debug)]
@@ -31,7 +31,6 @@ impl ops::Index<&Token> for RawModule {
         &self.source[index.source.start..index.source.end]
     }
 }
-
 
 use std::{fs, ops, path::Path, process::exit};
 

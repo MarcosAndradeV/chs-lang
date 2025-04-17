@@ -1,4 +1,4 @@
-use chs_util::{return_chs_error, CHSResult};
+use chs_util::{CHSResult, return_chs_error};
 use std::{collections::HashMap, fmt, rc::Rc};
 
 /// Represents a type variable used in type inference
@@ -78,7 +78,8 @@ impl fmt::Display for CHSType {
                 f,
                 "{}<{}>",
                 name,
-                params.iter()
+                params
+                    .iter()
                     .map(|p| p.to_string())
                     .collect::<Vec<String>>()
                     .join(", ")
@@ -145,12 +146,12 @@ impl TypeEnv {
     }
 
     /// Adds a type declaration
-    pub fn global_insert(&mut self, k: impl ToString, v: Rc<CHSType>)-> Option<Rc<CHSType>> {
+    pub fn global_insert(&mut self, k: impl ToString, v: Rc<CHSType>) -> Option<Rc<CHSType>> {
         self.globals.insert(k.to_string(), v)
     }
 
     // Get a global type declaration
-    pub fn global_get(&mut self, k: &str)-> Option<&CHSType> {
+    pub fn global_get(&mut self, k: &str) -> Option<&CHSType> {
         self.globals.get(k).map(|v| v.as_ref())
     }
 

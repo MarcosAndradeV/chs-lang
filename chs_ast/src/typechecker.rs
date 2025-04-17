@@ -293,9 +293,9 @@ impl<'src> TypeChecker<'src> {
                 else_branch,
             } => {
                 let cond_type = self.check_expr(condition)?;
-                self.env.unify(&cond_type, &CHSType::Boolean).map_err(|_|{
-                    chs_error!("{} Expected boolean condition", span.loc)
-                })?;
+                self.env
+                    .unify(&cond_type, &CHSType::Boolean)
+                    .map_err(|_| chs_error!("{} Expected boolean condition", span.loc))?;
 
                 let then_type = self.check_block(then_branch)?;
                 if let Some(else_branch) = else_branch {
@@ -306,21 +306,29 @@ impl<'src> TypeChecker<'src> {
                     Ok(CHSType::Void)
                 }
             }
-            HIRExpr::While { span, condition, body } => {
+            HIRExpr::While {
+                span,
+                condition,
+                body,
+            } => {
                 let cond_type = self.check_expr(condition)?;
-                self.env.unify(&cond_type, &CHSType::Boolean).map_err(|_|{
-                    chs_error!("{} Expected boolean condition", span.loc)
-                })?;
+                self.env
+                    .unify(&cond_type, &CHSType::Boolean)
+                    .map_err(|_| chs_error!("{} Expected boolean condition", span.loc))?;
                 self.check_block(body)?;
                 Ok(CHSType::Void)
             }
-            HIRExpr::Syscall { span: _, arity: _, args } => {
+            HIRExpr::Syscall {
+                span: _,
+                arity: _,
+                args,
+            } => {
                 for arg in args {
                     self.check_expr(arg)?;
                 }
                 Ok(CHSType::Int)
             }
-            HIRExpr::Return{ span: _, expr } => {
+            HIRExpr::Return { span: _, expr } => {
                 if let Some(expr) = expr {
                     self.check_expr(expr)
                 } else {

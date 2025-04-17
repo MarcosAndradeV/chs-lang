@@ -245,7 +245,10 @@ impl Cmd {
     }
 
     pub fn arg(mut self, name: &str, pos: u64) -> Self {
-        assert!(self.args.insert(pos, name.to_string()).is_none(), "Positon must be unique");
+        assert!(
+            self.args.insert(pos, name.to_string()).is_none(),
+            "Positon must be unique"
+        );
         self
     }
 

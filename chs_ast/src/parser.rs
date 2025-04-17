@@ -316,7 +316,10 @@ impl<'src> Parser<'src> {
                 let ptoken = self.next();
                 let args = self.parse_expr_list_iterative(|tk| tk.kind == CloseParen)?;
                 if args.len() != 0 {
-                    return_chs_error!("{} Syscall must have at least one argument the syscall number", ptoken.loc);
+                    return_chs_error!(
+                        "{} Syscall must have at least one argument the syscall number",
+                        ptoken.loc
+                    );
                 }
                 Ok(Expression::Syscall(Box::new(Syscall {
                     token: ptoken,
