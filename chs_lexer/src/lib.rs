@@ -195,7 +195,7 @@ impl<'src> Lexer<'src> {
     }
 }
 
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct Span<T> {
     _marker: PhantomData<T>,
     pub start: usize,
