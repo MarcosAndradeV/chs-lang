@@ -171,7 +171,7 @@ impl<'src> Parser<'src> {
                                  // Parse next primary expression as the right-hand side.
                     expr_stack.push(self.parse_primary_iterative()?);
                     // After pushing, combine operators if the next operator has lower precedence.
-                    while let Some(&(ref top_op, _)) = op_stack.last() {
+                    while let Some((top_op, _)) = op_stack.last() {
                         if let Some(next_token) = self.peek_if_op() {
                             let next_op = Operator::from_token(next_token, false)?;
                             if next_op.precedence() >= top_op.precedence() {
@@ -315,7 +315,7 @@ impl<'src> Parser<'src> {
             KeywordSyscall => {
                 let ptoken = self.next();
                 let args = self.parse_expr_list_iterative(|tk| tk.kind == CloseParen)?;
-                if args.len() != 0 {
+                if !args.is_empty() {
                     return_chs_error!(
                         "{} Syscall must have at least one argument the syscall number",
                         ptoken.loc
@@ -542,9 +542,9 @@ impl<'src> Parser<'src> {
             Identifier if self.peek().kind == TokenKind::Lt => {
                 self.next();
                 let v = self.parse_generic_type_iterative()?;
-                CHSType::Generic((&self.module[&ttoken]).to_string(), v)
+                CHSType::Generic(self.module[&ttoken].to_string(), v)
             }
-            Identifier => CHSType::Generic((&self.module[&ttoken]).to_string(), vec![]),
+            Identifier => CHSType::Generic(self.module[&ttoken].to_string(), vec![]),
             OpenSquare => {
                 // TODO: Add support for [<type>; <size>] array types
                 let ttp = self.parse_type_iterative()?;
