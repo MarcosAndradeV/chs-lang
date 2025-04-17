@@ -62,16 +62,16 @@ impl<'src> Parser<'src> {
                     KeywordFn => {
                         let ident_token = self.expect_kind(Identifier)?;
                         self.expect_kind(OpenParen)?;
-                        let (args, ret_type) = self.parse_fn_type_iterative()?;
+                        let (params, ret_type) = self.parse_fn_type_iterative()?;
                         let body = self.parse_expr_list_iterative(|tk| tk.kind == KeywordEnd)?;
                         let fn_type = CHSType::Function(
-                            args.iter().map(|(_, t)| t.clone()).collect(),
+                            params.iter().map(|t| t.ty.clone()).collect(),
                             Box::new(ret_type.clone()),
                         );
                         let function_decl = FunctionDecl {
                             name: ident_token,
                             fn_type,
-                            args,
+                            params,
                             ret_type,
                             body,
                         };
@@ -83,7 +83,7 @@ impl<'src> Parser<'src> {
                         self.expect_kind(OpenParen)?;
                         let (args, ret_type) = self.parse_fn_type_iterative()?;
                         let fn_type = CHSType::Function(
-                            args.into_iter().map(|(_, t)| t).collect(),
+                            args.into_iter().map(|t| t.ty).collect(),
                             Box::new(ret_type),
                         );
                         let function_decl = ExternFunctionDecl {
@@ -130,12 +130,11 @@ impl<'src> Parser<'src> {
                     self.next(); // consume ParenOpen
                     let args =
                         self.parse_expr_list_iterative(|tk| tk.kind == TokenKind::CloseParen)?;
-                    let caller = expr_stack.pop().unwrap();
+                    let callee = expr_stack.pop().unwrap();
                     expr_stack.push(Expression::Call(Box::new(Call {
                         token: ptoken,
-                        caller,
+                        callee,
                         args,
-                        ttype: None,
                     })));
                     continue;
                 }
@@ -146,9 +145,8 @@ impl<'src> Parser<'src> {
                     let left = expr_stack.pop().unwrap();
                     expr_stack.push(Expression::Index(Box::new(Index {
                         token: ptoken,
-                        left,
+                        base: left,
                         index,
-                        ttype: None,
                     })));
                     continue;
                 }
@@ -183,7 +181,6 @@ impl<'src> Parser<'src> {
                             op,
                             left,
                             right,
-                            ttype: None,
                         })));
                     }
                     continue;
@@ -203,7 +200,6 @@ impl<'src> Parser<'src> {
                 op,
                 left,
                 right,
-                ttype: None,
             })));
         }
         if expr_stack.len() != 1 {
@@ -243,7 +239,7 @@ impl<'src> Parser<'src> {
                 let value = self.parse_expression_iterative(Precedence::Lowest)?;
                 Ok(Expression::VarDecl(Box::new(VarDecl {
                     token,
-                    ttype,
+                    ty: ttype,
                     value,
                 })))
             }
@@ -253,7 +249,7 @@ impl<'src> Parser<'src> {
                 let value = self.parse_expression_iterative(Precedence::Lowest)?;
                 Ok(Expression::Assign(Box::new(nodes::Assign {
                     token,
-                    assigned,
+                    target: assigned,
                     value,
                 })))
             }
@@ -291,7 +287,7 @@ impl<'src> Parser<'src> {
                 let casted = self.parse_expression_iterative(Precedence::Prefix)?;
                 Ok(Expression::Cast(Box::new(Cast {
                     token,
-                    ttype,
+                    to_type: ttype,
                     casted,
                 })))
             }
@@ -310,8 +306,7 @@ impl<'src> Parser<'src> {
                 Ok(Expression::Unop(Box::new(Unop {
                     op: Operator::from_token(&token, true)?,
                     token,
-                    left: expr,
-                    ttype: None,
+                    operand: expr,
                 })))
             }
             OpenParen => {
@@ -426,7 +421,7 @@ impl<'src> Parser<'src> {
     }
 
     /// Iterative version of parsing a function type.
-    fn parse_fn_type_iterative(&mut self) -> CHSResult<(Vec<(String, CHSType)>, CHSType)> {
+    fn parse_fn_type_iterative(&mut self) -> CHSResult<(Vec<Param>, CHSType)> {
         use chs_lexer::TokenKind::*;
         let mut list = vec![];
         let mut ret_type = CHSType::Void;
@@ -449,7 +444,7 @@ impl<'src> Parser<'src> {
                     let token = self.next();
                     self.expect_kind(Colon)?;
                     let value = self.parse_type_iterative()?;
-                    list.push(((&self.module[&token]).to_string(), value));
+                    list.push(Param { name: token, ty: value });
                 }
                 _ => {
                     let token = self.next();
@@ -509,7 +504,7 @@ impl<'src> Parser<'src> {
             KeywordFn => {
                 self.next();
                 let (args, ret) = self.parse_fn_type_iterative()?;
-                CHSType::Function(args.into_iter().map(|(_, t)| t).collect(), Box::new(ret))
+                CHSType::Function(args.into_iter().map(|t| t.ty).collect(), Box::new(ret))
             }
             _ => return_chs_error!("{} Type not implemented {}", ttoken.loc, &self.module[&ttoken]),
         };

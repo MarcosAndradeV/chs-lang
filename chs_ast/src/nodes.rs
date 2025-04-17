@@ -1,5 +1,5 @@
 use chs_lexer::{Span, Token};
-use chs_util::{return_chs_error, CHSError, Loc};
+use chs_util::{return_chs_error, CHSError};
 use std::fmt;
 
 use chs_types::CHSType;
@@ -25,20 +25,17 @@ pub enum ConstExpression {
     BooleanLiteral(Span<bool>),
     StringLiteral(Span<String>),
     CharLiteral(Span<char>),
-    Void,
 }
 
 #[derive(Debug)]
 pub enum Expression {
     ConstExpression(ConstExpression),
-    ExpressionList(ExpressionList),
     Binop(Box<Binop>),
     Unop(Box<Unop>),
     Call(Box<Call>),
     Cast(Box<Cast>),
     Index(Box<Index>),
     Syscall(Box<Syscall>),
-    Array(Box<Array>),
     VarDecl(Box<VarDecl>),
     Assign(Box<Assign>),
     Group(Box<Self>),
@@ -64,19 +61,21 @@ impl Expression {
             _ => return_chs_error!("{} Unsupported literal", token.loc),
         }
     }
-
-    pub fn is_expression_list(&self) -> bool {
-        matches!(self, Self::ExpressionList(..))
-    }
 }
 
 #[derive(Debug)]
 pub struct FunctionDecl {
     pub name: Token,
     pub fn_type: CHSType,
-    pub args: Vec<(String, CHSType)>,
+    pub params: Vec<Param>,
     pub ret_type: CHSType,
     pub body: Vec<Expression>,
+}
+
+#[derive(Debug)]
+pub struct Param {
+    pub name: Token,
+    pub ty: CHSType,
 }
 
 #[derive(Debug)]
@@ -88,7 +87,7 @@ pub struct ExternFunctionDecl {
 #[derive(Debug)]
 pub struct Assign {
     pub token: Token,
-    pub assigned: Expression,
+    pub target: Expression,
     pub value: Expression,
 }
 
@@ -118,37 +117,28 @@ pub struct WhileExpression {
 pub struct VarDecl {
     pub token: Token,
     pub value: Expression,
-    pub ttype: Option<CHSType>,
+    pub ty: Option<CHSType>,
 }
 
 #[derive(Debug)]
 pub struct Cast {
     pub token: Token,
-    pub ttype: CHSType,
+    pub to_type: CHSType,
     pub casted: Expression,
 }
 
 #[derive(Debug)]
 pub struct Index {
     pub token: Token,
-    pub left: Expression,
+    pub base: Expression,
     pub index: Expression,
-    pub ttype: Option<CHSType>,
-}
-
-#[derive(Debug)]
-pub struct ExpressionList {
-    pub token: Token,
-    pub exprs: Vec<Expression>,
-    pub ttype: Option<CHSType>,
 }
 
 #[derive(Debug)]
 pub struct Call {
     pub token: Token,
-    pub caller: Expression,
+    pub callee: Expression,
     pub args: Vec<Expression>,
-    pub ttype: Option<CHSType>,
 }
 
 #[derive(Debug)]
@@ -159,27 +149,18 @@ pub struct Syscall {
 }
 
 #[derive(Debug)]
-pub struct Array {
-    pub loc: Loc,
-    pub ttype: CHSType,
-    pub size: u64,
-}
-
-#[derive(Debug)]
 pub struct Binop {
     pub token: Token,
     pub op: Operator,
     pub left: Expression,
     pub right: Expression,
-    pub ttype: Option<CHSType>,
 }
 
 #[derive(Debug)]
 pub struct Unop {
     pub token: Token,
     pub op: Operator,
-    pub left: Expression,
-    pub ttype: Option<CHSType>,
+    pub operand: Expression,
 }
 
 #[derive(Debug, PartialEq, Eq)]
