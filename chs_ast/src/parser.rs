@@ -1,5 +1,5 @@
 use crate::{
-    nodes::{self, *},
+    nodes::*,
     RawModule,
 };
 use chs_lexer::{Lexer, Span, Token, TokenKind};
@@ -260,16 +260,6 @@ impl<'src> Parser<'src> {
                 Ok(Expression::VarDecl(Box::new(VarDecl {
                     token,
                     ty: ttype,
-                    value,
-                })))
-            }
-            KeywordSet => {
-                let assigned = self.parse_expression_iterative(Precedence::Lowest)?;
-                self.expect_kind(Assign)?;
-                let value = self.parse_expression_iterative(Precedence::Lowest)?;
-                Ok(Expression::Assign(Box::new(nodes::Assign {
-                    token,
-                    target: assigned,
                     value,
                 })))
             }
