@@ -1,5 +1,5 @@
 use chs_lexer::{Span, Token};
-use chs_util::{return_chs_error, CHSError};
+use chs_util::{return_chs_error, CHSError, CHSResult};
 use std::fmt;
 
 use chs_types::CHSType;
@@ -257,6 +257,10 @@ impl Operator {
             Operator::Assign => Precedence::Assign,
             // _ => Precedence::Lowest,
         }
+    }
+
+    pub fn get_type_of_op(&self, _lty: CHSType, _rty: CHSType) -> CHSResult<CHSType> {
+        todo!()
     }
 }
 
