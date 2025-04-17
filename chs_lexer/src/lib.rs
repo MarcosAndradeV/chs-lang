@@ -281,8 +281,8 @@ impl TokenKind {
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Loc {
-    line: usize,
-    col: usize,
+    pub line: usize,
+    pub col: usize,
 }
 
 impl fmt::Display for Loc {
