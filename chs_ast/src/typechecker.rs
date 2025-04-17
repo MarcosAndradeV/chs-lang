@@ -5,7 +5,7 @@ use std::rc::Rc;
 
 use crate::RawModule;
 
-use super::{HIRExpr, HIRFunction, HIRLiteral, HIRModule, HIRModuleItem};
+use crate::hir::{HIRExpr, HIRBlock, HIRFunction, HIRLiteral, HIRModule, HIRModuleItem};
 
 pub struct TypeChecker<'src> {
     env: TypeEnv,
@@ -18,6 +18,10 @@ impl<'src> TypeChecker<'src> {
             env: TypeEnv::new(),
             raw_module,
         }
+    }
+
+    pub fn env(&self) -> &TypeEnv {
+        &self.env
     }
 
     fn get_span_str(&self, span: &Span<String>) -> &'src str {
@@ -266,7 +270,7 @@ impl<'src> TypeChecker<'src> {
         }
     }
 
-    fn check_block(&mut self, block: &super::HIRBlock) -> CHSResult<CHSType> {
+    fn check_block(&mut self, block: &HIRBlock) -> CHSResult<CHSType> {
         self.env.locals_new();
         let mut last_type = CHSType::Void;
         for expr in &block.expressions {
