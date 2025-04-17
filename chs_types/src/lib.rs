@@ -5,21 +5,17 @@ use std::{collections::HashMap, fmt, rc::Rc};
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct TypeVar {
     id: usize,
-    name: Option<String>,
 }
 
 impl TypeVar {
-    pub fn new(id: usize, name: Option<String>) -> Self {
-        Self { id, name }
+    pub fn new(id: usize) -> Self {
+        Self { id }
     }
 }
 
 impl fmt::Display for TypeVar {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.name {
-            Some(name) => write!(f, "{}", name),
-            None => write!(f, "^{}", self.id),
-        }
+        write!(f, "^{}", self.id)
     }
 }
 
@@ -112,8 +108,8 @@ impl TypeEnv {
     }
 
     /// Creates a new type variable
-    pub fn fresh_type_var(&mut self, name: Option<String>) -> TypeVar {
-        TypeVar::new(self.type_vars.len(), name)
+    pub fn fresh_type_var(&mut self) -> TypeVar {
+        TypeVar::new(self.type_vars.len())
     }
 
     /// Adds a type constraint
