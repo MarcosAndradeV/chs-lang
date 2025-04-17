@@ -497,7 +497,6 @@ impl<'src> Parser<'src> {
                     continue;
                 }
                 _ => {
-                    self.next();
                     let value = self.parse_type_iterative()?;
                     list.push(value);
                 }
@@ -524,6 +523,11 @@ impl<'src> Parser<'src> {
             Identifier => {
                 CHSType::Generic((&self.module[&ttoken]).to_string(), vec![])
             },
+            OpenSquare => { // TODO: Add support for [<type>; <size>] array types
+                let ttp = self.parse_type_iterative()?;
+                self.expect_kind(CloseSquare)?;
+                CHSType::Slice(Box::new(ttp))
+            }
             Asterisk => {
                 let ttp = self.parse_type_iterative()?;
                 CHSType::Pointer(Box::new(ttp))
