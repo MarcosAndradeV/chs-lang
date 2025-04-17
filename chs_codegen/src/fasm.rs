@@ -190,40 +190,40 @@ impl Register {
     }
 }
 
-// #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-// /// Scale: A 2-bit constant factor that is either 1, 2, 4, or 8.
-// ///
-// /// Index: Any general purpose register.
-// ///
-// /// Base: Any general purpose register.
-// ///
-// /// Displacement: An integral offset. (normally limited to 32 bits even in 64-bit mode but can be 64-bits with a few select encodings)
-// pub enum Addr {
-//     Base(Register),
-//     BaseIndex(Register, Register),
-//     BaseDisplacement(Register, i32),
-//     BaseIndexDisplacement(Register, Register, i32),
-//     BaseIndexXScale(Register, Register, u8),
-//     IndexXScaleDisplacement(Register, u8, i32),
-//     BaseIndexXScaleDisplacement(Register, Register, u8, i32),
-//     Displacement(i32)
-// }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Scale: A 2-bit constant factor that is either 1, 2, 4, or 8.
+///
+/// Index: Any general purpose register.
+///
+/// Base: Any general purpose register.
+///
+/// Displacement: An integral offset. (normally limited to 32 bits even in 64-bit mode but can be 64-bits with a few select encodings)
+pub enum Addr {
+    Base(Register),
+    BaseIndex(Register, Register),
+    BaseDisplacement(Register, i32),
+    BaseIndexDisplacement(Register, Register, i32),
+    BaseIndexXScale(Register, Register, u8),
+    IndexXScaleDisplacement(Register, u8, i32),
+    BaseIndexXScaleDisplacement(Register, Register, u8, i32),
+    Displacement(i32)
+}
 
-// impl fmt::Display for Addr {
-//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-//         match self {
-//             Addr::Base(reg) => write!(f, "{reg}"),
-//             Addr::BaseIndex(reg1, reg2) => write!(f, "{reg1}+{reg2}"),
-//             Addr::BaseDisplacement(reg, dis) => if *dis > 0 { write!(f, "{reg}+{dis}")} else {write!(f, "{reg}{dis}")},
-//             Addr::BaseIndexDisplacement(reg1, reg2, dis) => if *dis > 0 { write!(f, "{reg1}{reg2}+{dis}")} else {write!(f, "{reg1}{reg2}{dis}")},
-//             Addr::BaseIndexXScale(reg1, reg2, s) =>  write!(f, "{reg1}+{reg2}*{s}"),
-//             Addr::IndexXScaleDisplacement(reg1, s, dis) => if *dis > 0 { write!(f, "{reg1}*{s}+{dis}")} else {write!(f, "{reg1}*{s}{dis}")},
-//             Addr::BaseIndexXScaleDisplacement(reg1, reg2, s, dis) =>
-//                 if *dis > 0 { write!(f, "{reg1}+{reg2}*{s}+{dis}")} else {write!(f, "{reg1}+{reg2}*{s}{dis}")},
-//             Addr::Displacement(_) => todo!(),
-//         }
-//     }
-// }
+impl fmt::Display for Addr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Addr::Base(reg) => write!(f, "{reg}"),
+            Addr::BaseIndex(reg1, reg2) => write!(f, "{reg1}+{reg2}"),
+            Addr::BaseDisplacement(reg, dis) => if *dis > 0 { write!(f, "{reg}+{dis}")} else {write!(f, "{reg}{dis}")},
+            Addr::BaseIndexDisplacement(reg1, reg2, dis) => if *dis > 0 { write!(f, "{reg1}{reg2}+{dis}")} else {write!(f, "{reg1}{reg2}{dis}")},
+            Addr::BaseIndexXScale(reg1, reg2, s) =>  write!(f, "{reg1}+{reg2}*{s}"),
+            Addr::IndexXScaleDisplacement(reg1, s, dis) => if *dis > 0 { write!(f, "{reg1}*{s}+{dis}")} else {write!(f, "{reg1}*{s}{dis}")},
+            Addr::BaseIndexXScaleDisplacement(reg1, reg2, s, dis) =>
+                if *dis > 0 { write!(f, "{reg1}+{reg2}*{s}+{dis}")} else {write!(f, "{reg1}+{reg2}*{s}{dis}")},
+            Addr::Displacement(_) => todo!(),
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Value {
@@ -234,7 +234,7 @@ pub enum Value {
     /// Base: Any general purpose register.
     ///
     /// Displacement: An integral offset. (normally limited to 32 bits even in 64-bit mode but can be 64-bits with a few select encodings)
-    Memory(SizeOperator, String),
+    Memory(SizeOperator, Addr),
     Register(Register),
     Const(SizeOperator, i64),
     Label(String),
@@ -485,6 +485,10 @@ impl Block {
     pub fn push_instr(&mut self, instr: Instr) {
         self.instrs.push(instr);
     }
+
+    fn extend_instr(&mut self, instr: Vec<Instr>) {
+        self.instrs.extend(instr);
+    }
 }
 
 impl fmt::Display for Block {
@@ -535,6 +539,13 @@ impl Function {
             .last_mut()
             .expect("Last block must be present")
             .push_instr(instr);
+    }
+
+    pub fn extend_instr(&mut self, instr: Vec<Instr>) {
+        self.blocks
+            .last_mut()
+            .expect("Last block must be present")
+            .extend_instr(instr);
     }
 
     pub fn last_instr(&mut self) -> &Instr {
@@ -645,9 +656,7 @@ impl fmt::Display for Module {
             writeln!(f, "format ELF64 executable")?;
             writeln!(f, "entry _start")?;
             writeln!(f, "segment executable")?;
-            // for instr in self.start.instrs.iter() {
-            //     writeln!(f, "\t{}", instr)?;
-            // }
+            writeln!(f, "_start:")?;
             writeln!(f, "\tcall _main")?;
             writeln!(f, "\tmov rax, 60")?;
             writeln!(f, "\tmov rdi, 0")?;
