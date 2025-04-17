@@ -179,6 +179,7 @@ pub enum Operator {
     NEq,
     Gt,
     Lt,
+    Assign,
     // Unary
     Negate,
     LNot,
@@ -203,6 +204,7 @@ impl fmt::Display for Operator {
             Operator::Gt => write!(f, ">"),
             Operator::Lt => write!(f, "<"),
             Operator::LNot => write!(f, "!"),
+            Operator::Assign => write!(f, "="),
         }
     }
 }
@@ -228,6 +230,7 @@ impl Operator {
             DoublePipe => Ok(Self::LOr),
             Ampersand => Ok(Self::Or),
             Pipe => Ok(Self::And),
+            Assign => Ok(Self::Assign),
             _ => return_chs_error!("{} Unsupported operator", token.loc),
         }
     }
@@ -244,6 +247,7 @@ impl Operator {
             Operator::And => Precedence::And,
             Operator::Negate | Operator::LNot => Precedence::Prefix,
             Operator::Refer | Operator::Deref => Precedence::Prefix,
+            Operator::Assign => Precedence::Assign,
             // _ => Precedence::Lowest,
         }
     }
@@ -262,6 +266,7 @@ pub enum Precedence {
     BitWise,
     Sum,
     Product,
+    Assign,
     Prefix,
     Call,
 }

@@ -1,7 +1,6 @@
 use std::fmt;
 use std::marker::PhantomData;
 
-
 pub struct Lexer<'src> {
     source: &'src str,
     data: &'src [u8],
@@ -48,11 +47,11 @@ impl<'src> Lexer<'src> {
                 }
                 b'-' if self.read_char() == b'>' => {
                     self.advance();
-                    return Token::new(TokenKind::Arrow, loc , begin, self.pos);
+                    return Token::new(TokenKind::Arrow, loc, begin, self.pos);
                 }
                 b'=' if self.read_char() == b'=' => {
                     self.advance();
-                    return Token::new(TokenKind::Eq, loc , begin, self.pos);
+                    return Token::new(TokenKind::Eq, loc, begin, self.pos);
                 }
                 // b'=' if self.read_char() == b'=' => {
                 //     self.advance();
@@ -64,7 +63,11 @@ impl<'src> Lexer<'src> {
                 // }
                 b'|' if self.read_char() == b'|' => {
                     self.advance();
-                    return Token::new(TokenKind::DoublePipe, loc , begin, self.pos);
+                    return Token::new(TokenKind::DoublePipe, loc, begin, self.pos);
+                }
+                b'.' if self.read_char() == b'*' => {
+                    self.advance();
+                    return Token::new(TokenKind::Deref, loc, begin, self.pos);
                 }
                 b'a'..=b'z' | b'A'..=b'Z' | b'_' => {
                     return self.lex_identfier_or_keyword(begin);
@@ -74,41 +77,41 @@ impl<'src> Lexer<'src> {
                 // b'\'' => self.lex_char(),
 
                 // b'.' => Token::from_u8(loc, TokenKind::Dot, ch),
-                b',' => return Token::new(TokenKind::Comma, loc , begin, self.pos),
+                b',' => return Token::new(TokenKind::Comma, loc, begin, self.pos),
                 b';' => {
-                    return Token::new(TokenKind::SemiColon, loc , begin, self.pos);
+                    return Token::new(TokenKind::SemiColon, loc, begin, self.pos);
                 }
-                b':' => return Token::new(TokenKind::Colon, loc , begin, self.pos),
-                b'=' => return Token::new(TokenKind::Assign, loc , begin, self.pos),
-                b'<' => return Token::new(TokenKind::Lt, loc , begin, self.pos),
-                b'>' => return Token::new(TokenKind::Gt, loc , begin, self.pos),
+                b':' => return Token::new(TokenKind::Colon, loc, begin, self.pos),
+                b'=' => return Token::new(TokenKind::Assign, loc, begin, self.pos),
+                b'<' => return Token::new(TokenKind::Lt, loc, begin, self.pos),
+                b'>' => return Token::new(TokenKind::Gt, loc, begin, self.pos),
 
-                b'!' => return Token::new(TokenKind::Bang, loc , begin, self.pos),
-                b'+' => return Token::new(TokenKind::Plus, loc , begin, self.pos),
-                b'-' => return Token::new(TokenKind::Minus, loc , begin, self.pos),
-                b'*' => return Token::new(TokenKind::Asterisk, loc , begin, self.pos),
-                b'/' => return Token::new(TokenKind::Slash, loc , begin, self.pos),
-                b'%' => return Token::new(TokenKind::Mod, loc , begin, self.pos),
+                b'!' => return Token::new(TokenKind::Bang, loc, begin, self.pos),
+                b'+' => return Token::new(TokenKind::Plus, loc, begin, self.pos),
+                b'-' => return Token::new(TokenKind::Minus, loc, begin, self.pos),
+                b'*' => return Token::new(TokenKind::Asterisk, loc, begin, self.pos),
+                b'/' => return Token::new(TokenKind::Slash, loc, begin, self.pos),
+                b'%' => return Token::new(TokenKind::Mod, loc, begin, self.pos),
+                b'$' => return Token::new(TokenKind::Dollar, loc, begin, self.pos),
                 // b'&' => Token::from_u8(loc, TokenKind::Ampersand, ch),
                 // b'|' => Token::from_u8(loc, TokenKind::Pipe, ch),
                 b'(' => {
-                    return Token::new(TokenKind::OpenParen, loc , begin, self.pos);
+                    return Token::new(TokenKind::OpenParen, loc, begin, self.pos);
                 }
                 b')' => {
-                    return Token::new(TokenKind::CloseParen, loc , begin, self.pos);
+                    return Token::new(TokenKind::CloseParen, loc, begin, self.pos);
                 }
                 b'[' => {
-                    return Token::new(TokenKind::OpenSquare, loc , begin, self.pos);
+                    return Token::new(TokenKind::OpenSquare, loc, begin, self.pos);
                 }
                 b']' => {
-                    return Token::new(TokenKind::CloseSquare, loc , begin, self.pos);
+                    return Token::new(TokenKind::CloseSquare, loc, begin, self.pos);
                 }
                 // b'{' => Token::from_u8(loc, TokenKind::CurlyOpen, ch),
                 // b'}' => Token::from_u8(loc, TokenKind::CurlyClose, ch),
-
                 ch if ch.is_ascii_whitespace() => continue,
                 0 => return Token::new(TokenKind::EOF, self.loc, 0, 0),
-                _ => return Token::new(TokenKind::Invalid, loc , begin, self.pos),
+                _ => return Token::new(TokenKind::Invalid, loc, begin, self.pos),
             }
         }
         Token::new(TokenKind::EOF, self.loc, self.pos, self.pos)
@@ -125,18 +128,18 @@ impl<'src> Lexer<'src> {
             self.advance();
         }
         match &self.source[begin..self.pos] {
-            "end" => Token::new(TokenKind::KeywordEnd, loc , begin, self.pos),
-            "fn" => Token::new(TokenKind::KeywordFn, loc , begin, self.pos),
-            "extern" => Token::new(TokenKind::KeywordExtern, loc , begin, self.pos),
-            "set" => Token::new(TokenKind::KeywordSet, loc , begin, self.pos),
-            "if" => Token::new(TokenKind::KeywordIf, loc , begin, self.pos),
-            "else" => Token::new(TokenKind::KeywordElse, loc , begin, self.pos),
-            "while" => Token::new(TokenKind::KeywordWhile, loc , begin, self.pos),
-            "true" => Token::new(TokenKind::KeywordTrue, loc , begin, self.pos),
-            "false" => Token::new(TokenKind::KeywordFalse, loc , begin, self.pos),
-            "cast" => Token::new(TokenKind::KeywordCast, loc , begin, self.pos),
-            "syscall" => Token::new(TokenKind::KeywordSyscall, loc , begin, self.pos),
-            _ => Token::new(TokenKind::Identifier, loc , begin, self.pos),
+            "end" => Token::new(TokenKind::KeywordEnd, loc, begin, self.pos),
+            "fn" => Token::new(TokenKind::KeywordFn, loc, begin, self.pos),
+            "extern" => Token::new(TokenKind::KeywordExtern, loc, begin, self.pos),
+            "set" => Token::new(TokenKind::KeywordSet, loc, begin, self.pos),
+            "if" => Token::new(TokenKind::KeywordIf, loc, begin, self.pos),
+            "else" => Token::new(TokenKind::KeywordElse, loc, begin, self.pos),
+            "while" => Token::new(TokenKind::KeywordWhile, loc, begin, self.pos),
+            "true" => Token::new(TokenKind::KeywordTrue, loc, begin, self.pos),
+            "false" => Token::new(TokenKind::KeywordFalse, loc, begin, self.pos),
+            "cast" => Token::new(TokenKind::KeywordCast, loc, begin, self.pos),
+            "syscall" => Token::new(TokenKind::KeywordSyscall, loc, begin, self.pos),
+            _ => Token::new(TokenKind::Identifier, loc, begin, self.pos),
         }
     }
 
@@ -168,9 +171,7 @@ impl<'src> Lexer<'src> {
                     self.advance();
                     break;
                 }
-                b'\0' => {
-                    return Token::new(TokenKind::Invalid, loc, begin, self.pos)
-                }
+                b'\0' => return Token::new(TokenKind::Invalid, loc, begin, self.pos),
                 b'\\' => {
                     self.advance();
                     let ch = self.read_char();
@@ -179,9 +180,7 @@ impl<'src> Lexer<'src> {
                         b'n' => buffer.push('\n'),
                         b'\\' => buffer.push('\\'),
                         b'0' => buffer.push('\0'),
-                        _ => {
-                            return Token::new(TokenKind::Invalid, loc, begin, self.pos)
-                        }
+                        _ => return Token::new(TokenKind::Invalid, loc, begin, self.pos),
                     }
                 }
                 _ => buffer.push(ch as char),
@@ -293,11 +292,30 @@ pub enum TokenKind {
     Pipe,
     DoubleAmpersand,
     DoublePipe,
+
+    Dollar,
+    Deref,
 }
 impl TokenKind {
     pub fn is_binop(&self) -> bool {
         use TokenKind::*;
-        matches!(self, Plus|Minus|Asterisk|Slash|Eq|NotEq|Gt|Lt|Mod|Ampersand|Pipe|DoubleAmpersand|DoublePipe)
+        matches!(
+            self,
+            Assign
+                | Plus
+                | Minus
+                | Asterisk
+                | Slash
+                | Eq
+                | NotEq
+                | Gt
+                | Lt
+                | Mod
+                | Ampersand
+                | Pipe
+                | DoubleAmpersand
+                | DoublePipe
+        )
     }
 }
 

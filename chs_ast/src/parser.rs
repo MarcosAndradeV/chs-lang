@@ -121,6 +121,18 @@ impl<'src> Parser<'src> {
         // First parse a “primary” expression (which itself may be built iteratively).
         expr_stack.push(self.parse_primary_iterative()?);
 
+        // Check for assignment immediately after a primary expression
+        // if self.peek().kind == TokenKind::Assign {
+        //     let assign_token = self.next(); // consume '='
+        //     let value = self.parse_expression_iterative(Precedence::Lowest)?;
+        //     let target = expr_stack.pop().unwrap();
+        //     return Ok(Expression::Assign(Box::new(nodes::Assign {
+        //         token: assign_token,
+        //         target,
+        //         value,
+        //     })));
+        // }
+
         loop {
             let ptoken = self.peek().clone();
             // Handle non-binary postfix operators such as function calls or indexing:
@@ -176,12 +188,20 @@ impl<'src> Parser<'src> {
                         let (op, token) = op_stack.pop().unwrap();
                         let right = expr_stack.pop().unwrap();
                         let left = expr_stack.pop().unwrap();
+                        if op == Operator::Assign {
+                            expr_stack.push(Expression::Assign(Box::new(Assign {
+                                token,
+                                target: left,
+                                value: right,
+                            })));
+                        } else {
                         expr_stack.push(Expression::Binop(Box::new(Binop {
                             token,
                             op,
                             left,
                             right,
                         })));
+                        }
                     }
                     continue;
                 }
@@ -399,25 +419,42 @@ impl<'src> Parser<'src> {
         F: Fn(&Token) -> bool,
     {
         use chs_lexer::TokenKind::*;
-        let mut args = vec![];
+        let mut exprs = vec![];
         loop {
             let ptoken = self.peek();
+            if pred(ptoken) {
+                self.next();
+                break;
+            }
+
             match ptoken.kind {
-                _ if pred(ptoken) => {
-                    self.next();
-                    return Ok(args);
+                Comma => {
+                    self.next(); // skip comma, but don't treat it as end
+                    continue;
                 }
-                Comma | SemiColon => {
-                    self.next();
+                SemiColon => {
+                    self.next(); // skip `;`, but also treat it as end of current expr
                     continue;
                 }
                 EOF => return_chs_error!("Expected closing token, found EOF"),
                 _ => {
                     let value = self.parse_expression_iterative(Precedence::Lowest)?;
-                    args.push(value);
+                    exprs.push(value);
+
+                    // Check next token after parsing expression
+                    let sep = self.peek();
+                    if sep.kind == SemiColon {
+                        self.next(); // consume `;`
+                        continue;
+                    } else if pred(sep) {
+                        self.next(); // closing token
+                        break;
+                    }
                 }
             }
         }
+
+        Ok(exprs)
     }
 
     /// Iterative version of parsing a function type.
