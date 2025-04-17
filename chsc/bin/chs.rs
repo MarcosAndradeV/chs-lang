@@ -10,7 +10,7 @@ use std::{
 };
 
 use chs_ast::{ mir::MIRModule, hir::HIRModule, typechecker::TypeChecker, parser::Parser, RawModule};
-use chs_codegen::fasm;
+use chs_codegen::mir::MIRTranslator;
 use chs_util::{return_chs_error, CHSError, CHSResult};
 
 use my_cli::{Cmd, MyCLI};
@@ -70,9 +70,7 @@ fn compile(
     let tenv = checker.env();
     let module = MIRModule::from_hir(module, tenv);
 
-    dbg!(module);
-    todo!();
-    let fasm_code = fasm::Module::new();
+    let fasm_code = MIRTranslator::new(&raw_module).translate_module(module);
 
     let fasm_path = PathBuf::from(&raw_module.file_path).with_extension("asm");
     let mut out_file = File::create(&fasm_path).map_err(|err| CHSError(err.to_string()))?;
