@@ -5,6 +5,8 @@ use crate::{nodes, RawModule};
 
 use crate::nodes::Operator as HIROperator;
 
+pub mod typechecker;
+
 #[derive(Debug)]
 pub struct HIRModule<'src> {
     pub raw_module: &'src RawModule,
