@@ -11,7 +11,7 @@ use std::{
 
 use chs_ast::{ parser::Parser, RawModule};
 use chs_codegen::fasm;
-use chs_util::{chs_error, CHSError, CHSResult};
+use chs_util::{return_chs_error, CHSError, CHSResult};
 
 use my_cli::{Cmd, MyCLI};
 
@@ -49,6 +49,7 @@ fn main() {
     }
 }
 
+#[allow(dead_code)]
 fn compile(
     file_path: String,
     outpath: Option<String>,
@@ -61,6 +62,8 @@ fn compile(
 
     let module = Parser::new(&raw_module).parse()?;
 
+    dbg!(module);
+    todo!();
     let fasm_code = fasm::Module::new();
 
     let fasm_path = PathBuf::from(&raw_module.file_path).with_extension("asm");
@@ -86,7 +89,7 @@ fn compile(
         .wait_with_output()
         .expect("Failed to wait for fasm");
     if !result.status.success() {
-        chs_error!(String::from_utf8_lossy(&result.stderr));
+        return_chs_error!(String::from_utf8_lossy(&result.stderr));
     }
 
     let gcc_output_path = match outpath {
@@ -107,7 +110,7 @@ fn compile(
         .wait_with_output()
         .expect("Failed to wait for gcc");
     if !result.status.success() {
-        chs_error!(String::from_utf8_lossy(&result.stderr));
+        return_chs_error!(String::from_utf8_lossy(&result.stderr));
     }
 
     if !emit_asm {
@@ -119,7 +122,7 @@ fn compile(
 
         let result = rm_proc.wait_with_output().expect("Failed to wait for rm");
         if !result.status.success() {
-            chs_error!("Failed {}", String::from_utf8_lossy(&result.stderr));
+            return_chs_error!("Failed {}", String::from_utf8_lossy(&result.stderr));
         }
     }
 
@@ -132,7 +135,7 @@ fn compile(
             .wait_with_output()
             .expect("Failed to wait for run");
         if !result.status.success() {
-            chs_error!("Failed {}", String::from_utf8_lossy(&result.stderr));
+            return_chs_error!("Failed {}", String::from_utf8_lossy(&result.stderr));
         }
     }
 
