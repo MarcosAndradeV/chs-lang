@@ -233,6 +233,9 @@ impl HIRExpr {
                     expressions: w.body.into_iter().map(HIRExpr::from_ast_expr).collect(),
                 },
             },
+            nodes::Expression::ReturnExpression(r) => HIRExpr::Return(
+                r.expr.map(|e| HIRExpr::from_ast_expr(e).into())
+            ),
         }
     }
 }

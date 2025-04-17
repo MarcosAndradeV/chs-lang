@@ -1,7 +1,4 @@
-use crate::{
-    nodes::*,
-    RawModule,
-};
+use crate::{nodes::*, RawModule};
 use chs_lexer::{Lexer, Span, Token, TokenKind};
 use chs_types::CHSType;
 use chs_util::{return_chs_error, CHSResult};
@@ -88,7 +85,7 @@ impl<'src> Parser<'src> {
                         );
                         let function_decl = ExternFunctionDecl {
                             name: ident_token,
-                            fn_type
+                            fn_type,
                         };
                         items.push(ModuleItem::ExternFunction(function_decl));
                     }
@@ -105,7 +102,7 @@ impl<'src> Parser<'src> {
         } {}
         Ok(Module {
             raw_module: self.module,
-            items
+            items,
         })
     }
 
@@ -195,12 +192,12 @@ impl<'src> Parser<'src> {
                                 value: right,
                             })));
                         } else {
-                        expr_stack.push(Expression::Binop(Box::new(Binop {
-                            token,
-                            op,
-                            left,
-                            right,
-                        })));
+                            expr_stack.push(Expression::Binop(Box::new(Binop {
+                                token,
+                                op,
+                                left,
+                                right,
+                            })));
                         }
                     }
                     continue;
@@ -211,7 +208,10 @@ impl<'src> Parser<'src> {
         // Combine any remaining operators.
         while let Some((op, token)) = op_stack.pop() {
             if expr_stack.len() < 2 {
-                return_chs_error!("Insufficient operands for operator at {}", &self.module[&token]);
+                return_chs_error!(
+                    "Insufficient operands for operator at {}",
+                    &self.module[&token]
+                );
             }
             let right = expr_stack.pop().unwrap();
             let left = expr_stack.pop().unwrap();
@@ -268,6 +268,17 @@ impl<'src> Parser<'src> {
                 let cond = self.parse_expression_iterative(Precedence::Lowest)?;
                 self.expect_kind(CloseParen)?;
                 self.parse_if_expression_iterative(token, cond)
+            }
+            KeywordReturn => {
+                let expr = if self.peek().kind == TokenKind::SemiColon {
+                    None
+                } else {
+                    Some(self.parse_expression_iterative(Precedence::Lowest)?)
+                };
+                Ok(Expression::ReturnExpression(Box::new(ReturnExpression {
+                    token,
+                    expr,
+                })))
             }
             KeywordWhile => {
                 self.expect_kind(OpenParen)?;
@@ -471,12 +482,19 @@ impl<'src> Parser<'src> {
                     let token = self.next();
                     self.expect_kind(Colon)?;
                     let value = self.parse_type_iterative()?;
-                    list.push(Param { name: token, ty: value });
+                    list.push(Param {
+                        name: token,
+                        ty: value,
+                    });
                 }
                 _ => {
                     let token = self.next();
-                    return_chs_error!("{} Unexpected token in function type `{}`", token.loc, &self.module[&token])
-                },
+                    return_chs_error!(
+                        "{} Unexpected token in function type `{}`",
+                        token.loc,
+                        &self.module[&token]
+                    )
+                }
             }
         }
     }
@@ -519,11 +537,10 @@ impl<'src> Parser<'src> {
                 self.next();
                 let v = self.parse_generic_type_iterative()?;
                 CHSType::Generic((&self.module[&ttoken]).to_string(), v)
-            },
-            Identifier => {
-                CHSType::Generic((&self.module[&ttoken]).to_string(), vec![])
-            },
-            OpenSquare => { // TODO: Add support for [<type>; <size>] array types
+            }
+            Identifier => CHSType::Generic((&self.module[&ttoken]).to_string(), vec![]),
+            OpenSquare => {
+                // TODO: Add support for [<type>; <size>] array types
                 let ttp = self.parse_type_iterative()?;
                 self.expect_kind(CloseSquare)?;
                 CHSType::Slice(Box::new(ttp))
@@ -537,7 +554,11 @@ impl<'src> Parser<'src> {
                 let (args, ret) = self.parse_fn_type_iterative()?;
                 CHSType::Function(args.into_iter().map(|t| t.ty).collect(), Box::new(ret))
             }
-            _ => return_chs_error!("{} Type not implemented {}", ttoken.loc, &self.module[&ttoken]),
+            _ => return_chs_error!(
+                "{} Type not implemented {}",
+                ttoken.loc,
+                &self.module[&ttoken]
+            ),
         };
         Ok(ttype)
     }

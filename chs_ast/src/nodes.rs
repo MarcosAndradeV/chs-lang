@@ -42,6 +42,7 @@ pub enum Expression {
     IfExpression(Box<IfExpression>),
     IfElseExpression(Box<IfElseExpression>),
     WhileExpression(Box<WhileExpression>),
+    ReturnExpression(Box<ReturnExpression>),
 }
 
 impl Expression {
@@ -96,6 +97,12 @@ pub struct IfExpression {
     pub token: Token,
     pub cond: Expression,
     pub body: Vec<Expression>,
+}
+
+#[derive(Debug)]
+pub struct ReturnExpression {
+    pub token: Token,
+    pub expr: Option<Expression>,
 }
 
 #[derive(Debug)]

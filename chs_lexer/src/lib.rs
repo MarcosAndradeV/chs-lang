@@ -138,6 +138,7 @@ impl<'src> Lexer<'src> {
             "false" => Token::new(TokenKind::KeywordFalse, loc, begin, self.pos),
             "cast" => Token::new(TokenKind::KeywordCast, loc, begin, self.pos),
             "syscall" => Token::new(TokenKind::KeywordSyscall, loc, begin, self.pos),
+            "return" => Token::new(TokenKind::KeywordReturn, loc, begin, self.pos),
             _ => Token::new(TokenKind::Identifier, loc, begin, self.pos),
         }
     }
@@ -263,6 +264,7 @@ pub enum TokenKind {
     KeywordFalse,
     KeywordCast,
     KeywordSyscall,
+    KeywordReturn,
 
     IntegerNumber,
     RealNumber,
