@@ -1,5 +1,5 @@
 use chs_lexer::Span;
-use chs_types::CHSType;
+use chs_types::{CHSInfer, CHSType};
 
 use crate::{nodes, RawModule};
 
@@ -96,6 +96,15 @@ pub struct HIRBlock {
     pub expressions: Vec<HIRExpr>,
 }
 
+impl CHSInfer for HIRBlock {
+    fn infer(&self, env: &chs_types::TypeEnv) -> CHSType {
+        match self.expressions.last() {
+            Some(e) => e.infer(env),
+            None => CHSType::Void,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ExprId(pub usize);
 
@@ -184,10 +193,16 @@ impl chs_types::CHSInfer for HIRExpr {
             HIRExpr::Assign { .. } => todo!(),
             HIRExpr::VarDecl { .. } => todo!(),
             HIRExpr::Block(..) => todo!(),
-            HIRExpr::If { .. } => todo!(),
+            HIRExpr::If { else_branch: Some(else_branch) , .. } => {
+                else_branch.infer(_env)
+            },
+            HIRExpr::If { .. } => {
+                CHSType::Void
+            },
             HIRExpr::While { .. } => todo!(),
             HIRExpr::Syscall { .. } => todo!(),
-            HIRExpr::Return(..) => todo!(),
+            HIRExpr::Return(Some(e)) => e.infer(_env),
+            HIRExpr::Return(None) => CHSType::Void,
         }
     }
 }
