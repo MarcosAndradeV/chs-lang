@@ -5,7 +5,6 @@ use crate::{nodes, RawModule};
 
 use crate::nodes::Operator as HIROperator;
 
-pub mod typechecker;
 
 #[derive(Debug)]
 pub struct HIRModule<'src> {
@@ -14,7 +13,7 @@ pub struct HIRModule<'src> {
 }
 
 impl<'src> HIRModule<'src> {
-    pub fn from_ast_module(ast: nodes::Module<'src>) -> Self {
+    pub fn from_ast(ast: nodes::Module<'src>) -> Self {
         Self {
             raw_module: ast.raw_module,
             items: ast
@@ -162,6 +161,35 @@ pub enum HIRExpr {
         args: Vec<HIRExpr>,
     },
     Return(Option<Box<HIRExpr>>)
+}
+
+impl chs_types::CHSInfer for HIRExpr {
+    fn infer(&self, _env: &chs_types::TypeEnv) -> CHSType {
+        match self {
+            HIRExpr::Literal(l) => {
+                match l {
+                    HIRLiteral::Int(_) => CHSType::Int,
+                    HIRLiteral::Bool(_) => CHSType::Boolean,
+                    HIRLiteral::Str(_) => CHSType::String,
+                    HIRLiteral::Char(_) => CHSType::Char,
+                    HIRLiteral::Void => CHSType::Void,
+                }
+            },
+            HIRExpr::Identifier(_) => todo!(),
+            HIRExpr::Binary { .. } => todo!(),
+            HIRExpr::Unary { .. } => todo!(),
+            HIRExpr::Call { .. } => todo!(),
+            HIRExpr::Cast { .. } => todo!(),
+            HIRExpr::Index { .. } => todo!(),
+            HIRExpr::Assign { .. } => todo!(),
+            HIRExpr::VarDecl { .. } => todo!(),
+            HIRExpr::Block(..) => todo!(),
+            HIRExpr::If { .. } => todo!(),
+            HIRExpr::While { .. } => todo!(),
+            HIRExpr::Syscall { .. } => todo!(),
+            HIRExpr::Return(..) => todo!(),
+        }
+    }
 }
 
 impl HIRExpr {

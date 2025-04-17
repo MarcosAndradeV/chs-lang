@@ -179,3 +179,7 @@ impl TypeEnv {
         self.locals.push(HashMap::new());
     }
 }
+
+pub trait CHSInfer {
+    fn infer(&self, env: &TypeEnv) -> CHSType;
+}
