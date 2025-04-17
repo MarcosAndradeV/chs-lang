@@ -105,22 +105,6 @@ impl CHSInfer for HIRBlock {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct ExprId(pub usize);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct VarId(pub usize);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct ScopeId(pub usize);
-
-// Maybe use this
-// #[derive(Debug)]
-// pub struct WithSpan<T> {
-//     pub node: T,
-//     pub span: Span<String>,
-// }
-
 #[derive(Debug)]
 pub enum HIRExpr {
     Literal(HIRLiteral),
