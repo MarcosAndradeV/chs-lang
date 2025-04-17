@@ -195,9 +195,10 @@ impl<'src> Lexer<'src> {
     }
 }
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct Span<T> {
     _marker: PhantomData<T>,
+    pub loc: Loc,
     pub start: usize,
     pub end: usize,
 }
@@ -206,6 +207,7 @@ impl<T> From<Token> for Span<T> {
     fn from(value: Token) -> Self {
         Span {
             _marker: PhantomData,
+            loc: value.loc,
             start: value.source.start,
             end: value.source.end,
         }
@@ -226,6 +228,7 @@ impl Token {
             loc,
             source: Span {
                 _marker: PhantomData,
+                loc,
                 start,
                 end,
             },

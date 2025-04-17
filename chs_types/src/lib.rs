@@ -91,6 +91,7 @@ impl fmt::Display for CHSType {
 /// Type environment for managing type declarations and scoping
 #[derive(Debug)]
 pub struct TypeEnv {
+    /// Global types declarations
     pub globals: HashMap<String, Rc<CHSType>>,
     pub locals: Vec<HashMap<String, Rc<CHSType>>>,
     pub type_vars: HashMap<TypeVar, Rc<CHSType>>,
@@ -146,6 +147,11 @@ impl TypeEnv {
     /// Adds a type declaration
     pub fn global_insert(&mut self, k: impl ToString, v: Rc<CHSType>)-> Option<Rc<CHSType>> {
         self.globals.insert(k.to_string(), v)
+    }
+
+    // Get a global type declaration
+    pub fn global_get(&mut self, k: &str)-> Option<&CHSType> {
+        self.globals.get(k).map(|v| v.as_ref())
     }
 
     /// Gets a type declaration

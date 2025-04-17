@@ -32,7 +32,7 @@ impl<'src> MIRModule<'src> {
 #[derive(Debug)]
 pub enum MIRModuleItem {
     Function(MIRFunction),
-    ExternFunction(MIRExternFunction)
+    ExternFunction(MIRExternFunction),
 }
 
 impl MIRModuleItem {
@@ -254,11 +254,11 @@ impl<'src, 'env> ExprBuilder<'src, 'env> {
                 let rhs = self.build_expr(*rhs);
                 let temp = self.add_local(None, ty);
 
-                let lower_binop = self.lower_binop(op);
+                let lower_binop = self.lower_binop(op.op);
                 let block = &mut self.blocks[self.current_block_id.0];
 
                 // Special handling for pointer arithmetic
-                match (&lty, &rty, op) {
+                match (&lty, &rty, op.op) {
                     (CHSType::Pointer(inner), CHSType::Int, Operator::Plus) => {
                         // Pointer + int
                         block.statements.push(Statement::Assign {
@@ -326,7 +326,7 @@ impl<'src, 'env> ExprBuilder<'src, 'env> {
                 let operand = self.build_expr(*operand);
                 let temp = self.add_local(None, ty);
 
-                let lower_unop = match op {
+                let lower_unop = match op.op {
                     Operator::Negate => UnOp::Neg,
                     Operator::LNot => UnOp::Not,
                     _ => panic!("Unsupported unary operator"),
@@ -342,7 +342,11 @@ impl<'src, 'env> ExprBuilder<'src, 'env> {
                     projection: vec![],
                 })
             }
-            hir::HIRExpr::Call { callee, args } => {
+            hir::HIRExpr::Call {
+                span: _,
+                callee,
+                args,
+            } => {
                 let callee = self.build_expr(*callee);
                 let args = args.into_iter().map(|arg| self.build_expr(arg)).collect();
                 let temp = self.add_local(None, ty);
@@ -357,7 +361,11 @@ impl<'src, 'env> ExprBuilder<'src, 'env> {
                     projection: vec![],
                 })
             }
-            hir::HIRExpr::Cast { expr, to_type } => {
+            hir::HIRExpr::Cast {
+                span: _,
+                expr,
+                to_type,
+            } => {
                 let value = self.build_expr(*expr);
                 let temp = self.add_local(None, to_type.clone());
 
@@ -374,7 +382,11 @@ impl<'src, 'env> ExprBuilder<'src, 'env> {
                     projection: vec![],
                 })
             }
-            hir::HIRExpr::Index { base, index } => {
+            hir::HIRExpr::Index {
+                span: _,
+                base,
+                index,
+            } => {
                 let base = self.build_expr(*base);
                 let index = self.build_expr(*index);
                 let temp = self.add_local(None, ty);
@@ -395,7 +407,11 @@ impl<'src, 'env> ExprBuilder<'src, 'env> {
                     projection: vec![],
                 })
             }
-            hir::HIRExpr::Assign { target, value } => {
+            hir::HIRExpr::Assign {
+                span: _,
+                target,
+                value,
+            } => {
                 let value = self.build_expr(*value);
                 let target = self.build_expr(*target);
 
@@ -447,6 +463,7 @@ impl<'src, 'env> ExprBuilder<'src, 'env> {
                 }
             }
             hir::HIRExpr::If {
+                span: _,
                 condition,
                 then_branch,
                 else_branch: Some(else_branch),
@@ -553,6 +570,7 @@ impl<'src, 'env> ExprBuilder<'src, 'env> {
                 })
             }
             hir::HIRExpr::If {
+                span: _,
                 condition,
                 then_branch,
                 else_branch: None,
@@ -596,7 +614,11 @@ impl<'src, 'env> ExprBuilder<'src, 'env> {
 
                 Operand::Constant(Constant::Void)
             }
-            hir::HIRExpr::While { condition, body } => {
+            hir::HIRExpr::While {
+                span: _,
+                condition,
+                body,
+            } => {
                 let start_block_id = self.current_block_id;
                 let condition_block_id = BlockId(self.blocks.len());
                 let body_block_id = BlockId(self.blocks.len() + 1);
@@ -647,7 +669,11 @@ impl<'src, 'env> ExprBuilder<'src, 'env> {
                 // While loops always return void
                 Operand::Constant(Constant::Void)
             }
-            hir::HIRExpr::Syscall { arity, args } => {
+            hir::HIRExpr::Syscall {
+                span: _,
+                arity,
+                args,
+            } => {
                 let args = args.into_iter().map(|arg| self.build_expr(arg)).collect();
                 let ty = CHSType::Int;
                 let temp = self.add_local(None, ty);
@@ -665,7 +691,7 @@ impl<'src, 'env> ExprBuilder<'src, 'env> {
                     projection: vec![],
                 })
             }
-            hir::HIRExpr::Return(expr) => {
+            hir::HIRExpr::Return { span: _, expr } => {
                 let value = expr.map(|e| self.build_expr(*e));
                 let block = &mut self.blocks[self.current_block_id.0];
                 block.terminator = Terminator::Return(value);
