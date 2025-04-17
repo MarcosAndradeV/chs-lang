@@ -4,7 +4,7 @@ pub mod hir;
 
 #[derive(Debug)]
 pub struct RawModule {
-    source: String,
+    pub source: String,
     pub file_path: String,
 }
 
@@ -14,10 +14,10 @@ impl RawModule {
     }
 }
 
-impl<T> ops::Index<Span<T>> for RawModule {
+impl<T> ops::Index<&Span<T>> for RawModule {
     type Output = str;
 
-    fn index(&self, index: Span<T>) -> &Self::Output {
+    fn index(&self, index: &Span<T>) -> &Self::Output {
         &self.source[index.start..index.end]
     }
 }
