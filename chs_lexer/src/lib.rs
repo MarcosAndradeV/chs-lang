@@ -93,8 +93,8 @@ impl<'src> Lexer<'src> {
                 b'/' => return Token::new(TokenKind::Slash, loc, begin, self.pos),
                 b'%' => return Token::new(TokenKind::Mod, loc, begin, self.pos),
                 b'$' => return Token::new(TokenKind::Dollar, loc, begin, self.pos),
-                // b'&' => Token::from_u8(loc, TokenKind::Ampersand, ch),
-                // b'|' => Token::from_u8(loc, TokenKind::Pipe, ch),
+                b'&' => return Token::new(TokenKind::Ampersand, loc, begin, self.pos),
+                b'|' => return Token::new(TokenKind::Pipe, loc, begin, self.pos),
                 b'(' => {
                     return Token::new(TokenKind::OpenParen, loc, begin, self.pos);
                 }
