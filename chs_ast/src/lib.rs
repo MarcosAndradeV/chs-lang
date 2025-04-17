@@ -1,5 +1,6 @@
 pub mod nodes;
 pub mod parser;
+pub mod hir;
 
 #[derive(Debug)]
 pub struct RawModule {
@@ -13,8 +14,26 @@ impl RawModule {
     }
 }
 
+impl<T> ops::Index<Span<T>> for RawModule {
+    type Output = str;
 
-use std::{fs, path::Path, process::exit};
+    fn index(&self, index: Span<T>) -> &Self::Output {
+        &self.source[index.start..index.end]
+    }
+}
+
+impl ops::Index<&Token> for RawModule {
+    type Output = str;
+
+    fn index(&self, index: &Token) -> &Self::Output {
+        &self.source[index.source.start..index.source.end]
+    }
+}
+
+
+use std::{fs, ops, path::Path, process::exit};
+
+use chs_lexer::{Span, Token};
 pub fn read_flie<P: AsRef<Path>>(file_path: P) -> String {
     match fs::read_to_string(file_path) {
         Ok(ok) => ok,

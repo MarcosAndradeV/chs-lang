@@ -1,4 +1,4 @@
-use chs_lexer::Token;
+use chs_lexer::{Span, Token};
 use chs_util::{return_chs_error, CHSError, Loc};
 use std::fmt;
 
@@ -20,11 +20,11 @@ pub enum ModuleItem {
 
 #[derive(Debug)]
 pub enum ConstExpression {
-    Identifier(String),
-    IntegerLiteral(i64),
-    BooleanLiteral(bool),
-    StringLiteral(String),
-    CharLiteral(u8),
+    Identifier(Span<String>),
+    IntegerLiteral(Span<i64>),
+    BooleanLiteral(Span<bool>),
+    StringLiteral(Span<String>),
+    CharLiteral(Span<char>),
     Void,
 }
 
@@ -52,21 +52,13 @@ impl Expression {
         use chs_lexer::TokenKind::*;
         match token.kind {
             IntegerNumber => {
-                let value: i64 = token
-                    .source
-                    .parse::<i64>()
-                    .expect("No integer token. Probably a lexer error.");
                 Ok(Self::ConstExpression(ConstExpression::IntegerLiteral(
-                    value,
+                    Span::from(token)
                 )))
             }
             CharacterLiteral => {
-                let value: char = token
-                    .source
-                    .parse::<char>()
-                    .expect("No char token. Probably a lexer error.");
                 Ok(Self::ConstExpression(ConstExpression::CharLiteral(
-                    value as u8,
+                    Span::from(token)
                 )))
             }
             _ => return_chs_error!("{} Unsupported literal", token.loc),
