@@ -4,7 +4,7 @@ use crate::{
 };
 use chs_lexer::{Lexer, Token, TokenKind};
 use chs_types::CHSType;
-use chs_util::{chs_error, CHSResult};
+use chs_util::{return_chs_error, CHSResult};
 
 pub struct Parser<'src> {
     module: &'src RawModule,
@@ -29,7 +29,7 @@ impl<'src> Parser<'src> {
     fn expect_kind(&mut self, kind: TokenKind) -> CHSResult<Token> {
         let token = self.next();
         if token.kind != kind {
-            chs_error!(
+            return_chs_error!(
                 "{} Unexpected token {}, Expect: {:?}",
                 token.loc,
                 token.source,
@@ -56,7 +56,7 @@ impl<'src> Parser<'src> {
                 false
             } else {
                 if token.is_invalid() {
-                    chs_error!("{} Invalid token '{}'", token.loc, token.source);
+                    return_chs_error!("{} Invalid token '{}'", token.loc, token.source);
                 }
                 match token.kind {
                     KeywordFn => {
@@ -93,7 +93,7 @@ impl<'src> Parser<'src> {
                         items.push(ModuleItem::ExternFunction(function_decl));
                     }
                     _ => {
-                        chs_error!(
+                        return_chs_error!(
                             "{} Invalid Expression on top level `{}`",
                             token.loc,
                             token.source
@@ -194,7 +194,7 @@ impl<'src> Parser<'src> {
         // Combine any remaining operators.
         while let Some((op, token)) = op_stack.pop() {
             if expr_stack.len() < 2 {
-                chs_error!("Insufficient operands for operator at {}", token.source);
+                return_chs_error!("Insufficient operands for operator at {}", token.source);
             }
             let right = expr_stack.pop().unwrap();
             let left = expr_stack.pop().unwrap();
@@ -207,7 +207,7 @@ impl<'src> Parser<'src> {
             })));
         }
         if expr_stack.len() != 1 {
-            chs_error!(
+            return_chs_error!(
                 "Error combining expression, remaining stack: {:?}",
                 expr_stack
             );
@@ -255,7 +255,6 @@ impl<'src> Parser<'src> {
                     token,
                     assigned,
                     value,
-                    ttype: None,
                 })))
             }
             KeywordIf => {
@@ -282,7 +281,7 @@ impl<'src> Parser<'src> {
             KeywordFalse => Ok(Expression::ConstExpression(
                 ConstExpression::BooleanLiteral(true),
             )),
-            Identifier => Ok(Expression::ConstExpression(ConstExpression::Symbol(
+            Identifier => Ok(Expression::ConstExpression(ConstExpression::Identifier(
                 token.source.to_string(),
             ))),
             StringLiteral => Ok(Expression::ConstExpression(ConstExpression::StringLiteral(
@@ -324,7 +323,7 @@ impl<'src> Parser<'src> {
                 Ok(Expression::Group(Box::new(expr)))
             }
             // CurlyOpen => self.parse_init_list_iterative(),
-            _ => chs_error!("{} Unexpected token {}", token.loc, token.source),
+            _ => return_chs_error!("{} Unexpected token {}", token.loc, token.source),
         }
     }
 
@@ -393,7 +392,7 @@ impl<'src> Parser<'src> {
                     self.next();
                     continue;
                 }
-                TokenKind::EOF => chs_error!("Expected closing token, found EOF"),
+                TokenKind::EOF => return_chs_error!("Expected closing token, found EOF"),
                 _ => {
                     let value = self.parse_expression_iterative(Precedence::Lowest)?;
                     body.push(value);
@@ -420,7 +419,7 @@ impl<'src> Parser<'src> {
                     self.next();
                     continue;
                 }
-                EOF => chs_error!("Expected closing token, found EOF"),
+                EOF => return_chs_error!("Expected closing token, found EOF"),
                 _ => {
                     let value = self.parse_expression_iterative(Precedence::Lowest)?;
                     args.push(value);
@@ -455,7 +454,31 @@ impl<'src> Parser<'src> {
                     let value = self.parse_type_iterative()?;
                     list.push((token.source.to_string(), value));
                 }
-                _ => chs_error!("{} Unexpected token in function type `{}`", ptoken.loc, ptoken.source),
+                _ => return_chs_error!("{} Unexpected token in function type `{}`", ptoken.loc, ptoken.source),
+            }
+        }
+    }
+
+    /// Iterative version of parsing a function type.
+    fn parse_generic_type_iterative(&mut self) -> CHSResult<Vec<CHSType>> {
+        use chs_lexer::TokenKind::*;
+        let mut list = vec![];
+        loop {
+            let ptoken = self.peek();
+            match ptoken.kind {
+                Gt => {
+                    self.next();
+                    return Ok(list);
+                }
+                Comma => {
+                    self.next();
+                    continue;
+                }
+                _ => {
+                    self.next();
+                    let value = self.parse_type_iterative()?;
+                    list.push(value);
+                }
             }
         }
     }
@@ -471,6 +494,14 @@ impl<'src> Parser<'src> {
             Identifier if ttoken.source.as_ref() == "bool" => CHSType::Boolean,
             Identifier if ttoken.source.as_ref() == "char" => CHSType::Char,
             Identifier if ttoken.source.as_ref() == "string" => CHSType::String,
+            Identifier if self.peek().kind == TokenKind::Lt => {
+                self.next();
+                let v = self.parse_generic_type_iterative()?;
+                CHSType::Generic(ttoken.source.to_string(), v)
+            },
+            Identifier => {
+                CHSType::Generic(ttoken.source.to_string(), vec![])
+            },
             Asterisk => {
                 let ttp = self.parse_type_iterative()?;
                 CHSType::Pointer(Box::new(ttp))
@@ -480,7 +511,7 @@ impl<'src> Parser<'src> {
                 let (args, ret) = self.parse_fn_type_iterative()?;
                 CHSType::Function(args.into_iter().map(|(_, t)| t).collect(), Box::new(ret))
             }
-            _ => chs_error!("{} Type not implemented {}", ttoken.loc, ttoken.source),
+            _ => return_chs_error!("{} Type not implemented {}", ttoken.loc, ttoken.source),
         };
         Ok(ttype)
     }

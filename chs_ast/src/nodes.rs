@@ -1,15 +1,15 @@
 use chs_lexer::Token;
-use chs_util::{chs_error, CHSError, Loc};
+use chs_util::{return_chs_error, CHSError, Loc};
 use std::fmt;
 
-use chs_types::{CHSType, TypeMapLoc};
+use chs_types::CHSType;
 
 use crate::RawModule;
 
 #[derive(Debug)]
 pub struct Module<'src> {
     pub raw_module: &'src RawModule,
-    pub items: Vec<ModuleItem>
+    pub items: Vec<ModuleItem>,
 }
 
 #[derive(Debug)]
@@ -20,7 +20,7 @@ pub enum ModuleItem {
 
 #[derive(Debug)]
 pub enum ConstExpression {
-    Symbol(String),
+    Identifier(String),
     IntegerLiteral(i64),
     BooleanLiteral(bool),
     StringLiteral(String),
@@ -39,7 +39,6 @@ pub enum Expression {
     Index(Box<Index>),
     Syscall(Box<Syscall>),
     Array(Box<Array>),
-    Len(Box<Expression>),
     VarDecl(Box<VarDecl>),
     Assign(Box<Assign>),
     Group(Box<Self>),
@@ -70,7 +69,7 @@ impl Expression {
                     value as u8,
                 )))
             }
-            _ => chs_error!("{} Unsupported literal", token.loc),
+            _ => return_chs_error!("{} Unsupported literal", token.loc),
         }
     }
 
@@ -91,7 +90,7 @@ pub struct FunctionDecl {
 #[derive(Debug)]
 pub struct ExternFunctionDecl {
     pub name: Token,
-    pub fn_type: CHSType
+    pub fn_type: CHSType,
 }
 
 #[derive(Debug)]
@@ -99,7 +98,6 @@ pub struct Assign {
     pub token: Token,
     pub assigned: Expression,
     pub value: Expression,
-    pub ttype: Option<TypeMapLoc>,
 }
 
 #[derive(Debug)]
@@ -257,7 +255,7 @@ impl Operator {
             DoublePipe => Ok(Self::LOr),
             Ampersand => Ok(Self::Or),
             Pipe => Ok(Self::And),
-            _ => chs_error!("{} Unsupported operator", token.loc),
+            _ => return_chs_error!("{} Unsupported operator", token.loc),
         }
     }
 
