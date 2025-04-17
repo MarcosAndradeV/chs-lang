@@ -1,6 +1,8 @@
 pub mod nodes;
 pub mod parser;
 pub mod hir;
+pub mod mir;
+pub mod typechecker;
 
 #[derive(Debug)]
 pub struct RawModule {
