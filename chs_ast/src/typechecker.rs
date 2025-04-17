@@ -99,8 +99,11 @@ impl<'src> TypeChecker<'src> {
                         }
                     }
                     // Comparison operators
+                    crate::nodes::Operator::Le |
+                    crate::nodes::Operator::Ge |
                     crate::nodes::Operator::Lt |
-                    crate::nodes::Operator::Gt => {
+                    crate::nodes::Operator::Gt
+                    => {
                         self.env.unify(&lhs_type, &rhs_type)?;
                         match lhs_type {
                             CHSType::Int | CHSType::UInt => Ok(CHSType::Boolean),
@@ -121,8 +124,11 @@ impl<'src> TypeChecker<'src> {
                         Ok(CHSType::Boolean)
                     }
                     // Bitwise operators
-                    crate::nodes::Operator::And |
-                    crate::nodes::Operator::Or => {
+                    crate::nodes::Operator::BitAnd |
+                    crate::nodes::Operator::BitXor |
+                    crate::nodes::Operator::Shl |
+                    crate::nodes::Operator::Shr |
+                    crate::nodes::Operator::BitOr => {
                         self.env.unify(&lhs_type, &rhs_type)?;
                         match lhs_type {
                             CHSType::Int | CHSType::UInt => Ok(lhs_type),

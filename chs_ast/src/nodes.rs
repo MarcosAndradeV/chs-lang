@@ -49,16 +49,12 @@ impl Expression {
     pub fn from_literal_token(token: Token) -> Result<Self, CHSError> {
         use chs_lexer::TokenKind::*;
         match token.kind {
-            IntegerNumber => {
-                Ok(Self::ConstExpression(ConstExpression::IntegerLiteral(
-                    Span::from(token)
-                )))
-            }
-            CharacterLiteral => {
-                Ok(Self::ConstExpression(ConstExpression::CharLiteral(
-                    Span::from(token)
-                )))
-            }
+            IntegerNumber => Ok(Self::ConstExpression(ConstExpression::IntegerLiteral(
+                Span::from(token),
+            ))),
+            CharacterLiteral => Ok(Self::ConstExpression(ConstExpression::CharLiteral(
+                Span::from(token),
+            ))),
             _ => return_chs_error!("{} Unsupported literal", token.loc),
         }
     }
@@ -170,7 +166,7 @@ pub struct Unop {
     pub operand: Expression,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Operator {
     // Binary
     Plus,
@@ -180,13 +176,18 @@ pub enum Operator {
     Mod,
     LOr,
     LAnd,
-    Or,
-    And,
+    BitOr,
+    BitAnd,
     Eq,
     NEq,
     Gt,
     Lt,
     Assign,
+    Le,
+    Ge,
+    Shl,
+    Shr,
+    BitXor,
     // Unary
     Negate,
     LNot,
@@ -204,14 +205,19 @@ impl fmt::Display for Operator {
             Operator::Mod => write!(f, "%"),
             Operator::LOr => write!(f, "||"),
             Operator::LAnd => write!(f, "&&"),
-            Operator::Or => write!(f, "|"),
-            Operator::Refer | Operator::And => write!(f, "&"),
+            Operator::BitOr => write!(f, "|"),
+            Operator::Refer | Operator::BitAnd => write!(f, "&"),
             Operator::Eq => write!(f, "=="),
             Operator::NEq => write!(f, "!="),
             Operator::Gt => write!(f, ">"),
             Operator::Lt => write!(f, "<"),
             Operator::LNot => write!(f, "!"),
             Operator::Assign => write!(f, "="),
+            Operator::Le => write!(f, "<="),
+            Operator::Ge => write!(f, ">="),
+            Operator::Shl => write!(f, "<<"),
+            Operator::Shr => write!(f, ">>"),
+            Operator::BitXor => write!(f, "^"),
         }
     }
 }
@@ -235,8 +241,8 @@ impl Operator {
             Mod => Ok(Self::Mod),
             DoubleAmpersand => Ok(Self::LAnd),
             DoublePipe => Ok(Self::LOr),
-            Ampersand => Ok(Self::Or),
-            Pipe => Ok(Self::And),
+            Ampersand => Ok(Self::BitOr),
+            Pipe => Ok(Self::BitAnd),
             Assign => Ok(Self::Assign),
             _ => return_chs_error!("{} Unsupported operator", token.loc),
         }
@@ -246,21 +252,91 @@ impl Operator {
         match self {
             Operator::Plus | Operator::Minus => Precedence::Sum,
             Operator::Mult | Operator::Div | Operator::Mod => Precedence::Product,
-            Operator::Lt | Operator::Gt => Precedence::RelatonalGteLte,
+            Operator::Lt | Operator::Le | Operator::Ge | Operator::Gt => {
+                Precedence::RelatonalGteLte
+            }
             Operator::Eq | Operator::NEq => Precedence::Equals,
             Operator::LOr => Precedence::LOr,
             Operator::LAnd => Precedence::LAnd,
-            Operator::Or => Precedence::Or,
-            Operator::And => Precedence::And,
+            Operator::BitOr => Precedence::BitOr,
+            Operator::BitAnd => Precedence::BitAnd,
             Operator::Negate | Operator::LNot => Precedence::Prefix,
             Operator::Refer | Operator::Deref => Precedence::Prefix,
             Operator::Assign => Precedence::Assign,
+            Operator::Shl | Operator::Shr => Precedence::ShlShr,
+            Operator::BitXor => Precedence::BitXor,
             // _ => Precedence::Lowest,
         }
     }
 
-    pub fn get_type_of_op(&self, _lty: CHSType, _rty: CHSType) -> CHSResult<CHSType> {
-        todo!()
+    pub fn get_type_of_op(&self, lty: &CHSType, rty: &CHSType) -> CHSResult<CHSType> {
+        match self {
+            // Arithmetic operators
+            Operator::Plus | Operator::Minus | Operator::Mult | Operator::Div | Operator::Mod => {
+                // Handle pointer arithmetic
+                match (lty, rty) {
+                    (CHSType::Pointer(inner), CHSType::Int)
+                    | (CHSType::Int, CHSType::Pointer(inner)) => {
+                        // Pointer + int or int + pointer results in a pointer
+                        Ok(CHSType::Pointer(inner.clone()))
+                    }
+                    (CHSType::Pointer(inner1), CHSType::Pointer(inner2)) => {
+                        // Pointer - pointer results in an integer (offset)
+                        if inner1 == inner2 {
+                            Ok(CHSType::Int)
+                        } else {
+                            return_chs_error!("Cannot subtract pointers of different types")
+                        }
+                    }
+                    // Regular numeric arithmetic
+                    (CHSType::Int, CHSType::Int) => Ok(CHSType::Int),
+                    (CHSType::UInt, CHSType::UInt) => Ok(CHSType::UInt),
+                    _ => return_chs_error!(
+                        "Arithmetic operators require numeric types of the same kind"
+                    ),
+                }
+            }
+            // Comparison operators
+            Operator::Lt
+            | Operator::Le
+            | Operator::Gt
+            | Operator::Ge
+            | Operator::Eq
+            | Operator::NEq => {
+                if lty == rty {
+                    Ok(CHSType::Boolean)
+                } else {
+                    return_chs_error!("Comparison operators require operands of the same type")
+                }
+            }
+            // Logical operators
+            Operator::LAnd | Operator::LOr => {
+                if *lty == CHSType::Boolean && *rty == CHSType::Boolean {
+                    Ok(CHSType::Boolean)
+                } else {
+                    return_chs_error!("Logical operators require boolean operands")
+                }
+            }
+            // Bitwise operators
+            Operator::BitAnd
+            | Operator::BitOr
+            | Operator::BitXor
+            | Operator::Shl
+            | Operator::Shr => match (lty, rty) {
+                (CHSType::Int, CHSType::Int) => Ok(CHSType::Int),
+                (CHSType::UInt, CHSType::UInt) => Ok(CHSType::UInt),
+                _ => {
+                    return_chs_error!("Bitwise operators require numeric types of the same kind")
+                }
+            },
+            // Unary operators (should not be used in binary expressions)
+            Operator::Negate | Operator::LNot | Operator::Refer | Operator::Deref => {
+                return_chs_error!("Unary operator used in binary expression")
+            }
+            Operator::Assign => {
+                unreachable!("Assignment should be handled by Assign Expression")
+            }
+        }
     }
 }
 
@@ -269,12 +345,12 @@ pub enum Precedence {
     Lowest = 1,
     LOr,
     LAnd,
-    Or,
-    Xor,
-    And,
+    BitOr,
+    BitXor,
+    BitAnd,
     Equals,
     RelatonalGteLte,
-    BitWise,
+    ShlShr,
     Sum,
     Product,
     Assign,
