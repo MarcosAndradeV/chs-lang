@@ -9,7 +9,7 @@ use std::{
     process::{self, exit, ExitCode, Stdio},
 };
 
-use chs_ast::{ hir::{HIRModule, typechecker::TypeChecker}, parser::Parser, RawModule};
+use chs_ast::{ mir::MIRModule, hir::HIRModule, typechecker::TypeChecker, parser::Parser, RawModule};
 use chs_codegen::fasm;
 use chs_util::{return_chs_error, CHSError, CHSResult};
 
@@ -62,10 +62,13 @@ fn compile(
 
     let module = Parser::new(&raw_module).parse()?;
 
-    let module = HIRModule::from_ast_module(module);
+    let module = HIRModule::from_ast(module);
 
     let mut checker = TypeChecker::new(module.raw_module);
     checker.check_module(&module)?;
+
+    let tenv = checker.env();
+    let module = MIRModule::from_hir(module, tenv);
 
     dbg!(module);
     todo!();
