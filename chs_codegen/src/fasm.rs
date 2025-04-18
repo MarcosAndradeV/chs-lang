@@ -217,7 +217,7 @@ impl fmt::Display for Addr {
                 if *dis > 0 {
                     write!(f, "{reg}+{dis}")
                 } else {
-                    write!(f, "{reg}{dis}")
+                    write!(f, "{reg}")
                 }
             }
             Addr::BaseIndexDisplacement(reg1, reg2, dis) => {
@@ -662,6 +662,10 @@ impl Module {
 
     pub fn link_with_c(&mut self, arg: bool) {
         self.link_with_c = arg;
+    }
+
+    pub fn push_extrn(&mut self, name: &str) {
+        self.extrn.push(name.to_string());
     }
 }
 
