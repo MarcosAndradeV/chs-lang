@@ -141,6 +141,14 @@ pub enum Operand {
     Copy(Place),
     /// Move a place's value
     Move(Place),
+    /// Global value
+    Global(Global),
+}
+
+#[derive(Debug)]
+pub enum Global {
+    /// A global extern
+    Extern(Span<String>, CHSType),
 }
 
 #[derive(Debug)]
@@ -225,27 +233,30 @@ impl<'src, 'env> ExprBuilder<'src, 'env> {
     }
 
     fn build_expr(&mut self, expr: hir::HIRExpr) -> Operand {
-        let ty = expr.infer(self.env);
+        let ty = expr.infer(&self.raw_module, self.env);
         match expr {
             hir::HIRExpr::Literal(lit) => self.build_literal(lit),
             hir::HIRExpr::Identifier(id) => {
-                let local = self
-                    .locals
-                    .iter()
-                    .position(|l| {
-                        l.name
-                            .as_ref()
-                            .is_some_and(|n| self.get_span_str(n) == self.get_span_str(&id))
+                if let Some(local) = self.locals.iter().position(|l| {
+                    l.name
+                        .as_ref()
+                        .is_some_and(|n| self.get_span_str(n) == self.get_span_str(&id))
+                }) {
+                    Operand::Copy(Place {
+                        local: LocalId(local),
+                        projection: vec![],
                     })
-                    .expect("Expect bound identifier");
-                Operand::Copy(Place {
-                    local: LocalId(local),
-                    projection: vec![],
-                })
+                } else {
+                    if let Some(f) = self.env.global_get(self.get_span_str(&id)) {
+                        Operand::Global(Global::Extern(id, f.clone()))
+                    } else {
+                        todo!()
+                    }
+                }
             }
             hir::HIRExpr::Binary { op, lhs, rhs } => {
-                let lty = lhs.infer(self.env);
-                let rty = rhs.infer(self.env);
+                let lty = lhs.infer(&self.raw_module, self.env);
+                let rty = rhs.infer(&self.raw_module, self.env);
                 // TODO: Add a error handling for ExprBuilder
                 let ty = op.get_type_of_op(&lty, &rty).unwrap();
 
@@ -321,7 +332,7 @@ impl<'src, 'env> ExprBuilder<'src, 'env> {
                 })
             }
             hir::HIRExpr::Unary { op, operand } => {
-                let ty = operand.infer(self.env);
+                let ty = operand.infer(&self.raw_module, self.env);
                 let operand = self.build_expr(*operand);
                 let temp = self.add_local(None, ty);
 
@@ -348,17 +359,21 @@ impl<'src, 'env> ExprBuilder<'src, 'env> {
             } => {
                 let callee = self.build_expr(*callee);
                 let args = args.into_iter().map(|arg| self.build_expr(arg)).collect();
+                let not_void = ty != CHSType::Void;
                 let temp = self.add_local(None, ty);
-
-                let block = &mut self.blocks[self.current_block_id.0];
-                block.statements.push(Statement::Assign {
-                    target: temp,
-                    value: Rvalue::Call { func: callee, args },
-                });
-                Operand::Copy(Place {
-                    local: temp,
-                    projection: vec![],
-                })
+                if not_void {
+                    let block = &mut self.blocks[self.current_block_id.0];
+                    block.statements.push(Statement::Assign {
+                        target: temp,
+                        value: Rvalue::Call { func: callee, args },
+                    });
+                    Operand::Copy(Place {
+                        local: temp,
+                        projection: vec![],
+                    })
+                } else {
+                    Operand::Constant(Constant::Void)
+                }
             }
             hir::HIRExpr::Cast {
                 span: _,
@@ -431,7 +446,7 @@ impl<'src, 'env> ExprBuilder<'src, 'env> {
                 let ty = if let Some(ty) = ty {
                     ty
                 } else {
-                    value.infer(self.env)
+                    value.infer(&self.raw_module, self.env)
                 };
                 let local = self.add_local(Some(name), ty);
                 let value = self.build_expr(*value);

@@ -429,7 +429,7 @@ impl TypeEnv {
     }
 
     // Get a global type declaration
-    pub fn global_get(&mut self, k: &str) -> Option<&CHSType> {
+    pub fn global_get(&self, k: &str) -> Option<&CHSType> {
         self.globals.get(k).map(|v| v.as_ref())
     }
 
@@ -466,5 +466,5 @@ impl TypeEnv {
 }
 
 pub trait CHSInfer {
-    fn infer(&self, env: &TypeEnv) -> CHSType;
+    fn infer(&self, raw_module: &RawModule, env: &TypeEnv) -> CHSType;
 }

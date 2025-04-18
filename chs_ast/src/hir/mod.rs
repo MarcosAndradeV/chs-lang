@@ -117,9 +117,9 @@ pub struct HIRBlock {
 }
 
 impl CHSInfer for HIRBlock {
-    fn infer(&self, env: &TypeEnv) -> CHSType {
+    fn infer(&self, r: &RawModule , env: &TypeEnv) -> CHSType {
         match self.expressions.last() {
-            Some(e) => e.infer(env),
+            Some(e) => e.infer(r, env),
             None => CHSType::Void,
         }
     }
@@ -187,7 +187,7 @@ pub enum HIRExpr {
 }
 
 impl CHSInfer for HIRExpr {
-    fn infer(&self, env: &TypeEnv) -> CHSType {
+    fn infer(&self, r: &RawModule, env: &TypeEnv) -> CHSType {
         match self {
             HIRExpr::Literal(l) => match l {
                 HIRLiteral::Int(_) => CHSType::Int,
@@ -196,10 +196,22 @@ impl CHSInfer for HIRExpr {
                 HIRLiteral::Char(_) => CHSType::Char,
                 HIRLiteral::Void => CHSType::Void,
             },
-            HIRExpr::Identifier(_) => todo!(),
+            HIRExpr::Identifier(span) => {
+                if let Some(ty) = env.get(&r[span]).map(|t| t.as_ref()) {
+                    ty.clone()
+                } else {
+                    unreachable!("Unknown identifier")
+                }
+            }
             HIRExpr::Binary { .. } => todo!(),
             HIRExpr::Unary { .. } => todo!(),
-            HIRExpr::Call { .. } => todo!(),
+            HIRExpr::Call { span: _, callee, args: _  } => {
+                if let CHSType::Function(_, ret_ty) = callee.infer(r, env) {
+                    *ret_ty
+                } else {
+                    unreachable!("Expected function type for callee")
+                }
+            },
             HIRExpr::Cast { .. } => todo!(),
             HIRExpr::Index { .. } => todo!(),
             HIRExpr::Assign { .. } => todo!(),
@@ -208,14 +220,14 @@ impl CHSInfer for HIRExpr {
             HIRExpr::If {
                 else_branch: Some(else_branch),
                 ..
-            } => else_branch.infer(env),
+            } => else_branch.infer(r, env),
             HIRExpr::If { .. } => CHSType::Void,
             HIRExpr::While { .. } => todo!(),
             HIRExpr::Syscall { .. } => todo!(),
             HIRExpr::Return {
                 span: _,
                 expr: Some(e),
-            } => e.infer(env),
+            } => e.infer(r, env),
             HIRExpr::Return {
                 span: _,
                 expr: None,
