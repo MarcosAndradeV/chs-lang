@@ -1,7 +1,8 @@
 use chs_lexer::{Span, Token};
-use chs_types::{CHSInfer, CHSType};
+use chs_types::CHSType;
 use chs_util::CHSResult;
 
+use crate::typechecker::{CHSInfer, TypeEnv};
 use crate::{nodes, RawModule};
 
 use crate::nodes::Operator;
@@ -116,7 +117,7 @@ pub struct HIRBlock {
 }
 
 impl CHSInfer for HIRBlock {
-    fn infer(&self, env: &chs_types::TypeEnv) -> CHSType {
+    fn infer(&self, env: &TypeEnv) -> CHSType {
         match self.expressions.last() {
             Some(e) => e.infer(env),
             None => CHSType::Void,
@@ -185,8 +186,8 @@ pub enum HIRExpr {
     },
 }
 
-impl chs_types::CHSInfer for HIRExpr {
-    fn infer(&self, _env: &chs_types::TypeEnv) -> CHSType {
+impl CHSInfer for HIRExpr {
+    fn infer(&self, env: &TypeEnv) -> CHSType {
         match self {
             HIRExpr::Literal(l) => match l {
                 HIRLiteral::Int(_) => CHSType::Int,
@@ -207,14 +208,14 @@ impl chs_types::CHSInfer for HIRExpr {
             HIRExpr::If {
                 else_branch: Some(else_branch),
                 ..
-            } => else_branch.infer(_env),
+            } => else_branch.infer(env),
             HIRExpr::If { .. } => CHSType::Void,
             HIRExpr::While { .. } => todo!(),
             HIRExpr::Syscall { .. } => todo!(),
             HIRExpr::Return {
                 span: _,
                 expr: Some(e),
-            } => e.infer(_env),
+            } => e.infer(env),
             HIRExpr::Return {
                 span: _,
                 expr: None,

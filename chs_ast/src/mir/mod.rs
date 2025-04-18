@@ -1,10 +1,9 @@
 use chs_lexer::Span;
-use chs_types::CHSInfer as _;
 use chs_types::CHSType;
-use chs_types::TypeEnv;
 
 use crate::hir;
 use crate::nodes::Operator;
+use crate::typechecker::{CHSInfer as _, TypeEnv};
 use crate::RawModule;
 
 /// MIR Module
