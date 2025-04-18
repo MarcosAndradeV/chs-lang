@@ -10,9 +10,9 @@ use std::{
 };
 
 use chs_ast::{
-    hir::HIRModule, mir::MIRModule, parser::Parser, typechecker::TypeChecker, RawModule,
+    flow_checker::FlowChecker, hir::HIRModule, mir::MIRModule, parser::Parser, typechecker::TypeChecker, RawModule
 };
-use chs_util::{return_chs_error, CHSError, CHSResult};
+use chs_util::{chs_error, return_chs_error, CHSError, CHSResult};
 
 use my_cli::{Cmd, MyCLI};
 
@@ -70,6 +70,21 @@ fn compile(
 
     let tenv = checker.env();
     let module = MIRModule::from_hir(module, tenv);
+
+    let mut checker = FlowChecker::new(&module);
+    checker.check_module().map_err(|errors| {
+        // Combine all flow errors into a single CHSError with a formatted message
+        let error_messages: Vec<String> = errors.iter()
+            .map(|e| e.to_string())
+            .collect();
+        
+        CHSError(format!(
+            "Control flow errors detected:\n{}",
+            error_messages.join("\n")
+        ))
+    })?;
+
+    dbg!(module.items);
 
     todo!("Finalize compilation");
 

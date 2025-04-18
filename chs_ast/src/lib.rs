@@ -3,6 +3,7 @@ pub mod mir;
 pub mod nodes;
 pub mod parser;
 pub mod typechecker;
+pub mod flow_checker;
 
 #[derive(Debug)]
 pub struct RawModule {
