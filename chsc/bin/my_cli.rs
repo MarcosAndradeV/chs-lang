@@ -289,7 +289,7 @@ impl Cmd {
         for (fname, flag) in iter {
             let s = if fname.len() > 1 { "--" } else { "-" };
             if flag.boolean {
-                args.push_str(&format!(" [{s}{fname}] "));
+                args.push_str(&format!(" [{s}{fname}]"));
             } else {
                 args.push_str(&format!(" [{s}{fname} "));
                 args.push_str(&format!("<{}>]", flag.value));
