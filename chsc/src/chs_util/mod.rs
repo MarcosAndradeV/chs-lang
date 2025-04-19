@@ -1,4 +1,5 @@
 use core::fmt;
+use std::{path::Path, time::SystemTime};
 pub struct CHSError(pub String);
 pub type CHSResult<T> = Result<T, CHSError>;
 
@@ -72,5 +73,20 @@ impl Loc {
             c if (c as char).is_control() => {}
             _ => self.next_column(),
         }
+    }
+}
+
+pub fn binary_exists(bin: &str) -> bool {
+    which::which(bin).is_ok()
+}
+
+pub fn file_changed(src: &Path, artifact: &Path) -> bool {
+    use std::fs;
+
+    match (fs::metadata(src), fs::metadata(artifact)) {
+        (Ok(src_meta), Ok(art_meta)) => {
+            src_meta.modified().unwrap_or(SystemTime::now()) > art_meta.modified().unwrap_or(SystemTime::now())
+        }
+        _ => true, // Force rebuild if files are missing or error
     }
 }
