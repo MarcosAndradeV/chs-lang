@@ -41,6 +41,9 @@ impl<'src> TypeChecker<'src> {
                 HIRModuleItem::Function(func) => self.check_function(func)?,
                 HIRModuleItem::ExternFunction(func) => {
                     let name = self.get_span_str(&func.name);
+                    if let Some(_) = self.env.global_get(name) {
+                        return_chs_error!("{}:{}: Duplicate function declaration: {}", self.raw_module.file_path, func.name.loc, name);
+                    }
                     self.env.global_insert(name, Rc::new(func.fn_type.clone()));
                 }
             }
