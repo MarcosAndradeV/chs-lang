@@ -2,8 +2,15 @@ use std::{fs, path::PathBuf, process::Command};
 
 use chsc::{
     chs_ast::{
-        self, flow_checker::FlowChecker, hir::HIRModule, mir::MIRModule, parser::Parser, typechecker::TypeChecker, RawModule
-    }, chs_codegen::qbe_backend::QBEBackend, chs_error, chs_util::{binary_exists, file_changed, CHSError, CHSResult}, cli, config::Config, return_chs_error
+        self, RawModule, flow_checker::FlowChecker, hir::HIRModule, mir::MIRModule, parser::Parser,
+        typechecker::TypeChecker,
+    },
+    chs_codegen::qbe_backend::QBEBackend,
+    chs_error,
+    chs_util::{CHSError, CHSResult, binary_exists, file_changed},
+    cli,
+    config::Config,
+    return_chs_error,
 };
 use clap::Parser as _;
 
@@ -42,7 +49,11 @@ fn main() {
             }
         }
 
-        cli::Commands::CompileRun { input, output, force} => {
+        cli::Commands::CompileRun {
+            input,
+            output,
+            force,
+        } => {
             let result = compile(input, output, true, true, force);
             if let Err(err) = result {
                 eprintln!("[ERROR] {}", err);
@@ -60,7 +71,13 @@ macro_rules! log {
     }
 }
 
-fn compile(input_path: String, outpath: Option<String>, run: bool, silent: bool, force: bool) -> CHSResult<()> {
+fn compile(
+    input_path: String,
+    outpath: Option<String>,
+    run: bool,
+    silent: bool,
+    force: bool,
+) -> CHSResult<()> {
     let file_path = PathBuf::from(&input_path);
     let ssa_path = file_path.with_extension("ssa");
     let asm_path = file_path.with_extension("s");
@@ -69,7 +86,10 @@ fn compile(input_path: String, outpath: Option<String>, run: bool, silent: bool,
         .unwrap_or_else(|| file_path.with_extension(""));
 
     if !file_changed(&file_path, &out_path) && !force {
-        log!(silent && !run, "[INFO] Skipping rebuild, using cached output.");
+        log!(
+            silent && !run,
+            "[INFO] Skipping rebuild, using cached output."
+        );
         if run {
             run_exe(out_path)?;
         }
@@ -163,7 +183,14 @@ fn compile(input_path: String, outpath: Option<String>, run: bool, silent: bool,
     }
 
     log!(silent, "[INFO] Cleaning up temporary files...");
-    for temp_file in [&ssa_path, &asm_path] {
+    let paths = &[&ssa_path, &asm_path];
+    cleanup_files(silent, paths);
+
+    Ok(())
+}
+
+fn cleanup_files(silent: bool, paths: &[&PathBuf]) {
+    for temp_file in paths {
         if let Err(e) = fs::remove_file(temp_file) {
             log!(
                 silent,
@@ -173,8 +200,6 @@ fn compile(input_path: String, outpath: Option<String>, run: bool, silent: bool,
             );
         }
     }
-
-    Ok(())
 }
 
 fn run_exe(path: PathBuf) -> CHSResult<()> {
