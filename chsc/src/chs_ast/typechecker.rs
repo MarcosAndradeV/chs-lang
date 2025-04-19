@@ -9,9 +9,9 @@ use crate::{
 };
 
 use super::{
+    RawModule,
     hir::{HIRBlock, HIRExpr, HIRFunction, HIRLiteral, HIRModule, HIRModuleItem},
     nodes::Operator,
-    RawModule,
 };
 
 pub struct TypeChecker<'src> {

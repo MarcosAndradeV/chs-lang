@@ -5,9 +5,9 @@ use crate::{
 };
 
 use super::{
+    RawModule,
     nodes::{self, Operator},
     typechecker::{CHSInfer, TypeEnv},
-    RawModule,
 };
 
 #[derive(Debug)]

@@ -1,10 +1,9 @@
 use crate::{chs_lexer::Span, chs_types::CHSType};
 
 use super::{
-    hir,
+    RawModule, hir,
     nodes::Operator,
     typechecker::{CHSInfer as _, TypeEnv},
-    RawModule,
 };
 
 /// MIR Module
@@ -149,7 +148,7 @@ pub enum Operand {
 #[derive(Debug)]
 pub enum Global {
     /// A global extern
-    Extern(Span<String>, CHSType),
+    Function(Span<String>, CHSType),
 }
 
 #[derive(Debug)]
@@ -247,8 +246,10 @@ impl<'src, 'env> ExprBuilder<'src, 'env> {
                         local: LocalId(local),
                         projection: vec![],
                     })
-                } else if let Some(f) = self.env.global_get(self.get_span_str(&id)) {
-                    Operand::Global(Global::Extern(id, f.clone()))
+                } else if let Some(f @ CHSType::Function(..)) =
+                    self.env.global_get(self.get_span_str(&id))
+                {
+                    Operand::Global(Global::Function(id, f.clone()))
                 } else {
                     todo!()
                 }

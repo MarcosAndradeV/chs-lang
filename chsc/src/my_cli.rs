@@ -163,11 +163,7 @@ impl MyCLI {
 
         let max_w = 5 + self.usage.iter().fold(0, |w, (name, arg, _)| {
             let size = name.len() + arg.len();
-            if w < size {
-                size
-            } else {
-                w
-            }
+            if w < size { size } else { w }
         });
 
         for (name, args, description) in self.usage.iter() {

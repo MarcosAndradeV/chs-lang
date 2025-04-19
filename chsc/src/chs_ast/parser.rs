@@ -6,7 +6,7 @@ use crate::{
     return_chs_error,
 };
 
-use super::{nodes::*, RawModule};
+use super::{RawModule, nodes::*};
 
 pub struct Parser<'src> {
     module: &'src RawModule,
@@ -175,7 +175,7 @@ impl<'src> Parser<'src> {
                 if operator.precedence() > lowest_precedence {
                     op_stack.push((operator, ptoken));
                     self.next(); // consume operator
-                                 // Parse next primary expression as the right-hand side.
+                    // Parse next primary expression as the right-hand side.
                     expr_stack.push(self.parse_primary_iterative()?);
                     // After pushing, combine operators if the next operator has lower precedence.
                     while let Some((top_op, _)) = op_stack.last() {

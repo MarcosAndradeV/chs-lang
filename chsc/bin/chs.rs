@@ -1,18 +1,19 @@
 #![allow(unused)]
 use std::{
     env::Args,
-    fs::File,
+    fs::{self, File},
     io::{Empty, Write},
     os::unix::process::CommandExt,
     path::PathBuf,
-    process::{self, exit, ExitCode, Stdio},
+    process::{self, Command, ExitCode, Stdio, exit},
 };
 
 use chsc::{
     chs_ast::{
-        self, flow_checker::FlowChecker, hir::HIRModule, mir::MIRModule, parser::Parser,
-        typechecker::TypeChecker, RawModule,
+        self, RawModule, flow_checker::FlowChecker, hir::HIRModule, mir::MIRModule, parser::Parser,
+        typechecker::TypeChecker,
     },
+    chs_codegen::qbe_backend::QBEBackend,
     chs_lexer,
     chs_util::{CHSError, CHSResult},
     my_cli::{Cmd, MyCLI},
@@ -53,7 +54,6 @@ fn main() {
     }
 }
 
-#[allow(dead_code)]
 fn compile(
     file_path: String,
     outpath: Option<String>,
@@ -61,18 +61,24 @@ fn compile(
     silent: bool,
     emit_asm: bool,
 ) -> CHSResult<()> {
+    println!("[INFO] Reading module from file: {}", file_path);
     let raw_module = RawModule::new(chs_ast::read_flie(&file_path), file_path);
 
+    println!("[INFO] Parsing module...");
     let module = Parser::new(&raw_module).parse()?;
 
+    println!("[INFO] Converting to HIR...");
     let module = HIRModule::from_ast(module);
 
+    println!("[INFO] Running type checker...");
     let mut checker = TypeChecker::new(module.raw_module);
     checker.check_module(&module)?;
 
+    println!("[INFO] Converting to MIR...");
     let tenv = checker.env();
     let module = MIRModule::from_hir(module, tenv);
 
+    println!("[INFO] Running flow checker...");
     let mut checker = FlowChecker::new(&module);
     checker.check_module().map_err(|errors| {
         let error_messages: Vec<String> = errors.iter().map(|e| e.to_string()).collect();
@@ -83,9 +89,41 @@ fn compile(
         ))
     })?;
 
-    dbg!(module.items);
+    println!("[INFO] Generating code using QBE backend...");
+    let mut backend = QBEBackend::new(&raw_module);
+    backend.generate_module(module);
+    let module = backend.finish();
 
-    todo!("Finalize compilation");
+    let file_path = PathBuf::from(&raw_module.file_path);
+    let ssa_path = file_path.with_extension("ssa");
+    let asm_path = file_path.with_extension("s");
+    let out_path = file_path.with_extension("");
 
+    fs::write(&ssa_path, module.to_string()).unwrap();
+
+    println!(
+        "[INFO] CMD: qbe -o {} {}",
+        asm_path.display(),
+        ssa_path.display()
+    );
+    Command::new("qbe")
+        .arg("-o")
+        .arg(&asm_path)
+        .arg(&ssa_path)
+        .status()
+        .unwrap();
+    println!(
+        "[INFO] CMD: cc -o {} {}",
+        out_path.display(),
+        asm_path.display()
+    );
+    Command::new("cc")
+        .arg("-o")
+        .arg(&out_path)
+        .arg(&asm_path)
+        .status()
+        .unwrap();
+
+    println!("[INFO] Compilation completed successfully!");
     Ok(())
 }

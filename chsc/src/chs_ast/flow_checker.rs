@@ -166,9 +166,9 @@ impl<'src> FlowChecker<'src> {
 mod tests {
     use crate::{
         chs_ast::{
+            RawModule,
             flow_checker::{FlowChecker, FlowError},
             mir::{BasicBlock, BlockId, Local, MIRFunction, MIRModule, MIRModuleItem, Terminator},
-            RawModule,
         },
         chs_lexer::{Loc, Token, TokenKind},
         chs_types::CHSType,
