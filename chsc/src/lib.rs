@@ -3,4 +3,5 @@ pub mod chs_codegen;
 pub mod chs_lexer;
 pub mod chs_types;
 pub mod chs_util;
-pub mod my_cli;
+pub mod cli;
+pub mod config;
