@@ -11,7 +11,7 @@ impl fmt::Debug for CHSError {
 
 impl fmt::Display for CHSError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "ERROR: {}", self.0)
+        write!(f, "{}", self.0)
     }
 }
 
