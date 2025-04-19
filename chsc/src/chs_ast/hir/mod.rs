@@ -5,7 +5,9 @@ use crate::{
 };
 
 use super::{
-    nodes::{self, Operator}, typechecker::{CHSInfer, TypeEnv}, RawModule
+    RawModule,
+    nodes::{self, Operator},
+    typechecker::CHSInfer,
 };
 
 #[derive(Debug)]
@@ -49,10 +51,7 @@ impl<'src> HIRModule<'src> {
                 nodes::ModuleItem::MacroCall(..) => todo!(),
             })
             .collect();
-        Self {
-            raw_module,
-            items,
-        }
+        Self { raw_module, items }
     }
 }
 
@@ -118,31 +117,32 @@ impl HIRParam {
 #[derive(Debug)]
 pub struct HIRBlock {
     pub expressions: Vec<HIRExpr>,
+    pub ty: Option<CHSType>,
 }
 
 impl CHSInfer for HIRBlock {
-    fn infer(&self, r: &RawModule, env: &TypeEnv) -> CHSType {
-        match self.expressions.last() {
-            Some(e) => e.infer(r, env),
-            None => CHSType::Void,
-        }
+    fn infer(&self) -> CHSType {
+        self.ty.clone().unwrap_or(CHSType::Void)
     }
 }
 
 #[derive(Debug)]
 pub enum HIRExpr {
     Literal(HIRLiteral),
-    Identifier(Span<String>),
+    Identifier(Span<String>, Option<CHSType>),
     Binary {
+        ty: Option<CHSType>,
         op: HIROperator,
         lhs: Box<HIRExpr>,
         rhs: Box<HIRExpr>,
     },
     Unary {
+        ty: Option<CHSType>,
         op: HIROperator,
         operand: Box<HIRExpr>,
     },
     Call {
+        ty: Option<CHSType>,
         span: Span<()>,
         callee: Box<HIRExpr>,
         args: Vec<HIRExpr>,
@@ -191,7 +191,7 @@ pub enum HIRExpr {
 }
 
 impl CHSInfer for HIRExpr {
-    fn infer(&self, r: &RawModule, env: &TypeEnv) -> CHSType {
+    fn infer(&self) -> CHSType {
         match self {
             HIRExpr::Literal(l) => match l {
                 HIRLiteral::Int(_) => CHSType::Int,
@@ -200,42 +200,26 @@ impl CHSInfer for HIRExpr {
                 HIRLiteral::Char(_) => CHSType::Char,
                 HIRLiteral::Void => CHSType::Void,
             },
-            HIRExpr::Identifier(span) => {
-                if let Some(ty) = env.get(&r[span]).map(|t| t.as_ref()) {
-                    ty.clone()
-                } else {
-                    unreachable!("Unknown identifier")
-                }
-            }
-            HIRExpr::Binary { .. } => todo!(),
-            HIRExpr::Unary { .. } => todo!(),
-            HIRExpr::Call {
-                span: _,
-                callee,
-                args: _,
-            } => {
-                if let CHSType::Function(_, ret_ty) = callee.infer(r, env) {
-                    *ret_ty
-                } else {
-                    unreachable!("Expected function type for callee")
-                }
-            }
+            HIRExpr::Identifier(_, ty) => ty.clone().unwrap(),
+            HIRExpr::Binary { ty, .. } => ty.clone().unwrap(),
+            HIRExpr::Unary { ty, .. } => ty.clone().unwrap(),
+            HIRExpr::Call { ty, .. } => ty.clone().unwrap(),
             HIRExpr::Cast { .. } => todo!(),
             HIRExpr::Index { .. } => todo!(),
             HIRExpr::Assign { .. } => todo!(),
-            HIRExpr::VarDecl { .. } => todo!(),
+            HIRExpr::VarDecl { .. } => CHSType::Void,
             HIRExpr::Block(..) => todo!(),
             HIRExpr::If {
                 else_branch: Some(else_branch),
                 ..
-            } => else_branch.infer(r, env),
+            } => else_branch.infer(),
             HIRExpr::If { .. } => CHSType::Void,
             HIRExpr::While { .. } => todo!(),
             HIRExpr::Syscall { .. } => todo!(),
             HIRExpr::Return {
                 span: _,
                 expr: Some(e),
-            } => e.infer(r, env),
+            } => e.infer(),
             HIRExpr::Return {
                 span: _,
                 expr: None,
@@ -250,20 +234,23 @@ impl HIRExpr {
             nodes::Expression::ConstExpression(cexp) => match cexp {
                 nodes::ConstExpression::IntegerLiteral(s) => HIRExpr::Literal(HIRLiteral::Int(s)),
                 nodes::ConstExpression::BooleanLiteral(s) => HIRExpr::Literal(HIRLiteral::Bool(s)),
-                nodes::ConstExpression::Identifier(s) => HIRExpr::Identifier(s),
+                nodes::ConstExpression::Identifier(s) => HIRExpr::Identifier(s, None),
                 nodes::ConstExpression::StringLiteral(s) => HIRExpr::Literal(HIRLiteral::Str(s)),
                 nodes::ConstExpression::CharLiteral(s) => HIRExpr::Literal(HIRLiteral::Char(s)),
             },
             nodes::Expression::Binop(b) => HIRExpr::Binary {
+                ty: None,
                 op: HIROperator::from_ast_op(b.token, b.op),
                 lhs: HIRExpr::from_ast_expr(b.left).into(),
                 rhs: HIRExpr::from_ast_expr(b.right).into(),
             },
             nodes::Expression::Unop(u) => HIRExpr::Unary {
+                ty: None,
                 op: HIROperator::from_ast_op(u.token, u.op),
                 operand: HIRExpr::from_ast_expr(u.operand).into(),
             },
             nodes::Expression::Call(c) => HIRExpr::Call {
+                ty: None,
                 span: Span::from(c.token),
                 callee: HIRExpr::from_ast_expr(c.callee).into(),
                 args: c.args.into_iter().map(HIRExpr::from_ast_expr).collect(),
@@ -299,6 +286,7 @@ impl HIRExpr {
                 condition: HIRExpr::from_ast_expr(i.cond).into(),
                 then_branch: HIRBlock {
                     expressions: i.body.into_iter().map(HIRExpr::from_ast_expr).collect(),
+                    ty: None,
                 },
                 else_branch: None,
             },
@@ -307,6 +295,7 @@ impl HIRExpr {
                 condition: HIRExpr::from_ast_expr(i.cond).into(),
                 then_branch: HIRBlock {
                     expressions: i.body.into_iter().map(HIRExpr::from_ast_expr).collect(),
+                    ty: None,
                 },
                 else_branch: Some(HIRBlock {
                     expressions: i
@@ -314,6 +303,7 @@ impl HIRExpr {
                         .into_iter()
                         .map(HIRExpr::from_ast_expr)
                         .collect(),
+                    ty: None,
                 }),
             },
             nodes::Expression::WhileExpression(w) => HIRExpr::While {
@@ -321,6 +311,7 @@ impl HIRExpr {
                 condition: HIRExpr::from_ast_expr(w.cond).into(),
                 body: HIRBlock {
                     expressions: w.body.into_iter().map(HIRExpr::from_ast_expr).collect(),
+                    ty: None,
                 },
             },
             nodes::Expression::ReturnExpression(r) => HIRExpr::Return {

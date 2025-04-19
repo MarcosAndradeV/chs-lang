@@ -103,11 +103,11 @@ fn compile(
     let module = Parser::new(&raw_module).parse()?;
 
     log!(silent, "[INFO] Converting to HIR...");
-    let module = HIRModule::from_ast(module);
+    let mut module = HIRModule::from_ast(module);
 
     log!(silent, "[INFO] Running type checker...");
     let mut checker = TypeChecker::new(module.raw_module);
-    checker.check_module(&module)?;
+    checker.check_module(&mut module)?;
 
     log!(silent, "[INFO] Converting to MIR...");
     let tenv = checker.env();

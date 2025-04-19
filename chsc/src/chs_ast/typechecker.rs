@@ -27,22 +27,23 @@ impl<'src> TypeChecker<'src> {
         }
     }
 
-    pub fn env(&self) -> &TypeEnv {
-        &self.env
-    }
-
     fn get_span_str(&self, span: &Span<String>) -> &'src str {
         &self.raw_module[span]
     }
 
-    pub fn check_module(&mut self, module: &HIRModule) -> CHSResult<()> {
-        for item in &module.items {
+    pub fn check_module(&mut self, module: &mut HIRModule) -> CHSResult<()> {
+        for item in &mut module.items {
             match item {
                 HIRModuleItem::Function(func) => self.check_function(func)?,
                 HIRModuleItem::ExternFunction(func) => {
                     let name = self.get_span_str(&func.name);
                     if let Some(_) = self.env.global_get(name) {
-                        return_chs_error!("{}:{}: Duplicate function declaration: {}", self.raw_module.file_path, func.name.loc, name);
+                        return_chs_error!(
+                            "{}:{}: Duplicate function declaration: {}",
+                            self.raw_module.file_path,
+                            func.name.loc,
+                            name
+                        );
                     }
                     self.env.global_insert(name, Rc::new(func.fn_type.clone()));
                 }
@@ -58,7 +59,7 @@ impl<'src> TypeChecker<'src> {
         Ok(())
     }
 
-    fn check_function(&mut self, func: &HIRFunction) -> CHSResult<()> {
+    fn check_function(&mut self, func: &mut HIRFunction) -> CHSResult<()> {
         // Register function in global scope
         let name = self.get_span_str(&func.name);
         self.env.global_insert(name, Rc::new(func.fn_type.clone()));
@@ -75,7 +76,7 @@ impl<'src> TypeChecker<'src> {
 
         // Type check body
         let mut last_type = CHSType::Void;
-        for expr in &func.body {
+        for expr in &mut func.body {
             last_type = self.check_expr(expr)?;
         }
 
@@ -96,22 +97,29 @@ impl<'src> TypeChecker<'src> {
         Ok(())
     }
 
-    fn check_expr(&mut self, expr: &HIRExpr) -> CHSResult<CHSType> {
+    fn check_expr(&mut self, expr: &mut HIRExpr) -> CHSResult<CHSType> {
         match expr {
             HIRExpr::Literal(lit) => self.check_literal(lit),
-            HIRExpr::Identifier(name) => {
+            HIRExpr::Identifier(name, ty) => {
                 let name_str = self.get_span_str(name);
-                if let Some(ty) = self.env.get(name_str) {
-                    Ok((**ty).clone())
+                let t: CHSType = if let Some(ty) = self.env.get(name_str) {
+                    (**ty).clone()
                 } else {
-                    return_chs_error!("{} Undefined variable: {}", name.loc, name_str)
-                }
+                    return_chs_error!(
+                        "{}:{} Undefined variable: {}",
+                        self.raw_module.file_path,
+                        name.loc,
+                        name_str
+                    )
+                };
+                *ty = Some(t.clone());
+                Ok(t)
             }
-            HIRExpr::Binary { op, lhs, rhs } => {
+            HIRExpr::Binary { ty, op, lhs, rhs } => {
                 let lhs_type = self.check_expr(lhs)?;
                 let rhs_type = self.check_expr(rhs)?;
 
-                match op.op {
+                let expr_ty = match op.op {
                     // Arithmetic operators
                     Operator::Plus
                     | Operator::Minus
@@ -120,7 +128,7 @@ impl<'src> TypeChecker<'src> {
                     | Operator::Mod => {
                         self.env.unify(&lhs_type, &rhs_type)?;
                         match lhs_type {
-                            CHSType::Int | CHSType::UInt => Ok(lhs_type),
+                            CHSType::Int | CHSType::UInt => lhs_type,
                             _ => return_chs_error!(
                                 "{} Expected numeric type for arithmetic operation",
                                 op.span.loc
@@ -131,7 +139,7 @@ impl<'src> TypeChecker<'src> {
                     Operator::Le | Operator::Ge | Operator::Lt | Operator::Gt => {
                         self.env.unify(&lhs_type, &rhs_type)?;
                         match lhs_type {
-                            CHSType::Int | CHSType::UInt => Ok(CHSType::Boolean),
+                            CHSType::Int | CHSType::UInt => CHSType::Boolean,
                             _ => return_chs_error!(
                                 "{} Expected numeric type for comparison",
                                 op.span.loc
@@ -141,13 +149,13 @@ impl<'src> TypeChecker<'src> {
                     // Equality operators
                     Operator::Eq | Operator::NEq => {
                         self.env.unify(&lhs_type, &rhs_type)?;
-                        Ok(CHSType::Boolean)
+                        CHSType::Boolean
                     }
                     // Logical operators
                     Operator::LAnd | Operator::LOr => {
                         self.env.unify(&lhs_type, &CHSType::Boolean)?;
                         self.env.unify(&rhs_type, &CHSType::Boolean)?;
-                        Ok(CHSType::Boolean)
+                        CHSType::Boolean
                     }
                     // Bitwise operators
                     Operator::BitAnd
@@ -157,7 +165,7 @@ impl<'src> TypeChecker<'src> {
                     | Operator::BitOr => {
                         self.env.unify(&lhs_type, &rhs_type)?;
                         match lhs_type {
-                            CHSType::Int | CHSType::UInt => Ok(lhs_type),
+                            CHSType::Int | CHSType::UInt => lhs_type,
                             _ => return_chs_error!(
                                 "{} Expected numeric type for bitwise operation",
                                 op.span.loc
@@ -166,48 +174,59 @@ impl<'src> TypeChecker<'src> {
                     }
                     Operator::Assign => {
                         self.env.unify(&lhs_type, &rhs_type)?;
-                        Ok(lhs_type)
+                        lhs_type
                     }
                     // These operators should not appear in binary expressions
                     _ => {
                         unreachable!("Unary operator used in binary expression")
                     }
-                }
+                };
+
+                *ty = Some(expr_ty.clone());
+                Ok(expr_ty)
             }
-            HIRExpr::Unary { op, operand } => {
+            HIRExpr::Unary { ty, op, operand } => {
                 let operand_type = self.check_expr(operand)?;
-                match op.op {
+                let expr_ty = match op.op {
                     Operator::Negate => match operand_type {
-                        CHSType::Int | CHSType::UInt => Ok(operand_type),
+                        CHSType::Int | CHSType::UInt => operand_type,
                         _ => {
                             return_chs_error!("{} Expected numeric type for negation", op.span.loc)
                         }
                     },
                     Operator::LNot => {
                         self.env.unify(&operand_type, &CHSType::Boolean)?;
-                        Ok(CHSType::Boolean)
+                        CHSType::Boolean
                     }
                     Operator::Deref => match operand_type {
-                        CHSType::Pointer(inner) => Ok(*inner),
+                        CHSType::Pointer(inner) => *inner,
                         _ => {
                             return_chs_error!("{} Can only dereference pointer types", op.span.loc)
                         }
                     },
-                    Operator::Refer => Ok(CHSType::Pointer(Box::new(operand_type))),
+                    Operator::Refer => CHSType::Pointer(Box::new(operand_type)),
                     _ => unreachable!("Invalid unary operator"),
-                }
+                };
+                *ty = Some(expr_ty.clone());
+                Ok(expr_ty)
             }
-            HIRExpr::Call { span, callee, args } => {
+            HIRExpr::Call {
+                ty,
+                span,
+                callee,
+                args,
+            } => {
                 let callee_type = self.check_expr(callee)?;
                 match callee_type {
                     CHSType::Function(param_types, return_type) => {
                         if args.len() != param_types.len() {
                             return_chs_error!("{} Wrong number of arguments", span.loc);
                         }
-                        for (arg, expected_type) in args.iter().zip(param_types.iter()) {
+                        for (arg, expected_type) in args.iter_mut().zip(param_types.iter()) {
                             let arg_type = self.check_expr(arg)?;
                             self.env.unify(&arg_type, expected_type)?;
                         }
+                        *ty = Some((*return_type).clone());
                         Ok(*return_type)
                     }
                     _ => return_chs_error!("{} Called expression is not a function", span.loc),
@@ -220,7 +239,7 @@ impl<'src> TypeChecker<'src> {
             } => {
                 let expr_type = self.check_expr(expr)?;
                 // For now, only allow numeric casts
-                match (&expr_type, to_type) {
+                match (&expr_type, &to_type) {
                     (CHSType::Int, CHSType::UInt) | (CHSType::UInt, CHSType::Int) => {
                         Ok(to_type.clone())
                     }
@@ -287,7 +306,7 @@ impl<'src> TypeChecker<'src> {
             HIRExpr::Block(block) => {
                 self.env.locals_new();
                 let mut last_type = CHSType::Void;
-                for expr in &block.expressions {
+                for expr in &mut block.expressions {
                     last_type = self.check_expr(expr)?;
                 }
                 self.env.locals.pop();
@@ -345,10 +364,10 @@ impl<'src> TypeChecker<'src> {
         }
     }
 
-    fn check_block(&mut self, block: &HIRBlock) -> CHSResult<CHSType> {
+    fn check_block(&mut self, block: &mut HIRBlock) -> CHSResult<CHSType> {
         self.env.locals_new();
         let mut last_type = CHSType::Void;
-        for expr in &block.expressions {
+        for expr in &mut block.expressions {
             last_type = self.check_expr(expr)?;
         }
         self.env.locals.pop();
@@ -363,6 +382,10 @@ impl<'src> TypeChecker<'src> {
             HIRLiteral::Char(_) => CHSType::Char,
             HIRLiteral::Void => CHSType::Void,
         })
+    }
+
+    pub fn env(&self) -> &TypeEnv {
+        &self.env
     }
 }
 
@@ -471,5 +494,5 @@ impl TypeEnv {
 }
 
 pub trait CHSInfer {
-    fn infer(&self, raw_module: &RawModule, env: &TypeEnv) -> CHSType;
+    fn infer(&self) -> CHSType;
 }

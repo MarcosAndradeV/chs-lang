@@ -233,10 +233,10 @@ impl<'src, 'env> ExprBuilder<'src, 'env> {
     }
 
     fn build_expr(&mut self, expr: hir::HIRExpr) -> Operand {
-        let ty = expr.infer(self.raw_module, self.env);
+        let ty = expr.infer();
         match expr {
             hir::HIRExpr::Literal(lit) => self.build_literal(lit),
-            hir::HIRExpr::Identifier(id) => {
+            hir::HIRExpr::Identifier(id, _) => {
                 if let Some(local) = self.locals.iter().position(|l| {
                     l.name
                         .as_ref()
@@ -254,11 +254,11 @@ impl<'src, 'env> ExprBuilder<'src, 'env> {
                     todo!()
                 }
             }
-            hir::HIRExpr::Binary { op, lhs, rhs } => {
-                let lty = lhs.infer(self.raw_module, self.env);
-                let rty = rhs.infer(self.raw_module, self.env);
+            hir::HIRExpr::Binary { ty, op, lhs, rhs } => {
+                let lty = lhs.infer();
+                let rty = rhs.infer();
                 // TODO: Add a error handling for ExprBuilder
-                let ty = op.get_type_of_op(&lty, &rty).unwrap();
+                let ty = ty.unwrap();
 
                 let lhs = self.build_expr(*lhs);
                 let rhs = self.build_expr(*rhs);
@@ -331,8 +331,8 @@ impl<'src, 'env> ExprBuilder<'src, 'env> {
                     projection: vec![],
                 })
             }
-            hir::HIRExpr::Unary { op, operand } => {
-                let ty = operand.infer(self.raw_module, self.env);
+            hir::HIRExpr::Unary { ty: _, op, operand } => {
+                let ty = operand.infer();
                 let operand = self.build_expr(*operand);
                 let temp = self.add_local(None, ty);
 
@@ -353,6 +353,7 @@ impl<'src, 'env> ExprBuilder<'src, 'env> {
                 })
             }
             hir::HIRExpr::Call {
+                ty: _,
                 span: _,
                 callee,
                 args,
@@ -446,7 +447,7 @@ impl<'src, 'env> ExprBuilder<'src, 'env> {
                 let ty = if let Some(ty) = ty {
                     ty
                 } else {
-                    value.infer(self.raw_module, self.env)
+                    value.infer()
                 };
                 let local = self.add_local(Some(name), ty);
                 let value = self.build_expr(*value);
