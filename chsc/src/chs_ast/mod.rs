@@ -37,7 +37,7 @@ impl ops::Index<&Token> for RawModule {
     }
 }
 
-pub fn read_flie<P: AsRef<Path>>(file_path: P) -> String {
+pub fn read_file<P: AsRef<Path>>(file_path: P) -> String {
     match fs::read_to_string(file_path) {
         Ok(ok) => ok,
         Err(err) => {
