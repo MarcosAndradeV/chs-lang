@@ -80,6 +80,17 @@ impl<'src> TypeChecker<'src> {
             last_type = self.check_expr(expr)?;
         }
 
+        if let Some(HIRExpr::Return { .. }) = func.body.last() {
+            // Ok
+        } else {
+            return_chs_error!(
+                "{}:{} Implicit return is not yet implemented. Last expression of function `{}` must be a return statement.",
+                self.raw_module.file_path,
+                func.name.loc,
+                self.get_span_str(&func.name)
+            )
+        }
+
         // Verify return type matches
         self.env.unify(&last_type, &func.return_type).map_err(|_| {
             chs_error!(
