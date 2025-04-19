@@ -1,7 +1,7 @@
 use core::fmt;
 use std::collections::HashSet;
 
-use crate::mir::{BlockId, MIRFunction, MIRModule, MIRModuleItem, Terminator};
+use super::mir::{BlockId, MIRFunction, MIRModule, MIRModuleItem, Terminator};
 
 /// Error types that can be encountered during flow checking
 #[derive(Debug)]
@@ -14,15 +14,16 @@ pub enum FlowError {
     UnreachableCodeAfterReturn(BlockId),
 }
 
-impl fmt::Display for FlowError{
+impl fmt::Display for FlowError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            FlowError::InvalidBlockReference(block_id)
-            => write!(f, "Invalid block reference: {:?}", block_id),
-            FlowError::UnreachableBlock(block_id) =>
-            write!(f, "Unreachable block: {:?}", block_id),
-            FlowError::UnreachableCodeAfterReturn(block_id) =>
-            write!(f, "Unreachable code after return in block: {:?}", block_id),
+            FlowError::InvalidBlockReference(block_id) => {
+                write!(f, "Invalid block reference: {:?}", block_id)
+            }
+            FlowError::UnreachableBlock(block_id) => write!(f, "Unreachable block: {:?}", block_id),
+            FlowError::UnreachableCodeAfterReturn(block_id) => {
+                write!(f, "Unreachable code after return in block: {:?}", block_id)
+            }
         }
     }
 }
@@ -148,17 +149,14 @@ impl<'src> FlowChecker<'src> {
     fn check_unreachable_code(&self, func: &MIRFunction, errors: &mut Vec<FlowError>) {
         for block in &func.blocks {
             // If a block has statements after a return terminator, mark as error
-            match &block.terminator {
-                Terminator::Return(_) => {
-                    // Check next block if it exists and is reachable
-                    let next_block_id = BlockId(block.id.0 + 1);
-                    if next_block_id.0 < func.blocks.len() {
-                        // Only report if the next block is reachable through some path
-                        // We'll skip this check as it would duplicate unreachable block errors
-                        errors.push(FlowError::UnreachableCodeAfterReturn(next_block_id));
-                    }
+            if let Terminator::Return(_) = &block.terminator {
+                // Check next block if it exists and is reachable
+                let next_block_id = BlockId(block.id.0 + 1);
+                if next_block_id.0 < func.blocks.len() {
+                    // Only report if the next block is reachable through some path
+                    // We'll skip this check as it would duplicate unreachable block errors
+                    errors.push(FlowError::UnreachableCodeAfterReturn(next_block_id));
                 }
-                _ => {}
             }
         }
     }
@@ -166,11 +164,15 @@ impl<'src> FlowChecker<'src> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::mir::{BasicBlock, Local};
-    use crate::RawModule;
-    use chs_lexer::{Loc, Token, TokenKind};
-    use chs_types::CHSType;
+    use crate::{
+        chs_ast::{
+            flow_checker::{FlowChecker, FlowError},
+            mir::{BasicBlock, BlockId, Local, MIRFunction, MIRModule, MIRModuleItem, Terminator},
+            RawModule,
+        },
+        chs_lexer::{Loc, Token, TokenKind},
+        chs_types::CHSType,
+    };
 
     fn create_test_raw_module() -> RawModule {
         RawModule {

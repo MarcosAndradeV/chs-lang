@@ -3,51 +3,8 @@
 version = 4
 
 [[package]]
-name = "chs_ast"
-version = "0.1.0"
-dependencies = [
- "chs_lexer",
- "chs_types",
- "chs_util",
-]
-
-[[package]]
-name = "chs_codegen"
-version = "0.1.0"
-dependencies = [
- "chs_ast",
- "chs_lexer",
- "chs_types",
- "chs_util",
-]
-
-[[package]]
-name = "chs_lexer"
-version = "0.1.0"
-dependencies = [
- "chs_util",
-]
-
-[[package]]
-name = "chs_types"
-version = "0.1.0"
-dependencies = [
- "chs_util",
-]
-
-[[package]]
-name = "chs_util"
-version = "0.1.0"
-
-[[package]]
 name = "chsc"
 version = "0.1.0"
-dependencies = [
- "chs_ast",
- "chs_codegen",
- "chs_lexer",
- "chs_util",
-]
 
 [[package]]
 name = "test_maker"

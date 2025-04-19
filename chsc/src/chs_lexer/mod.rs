@@ -35,7 +35,7 @@ impl<'src> Lexer<'src> {
         }
     }
 
-    pub fn next(&mut self) -> Token {
+    pub fn next_token(&mut self) -> Token {
         while self.pos <= self.data.len() {
             let begin = self.pos;
             let ch = self.advance();
@@ -369,11 +369,11 @@ mod tests {
     fn test_lexer_kinds() {
         let source = "fn main() end";
         let mut lex = Lexer::new(source);
-        assert!(lex.next().kind == TokenKind::KeywordFn);
-        assert!(lex.next().kind == TokenKind::Identifier);
-        assert!(lex.next().kind == TokenKind::OpenParen);
-        assert!(lex.next().kind == TokenKind::CloseParen);
-        assert!(lex.next().kind == TokenKind::KeywordEnd);
+        assert!(lex.next_token().kind == TokenKind::KeywordFn);
+        assert!(lex.next_token().kind == TokenKind::Identifier);
+        assert!(lex.next_token().kind == TokenKind::OpenParen);
+        assert!(lex.next_token().kind == TokenKind::CloseParen);
+        assert!(lex.next_token().kind == TokenKind::KeywordEnd);
     }
 
     // #[test]

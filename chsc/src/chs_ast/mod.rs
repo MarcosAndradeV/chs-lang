@@ -1,9 +1,13 @@
+use std::{fs, ops, path::Path, process::exit};
+
+use crate::chs_lexer::{Span, Token};
+
+pub mod flow_checker;
 pub mod hir;
 pub mod mir;
 pub mod nodes;
 pub mod parser;
 pub mod typechecker;
-pub mod flow_checker;
 
 #[derive(Debug)]
 pub struct RawModule {
@@ -33,9 +37,6 @@ impl ops::Index<&Token> for RawModule {
     }
 }
 
-use std::{fs, ops, path::Path, process::exit};
-
-use chs_lexer::{Span, Token};
 pub fn read_flie<P: AsRef<Path>>(file_path: P) -> String {
     match fs::read_to_string(file_path) {
         Ok(ok) => ok,

@@ -1,10 +1,13 @@
-use chs_lexer::{Span, Token};
-use chs_util::{return_chs_error, CHSError, CHSResult};
-use std::fmt;
+use core::fmt;
 
-use chs_types::CHSType;
+use crate::{
+    chs_lexer::{Span, Token, TokenKind},
+    chs_types::CHSType,
+    chs_util::{CHSError, CHSResult},
+    return_chs_error,
+};
 
-use crate::RawModule;
+use super::RawModule;
 
 #[derive(Debug)]
 pub struct Module<'src> {
@@ -47,7 +50,7 @@ pub enum Expression {
 
 impl Expression {
     pub fn from_literal_token(token: Token) -> Result<Self, CHSError> {
-        use chs_lexer::TokenKind::*;
+        use TokenKind::*;
         match token.kind {
             IntegerNumber => Ok(Self::ConstExpression(ConstExpression::IntegerLiteral(
                 Span::from(token),
@@ -224,7 +227,7 @@ impl fmt::Display for Operator {
 
 impl Operator {
     pub fn from_token(token: &Token, unary: bool) -> Result<Self, CHSError> {
-        use chs_lexer::TokenKind::*;
+        use TokenKind::*;
         match token.kind {
             Minus if unary => Ok(Self::Negate),
             Bang if unary => Ok(Self::LNot),

@@ -28,10 +28,10 @@ impl MyCLI {
         let mut inputs = vec![];
         let mut i = 0;
         for arg in args {
-            if arg.starts_with("--") {
-                flags.push(arg[2..].to_string());
-            } else if arg.starts_with("-") {
-                flags.push(arg[1..].to_string());
+            if let Some(prefix) = arg.strip_prefix("--") {
+                flags.push(prefix.to_string());
+            } else if let Some(prefix) = arg.strip_prefix("-") {
+                flags.push(prefix.to_string());
             } else {
                 inputs.push((i, arg));
                 i += 1;
@@ -54,10 +54,10 @@ impl MyCLI {
         let mut flags = vec![];
         let mut inputs = vec![];
         for (i, arg) in args.enumerate() {
-            if arg.starts_with("--") {
-                flags.push(arg[2..].to_string());
-            } else if arg.starts_with("-") {
-                flags.push(arg[1..].to_string());
+            if let Some(prefix) = arg.strip_prefix("--") {
+                flags.push(prefix.to_string());
+            } else if let Some(prefix) = arg.strip_prefix("-") {
+                flags.push(prefix.to_string());
             } else {
                 inputs.push((i as u64, arg));
             }
@@ -106,7 +106,7 @@ impl MyCLI {
                     value,
                 }) => loop {
                     match args.next() {
-                        Some((n, v)) if cmd.args.get(n).is_some() => {
+                        Some((n, v)) if cmd.args.contains_key(n) => {
                             matched_args.insert(*n, v.clone());
                             continue;
                         }
@@ -191,7 +191,7 @@ impl MatchedFlags {
     }
 
     pub fn is_present(&self, k: &str) -> bool {
-        self.0.get(k).is_some()
+        self.0.contains_key(k)
     }
 
     fn insert(&mut self, k: String, v: Option<String>) -> Option<Option<String>> {
@@ -200,6 +200,10 @@ impl MatchedFlags {
 
     pub fn len(&self) -> usize {
         self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
     }
 }
 
@@ -212,7 +216,7 @@ impl MatchedArgs {
     }
 
     pub fn is_present(&self, k: u64) -> bool {
-        self.0.get(&k).is_some()
+        self.0.contains_key(&k)
     }
 
     pub fn insert(&mut self, k: u64, v: String) -> Option<String> {

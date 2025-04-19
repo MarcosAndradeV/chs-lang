@@ -1,12 +1,18 @@
-use chs_lexer::Span;
-use chs_types::{CHSType, TypeConstraint, TypeVar};
-use chs_util::{chs_error, return_chs_error, CHSResult};
-use std::collections::HashMap;
-use std::rc::Rc;
+use std::{collections::HashMap, rc::Rc};
 
-use crate::RawModule;
+use crate::{
+    chs_error,
+    chs_lexer::Span,
+    chs_types::{CHSType, TypeConstraint, TypeVar},
+    chs_util::*,
+    return_chs_error,
+};
 
-use crate::hir::{HIRBlock, HIRExpr, HIRFunction, HIRLiteral, HIRModule, HIRModuleItem};
+use super::{
+    hir::{HIRBlock, HIRExpr, HIRFunction, HIRLiteral, HIRModule, HIRModuleItem},
+    nodes::Operator,
+    RawModule,
+};
 
 pub struct TypeChecker<'src> {
     env: TypeEnv,
@@ -104,11 +110,11 @@ impl<'src> TypeChecker<'src> {
 
                 match op.op {
                     // Arithmetic operators
-                    crate::nodes::Operator::Plus
-                    | crate::nodes::Operator::Minus
-                    | crate::nodes::Operator::Mult
-                    | crate::nodes::Operator::Div
-                    | crate::nodes::Operator::Mod => {
+                    Operator::Plus
+                    | Operator::Minus
+                    | Operator::Mult
+                    | Operator::Div
+                    | Operator::Mod => {
                         self.env.unify(&lhs_type, &rhs_type)?;
                         match lhs_type {
                             CHSType::Int | CHSType::UInt => Ok(lhs_type),
@@ -119,10 +125,7 @@ impl<'src> TypeChecker<'src> {
                         }
                     }
                     // Comparison operators
-                    crate::nodes::Operator::Le
-                    | crate::nodes::Operator::Ge
-                    | crate::nodes::Operator::Lt
-                    | crate::nodes::Operator::Gt => {
+                    Operator::Le | Operator::Ge | Operator::Lt | Operator::Gt => {
                         self.env.unify(&lhs_type, &rhs_type)?;
                         match lhs_type {
                             CHSType::Int | CHSType::UInt => Ok(CHSType::Boolean),
@@ -133,22 +136,22 @@ impl<'src> TypeChecker<'src> {
                         }
                     }
                     // Equality operators
-                    crate::nodes::Operator::Eq | crate::nodes::Operator::NEq => {
+                    Operator::Eq | Operator::NEq => {
                         self.env.unify(&lhs_type, &rhs_type)?;
                         Ok(CHSType::Boolean)
                     }
                     // Logical operators
-                    crate::nodes::Operator::LAnd | crate::nodes::Operator::LOr => {
+                    Operator::LAnd | Operator::LOr => {
                         self.env.unify(&lhs_type, &CHSType::Boolean)?;
                         self.env.unify(&rhs_type, &CHSType::Boolean)?;
                         Ok(CHSType::Boolean)
                     }
                     // Bitwise operators
-                    crate::nodes::Operator::BitAnd
-                    | crate::nodes::Operator::BitXor
-                    | crate::nodes::Operator::Shl
-                    | crate::nodes::Operator::Shr
-                    | crate::nodes::Operator::BitOr => {
+                    Operator::BitAnd
+                    | Operator::BitXor
+                    | Operator::Shl
+                    | Operator::Shr
+                    | Operator::BitOr => {
                         self.env.unify(&lhs_type, &rhs_type)?;
                         match lhs_type {
                             CHSType::Int | CHSType::UInt => Ok(lhs_type),
@@ -158,7 +161,7 @@ impl<'src> TypeChecker<'src> {
                             ),
                         }
                     }
-                    crate::nodes::Operator::Assign => {
+                    Operator::Assign => {
                         self.env.unify(&lhs_type, &rhs_type)?;
                         Ok(lhs_type)
                     }
@@ -171,23 +174,23 @@ impl<'src> TypeChecker<'src> {
             HIRExpr::Unary { op, operand } => {
                 let operand_type = self.check_expr(operand)?;
                 match op.op {
-                    crate::nodes::Operator::Negate => match operand_type {
+                    Operator::Negate => match operand_type {
                         CHSType::Int | CHSType::UInt => Ok(operand_type),
                         _ => {
                             return_chs_error!("{} Expected numeric type for negation", op.span.loc)
                         }
                     },
-                    crate::nodes::Operator::LNot => {
+                    Operator::LNot => {
                         self.env.unify(&operand_type, &CHSType::Boolean)?;
                         Ok(CHSType::Boolean)
                     }
-                    crate::nodes::Operator::Deref => match operand_type {
+                    Operator::Deref => match operand_type {
                         CHSType::Pointer(inner) => Ok(*inner),
                         _ => {
                             return_chs_error!("{} Can only dereference pointer types", op.span.loc)
                         }
                     },
-                    crate::nodes::Operator::Refer => Ok(CHSType::Pointer(Box::new(operand_type))),
+                    Operator::Refer => Ok(CHSType::Pointer(Box::new(operand_type))),
                     _ => unreachable!("Invalid unary operator"),
                 }
             }
@@ -359,7 +362,6 @@ impl<'src> TypeChecker<'src> {
         })
     }
 }
-
 
 /// Type environment for managing type declarations and scoping
 #[derive(Debug)]

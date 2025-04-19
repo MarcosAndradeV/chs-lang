@@ -1,11 +1,14 @@
-use chs_lexer::{Span, Token};
-use chs_types::CHSType;
-use chs_util::CHSResult;
+use crate::{
+    chs_lexer::{Span, Token},
+    chs_types::CHSType,
+    chs_util::CHSResult,
+};
 
-use crate::typechecker::{CHSInfer, TypeEnv};
-use crate::{nodes, RawModule};
-
-use crate::nodes::Operator;
+use super::{
+    nodes::{self, Operator},
+    typechecker::{CHSInfer, TypeEnv},
+    RawModule,
+};
 
 #[derive(Debug)]
 pub struct HIROperator {
@@ -117,7 +120,7 @@ pub struct HIRBlock {
 }
 
 impl CHSInfer for HIRBlock {
-    fn infer(&self, r: &RawModule , env: &TypeEnv) -> CHSType {
+    fn infer(&self, r: &RawModule, env: &TypeEnv) -> CHSType {
         match self.expressions.last() {
             Some(e) => e.infer(r, env),
             None => CHSType::Void,
@@ -205,13 +208,17 @@ impl CHSInfer for HIRExpr {
             }
             HIRExpr::Binary { .. } => todo!(),
             HIRExpr::Unary { .. } => todo!(),
-            HIRExpr::Call { span: _, callee, args: _  } => {
+            HIRExpr::Call {
+                span: _,
+                callee,
+                args: _,
+            } => {
                 if let CHSType::Function(_, ret_ty) = callee.infer(r, env) {
                     *ret_ty
                 } else {
                     unreachable!("Expected function type for callee")
                 }
-            },
+            }
             HIRExpr::Cast { .. } => todo!(),
             HIRExpr::Index { .. } => todo!(),
             HIRExpr::Assign { .. } => todo!(),

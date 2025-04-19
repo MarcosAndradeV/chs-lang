@@ -1,7 +1,12 @@
-use crate::{nodes::*, RawModule};
-use chs_lexer::{Lexer, Span, Token, TokenKind};
-use chs_types::CHSType;
-use chs_util::{return_chs_error, CHSResult};
+use crate::{
+    chs_ast::nodes::{FunctionDecl, ModuleItem},
+    chs_lexer::{Lexer, Span, Token, TokenKind},
+    chs_types::CHSType,
+    chs_util::{CHSError, CHSResult},
+    return_chs_error,
+};
+
+use super::{nodes::*, RawModule};
 
 pub struct Parser<'src> {
     module: &'src RawModule,
@@ -20,7 +25,9 @@ impl<'src> Parser<'src> {
     }
 
     fn next(&mut self) -> Token {
-        self.peeked.take().unwrap_or_else(|| self.lexer.next())
+        self.peeked
+            .take()
+            .unwrap_or_else(|| self.lexer.next_token())
     }
 
     fn expect_kind(&mut self, kind: TokenKind) -> CHSResult<Token> {
@@ -45,7 +52,7 @@ impl<'src> Parser<'src> {
 
     /// Top-level parser loop.
     pub fn parse(mut self) -> CHSResult<Module<'src>> {
-        use chs_lexer::TokenKind::*;
+        use TokenKind::*;
         let mut items: Vec<ModuleItem> = vec![];
         while {
             let token = self.next();
@@ -243,7 +250,7 @@ impl<'src> Parser<'src> {
 
     /// Parses a primary expression iteratively (including handling of prefix operators).
     fn parse_primary_iterative(&mut self) -> CHSResult<Expression> {
-        use chs_lexer::TokenKind::*;
+        use TokenKind::*;
         let token = self.next();
         match token.kind {
             Identifier if self.peek().kind == Colon => {
@@ -346,7 +353,7 @@ impl<'src> Parser<'src> {
         }
     }
 
-    /// Iterative version of parsing an initialization list.
+    // Iterative version of parsing an initialization list.
     // fn parse_init_list_iterative(&mut self) -> CHSResult<Expression> {
     //     use chs_lexer::TokenKind::*;
     //     let mut exprs = vec![];
@@ -384,7 +391,7 @@ impl<'src> Parser<'src> {
         token: Token,
         cond: Expression,
     ) -> CHSResult<Expression> {
-        use chs_lexer::TokenKind::*;
+        use TokenKind::*;
         let mut body = vec![];
         loop {
             let ptoken = self.peek();
@@ -425,7 +432,7 @@ impl<'src> Parser<'src> {
     where
         F: Fn(&Token) -> bool,
     {
-        use chs_lexer::TokenKind::*;
+        use TokenKind::*;
         let mut exprs = vec![];
         loop {
             let ptoken = self.peek();
@@ -466,7 +473,7 @@ impl<'src> Parser<'src> {
 
     /// Iterative version of parsing a function type.
     fn parse_fn_type_iterative(&mut self) -> CHSResult<(Vec<Param>, CHSType)> {
-        use chs_lexer::TokenKind::*;
+        use TokenKind::*;
         let mut list = vec![];
         let mut ret_type = CHSType::Void;
         loop {
@@ -507,7 +514,7 @@ impl<'src> Parser<'src> {
 
     /// Iterative version of parsing a function type.
     fn parse_generic_type_iterative(&mut self) -> CHSResult<Vec<CHSType>> {
-        use chs_lexer::TokenKind::*;
+        use TokenKind::*;
         let mut list = vec![];
         loop {
             let ptoken = self.peek();
@@ -530,7 +537,7 @@ impl<'src> Parser<'src> {
 
     /// Iterative version of parsing a type.
     fn parse_type_iterative(&mut self) -> CHSResult<CHSType> {
-        use chs_lexer::TokenKind::*;
+        use TokenKind::*;
         let ttoken = self.next();
         let ttype = match ttoken.kind {
             Identifier if &self.module[&ttoken] == "int" => CHSType::Int,

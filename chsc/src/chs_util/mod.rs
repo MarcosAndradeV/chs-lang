@@ -17,22 +17,22 @@ impl fmt::Display for CHSError {
 #[macro_export]
 macro_rules! return_chs_error {
     ($message: expr, $($field: expr),*) => {
-        return Err(chs_util::CHSError (format!($message, $($field),*)))
+        return Err(CHSError (format!($message, $($field),*)))
     };
 
     ($message: expr) => {
-        return Err(chs_util::CHSError ($message.to_string()))
+        return Err(CHSError ($message.to_string()))
     }
 }
 
 #[macro_export]
 macro_rules! chs_error {
     ($message: expr, $($field: expr),*) => {
-        chs_util::CHSError (format!($message, $($field),*))
+        CHSError (format!($message, $($field),*))
     };
 
     ($message: expr) => {
-        chs_util::CHSError ($message.to_string())
+        CHSError ($message.to_string())
     }
 }
 
