@@ -1,6 +1,8 @@
 use core::fmt;
+use std::str::FromStr;
 
 use crate::{
+    chs_error,
     chs_lexer::{Span, Token, TokenKind},
     chs_types::CHSType,
     chs_util::{CHSError, CHSResult},
@@ -15,10 +17,20 @@ pub struct Module<'src> {
     pub items: Vec<ModuleItem>,
 }
 
+impl<'src> Module<'src> {
+    pub fn imports(&self) -> Vec<&Use> {
+        self.items.iter().filter_map(|item| match item {
+            ModuleItem::MacroCall(MacroCall::Use(use_)) => Some(use_),
+            _ => None
+        }).collect()
+    }
+}
+
 #[derive(Debug)]
 pub enum ModuleItem {
     Function(FunctionDecl),
     ExternFunction(ExternFunctionDecl),
+    MacroCall(MacroCall),
 }
 
 #[derive(Debug)]
@@ -61,6 +73,60 @@ impl Expression {
             _ => return_chs_error!("{} Unsupported literal", token.loc),
         }
     }
+}
+
+#[derive(Debug)]
+pub struct Use(pub Token, pub ImportSyntax);
+
+#[derive(Debug)]
+pub enum MacroCall {
+    Use(Use),
+}
+
+#[derive(Debug)]
+pub enum ImportSyntax {
+    Logical(Vec<String>, Option<String>), // std::io [as name]
+    Path(String, Option<String>),         // "std/io" [as name]
+}
+
+impl FromStr for ImportSyntax {
+    type Err = CHSError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let s = s.trim();
+
+        // handle use!("std/io" as alias)
+        if s.starts_with('"') && s.ends_with('"') {
+            // Remove surrounding quotes
+            let inner = &s[1..s.len() - 1];
+            let (path, alias) = split_alias(inner)?;
+            return Ok(ImportSyntax::Path(path.to_string(), alias));
+        }
+
+        let (path_part, alias) = split_alias(s)?;
+        let parts = path_part
+            .split("::")
+            .map(|s| s.trim().to_string())
+            .collect::<Vec<_>>();
+
+        if parts.is_empty() {
+            return Err(chs_error!("Empty logical module path"));
+        }
+
+        Ok(ImportSyntax::Logical(parts, alias))
+    }
+}
+
+fn split_alias(s: &str) -> Result<(&str, Option<String>), CHSError> {
+    let parts = s.splitn(2, " as ").collect::<Vec<_>>();
+    let path = parts[0].trim();
+    let alias = parts.get(1).map(|s| s.trim().to_string());
+
+    if path.is_empty() {
+        return Err(chs_error!("Import path cannot be empty"));
+    }
+
+    Ok((path, alias))
 }
 
 #[derive(Debug)]

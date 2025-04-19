@@ -5,9 +5,7 @@ use crate::{
 };
 
 use super::{
-    RawModule,
-    nodes::{self, Operator},
-    typechecker::{CHSInfer, TypeEnv},
+    nodes::{self, Operator}, typechecker::{CHSInfer, TypeEnv}, RawModule
 };
 
 #[derive(Debug)]
@@ -37,20 +35,23 @@ pub struct HIRModule<'src> {
 
 impl<'src> HIRModule<'src> {
     pub fn from_ast(ast: nodes::Module<'src>) -> Self {
+        let raw_module = ast.raw_module;
+        let items = ast
+            .items
+            .into_iter()
+            .map(|item| match item {
+                nodes::ModuleItem::Function(func) => {
+                    HIRModuleItem::Function(HIRFunction::from_ast_function(func))
+                }
+                nodes::ModuleItem::ExternFunction(func) => {
+                    HIRModuleItem::ExternFunction(HIRExternFunction::from_ast_extern_function(func))
+                }
+                nodes::ModuleItem::MacroCall(..) => todo!(),
+            })
+            .collect();
         Self {
-            raw_module: ast.raw_module,
-            items: ast
-                .items
-                .into_iter()
-                .map(|item| match item {
-                    nodes::ModuleItem::Function(func) => {
-                        HIRModuleItem::Function(HIRFunction::from_ast_function(func))
-                    }
-                    nodes::ModuleItem::ExternFunction(func) => HIRModuleItem::ExternFunction(
-                        HIRExternFunction::from_ast_extern_function(func),
-                    ),
-                })
-                .collect(),
+            raw_module,
+            items,
         }
     }
 }

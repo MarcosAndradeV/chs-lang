@@ -74,6 +74,7 @@ impl<'src> Lexer<'src> {
                 }
                 b'0'..=b'9' => return self.lex_number(begin),
                 b'"' => return self.lex_string(begin),
+                b'@' => return self.lex_macro(begin),
                 // b'\'' => self.lex_char(),
 
                 // b'.' => Token::from_u8(loc, TokenKind::Dot, ch),
@@ -160,6 +161,7 @@ impl<'src> Lexer<'src> {
         Token::new(kind, loc, begin, self.pos)
     }
 
+    // TODO: Fix the lexer. `lex_string` should handle escape sequences or RawModule should handle escape sequences
     fn lex_string(&mut self, begin: usize) -> Token {
         let mut buffer = String::new();
         let kind = TokenKind::StringLiteral;
@@ -192,6 +194,39 @@ impl<'src> Lexer<'src> {
 
     pub fn loc(&self) -> Loc {
         self.loc
+    }
+
+    fn lex_macro(&mut self, begin: usize) -> Token {
+        let mut buffer = String::new();
+        let mut kind = TokenKind::Macro;
+        let loc = self.loc();
+        loop {
+            let ch = self.read_char();
+            match ch {
+                _ if ch.is_ascii_whitespace() => {
+                    self.advance();
+                    break;
+                }
+                b'(' => {
+                    kind = TokenKind::MacroWithArgs;
+                    self.advance();
+                    loop {
+                        let ch = self.read_char();
+                        if ch == b')' {
+                            self.advance();
+                            break;
+                        }
+                        self.advance();
+                    }
+                    break;
+                }
+                b'\0' => return Token::new(TokenKind::Invalid, loc, begin, self.pos),
+                _ => buffer.push(ch as char),
+
+            }
+            self.advance();
+        }
+        Token::new(kind, loc, begin + 1, self.pos)
     }
 }
 
@@ -254,6 +289,9 @@ pub enum TokenKind {
     CloseParen,
     OpenSquare,
     CloseSquare,
+
+    Macro,
+    MacroWithArgs,
 
     Identifier,
     Keyword,

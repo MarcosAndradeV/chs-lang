@@ -1,3 +1,7 @@
+use std::str::FromStr;
+
+use Use;
+
 use crate::{
     chs_ast::nodes::{FunctionDecl, ModuleItem},
     chs_lexer::{Lexer, Span, Token, TokenKind},
@@ -60,9 +64,39 @@ impl<'src> Parser<'src> {
                 false
             } else {
                 if token.is_invalid() {
-                    return_chs_error!("{} Invalid token '{}'", token.loc, &self.module[&token]);
+                    return_chs_error!(
+                        "{}:{} Invalid token '{}'",
+                        self.module.file_path,
+                        token.loc,
+                        &self.module[&token]
+                    );
                 }
                 match token.kind {
+                    MacroWithArgs => {
+                        let src = &self.module[&token.source];
+                        let (macro_, args) = src
+                            .split_once("(")
+                            .expect("macro with args always have `(`");
+                        match macro_ {
+                            "use" => {
+                                let (args, _) = args
+                                    .split_once(")")
+                                    .expect("macro with args always have `)`");
+                                items.push(ModuleItem::MacroCall(MacroCall::Use(Use(
+                                    token,
+                                    ImportSyntax::from_str(args)?,
+                                ))));
+                            }
+                            _ => {
+                                return_chs_error!(
+                                    "{}:{} Unknown macro '{}'",
+                                    self.module.file_path,
+                                    token.loc,
+                                    macro_
+                                );
+                            }
+                        }
+                    }
                     KeywordFn => {
                         let ident_token = self.expect_kind(Identifier)?;
                         self.expect_kind(OpenParen)?;
