@@ -30,6 +30,7 @@ fn main() {
             input,
             output,
             silent,
+            force,
         } => {
             if !silent {
                 println!("[INFO] Compiling file: {}", input);
@@ -37,15 +38,15 @@ fn main() {
                     println!("[INFO] Output: {}", out);
                 }
             }
-            let result = compile(input, output, false, silent);
+            let result = compile(input, output, false, silent, force);
             if let Err(err) = result {
                 eprintln!("[ERROR] {}", err);
                 std::process::exit(1);
             }
         }
 
-        cli::Commands::CompileRun { input, output } => {
-            let result = compile(input, output, true, true);
+        cli::Commands::CompileRun { input, output, force} => {
+            let result = compile(input, output, true, true, force);
             if let Err(err) = result {
                 eprintln!("[ERROR] {}", err);
                 std::process::exit(1);
@@ -62,7 +63,7 @@ macro_rules! log {
     }
 }
 
-fn compile(input_path: String, outpath: Option<String>, run: bool, silent: bool) -> CHSResult<()> {
+fn compile(input_path: String, outpath: Option<String>, run: bool, silent: bool, force: bool) -> CHSResult<()> {
     let file_path = PathBuf::from(&input_path);
     let ssa_path = file_path.with_extension("ssa");
     let asm_path = file_path.with_extension("s");
@@ -70,8 +71,11 @@ fn compile(input_path: String, outpath: Option<String>, run: bool, silent: bool)
         .map(PathBuf::from)
         .unwrap_or_else(|| file_path.with_extension(""));
 
-    if !file_changed(&file_path, &asm_path) {
-        log!(silent, "[INFO] Skipping rebuild, using cached output.");
+    if !file_changed(&file_path, &asm_path) && !force {
+        log!(silent && !run, "[INFO] Skipping rebuild, using cached output.");
+        if run {
+            run_exe(out_path)?;
+        }
         return Ok(());
     }
 
@@ -158,14 +162,19 @@ fn compile(input_path: String, outpath: Option<String>, run: bool, silent: bool)
     log!(silent, "[INFO] Compilation completed successfully!");
 
     if run {
-        println!("[INFO] Running executable...");
-        Command::new(&out_path)
-            .status()
-            .map_err(|e| chs_error!("Failed to execute binary: {}", e))?
-            .success()
-            .then_some(())
-            .ok_or_else(|| chs_error!("Execution failed"))?;
+        run_exe(out_path)?;
     }
 
+    Ok(())
+}
+
+fn run_exe(out_path: PathBuf) -> Result<(), CHSError> {
+    println!("[INFO] Running executable...");
+    Command::new(&out_path)
+        .status()
+        .map_err(|e| chs_error!("Failed to execute binary: {}", e))?
+        .success()
+        .then_some(())
+        .ok_or_else(|| chs_error!("Execution failed"))?;
     Ok(())
 }

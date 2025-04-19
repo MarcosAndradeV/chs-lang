@@ -24,14 +24,23 @@ pub enum Commands {
         /// Silences compiler output
         #[arg(short, long)]
         silent: bool,
+
+        /// Force compilation even if the source file has not changed
+        #[arg(short, long)]
+        force: bool,
     },
 
     /// Compile and run the executable
     CompileRun {
+        /// Source file to compile
         input: String,
 
+        /// Output file name
         #[arg(short, long)]
         output: Option<String>,
 
+        /// Force compilation even if the source file has not changed
+        #[arg(short, long)]
+        force: bool,
     },
 }
