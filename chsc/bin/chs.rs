@@ -2,17 +2,14 @@ use std::{fs, path::PathBuf, process::Command};
 
 use chsc::{
     chs_ast::{
-        self, RawModule, flow_checker::FlowChecker, hir::HIRModule, mir::MIRModule, parser::Parser,
-        typechecker::TypeChecker,
-    },
-    chs_codegen::qbe_backend::QBEBackend,
-    chs_error,
-    chs_util::{CHSError, CHSResult, binary_exists, file_changed},
-    cli, return_chs_error,
+        self, flow_checker::FlowChecker, hir::HIRModule, mir::MIRModule, parser::Parser, typechecker::TypeChecker, RawModule
+    }, chs_codegen::qbe_backend::QBEBackend, chs_error, chs_util::{binary_exists, file_changed, CHSError, CHSResult}, cli, config::Config, return_chs_error
 };
 use clap::Parser as _;
 
 fn main() {
+    let _chs_config = Config::default();
+
     if !binary_exists("qbe") {
         eprintln!("[ERROR] qbe binary not found. Please install it.");
         std::process::exit(1);
@@ -71,7 +68,7 @@ fn compile(input_path: String, outpath: Option<String>, run: bool, silent: bool,
         .map(PathBuf::from)
         .unwrap_or_else(|| file_path.with_extension(""));
 
-    if !file_changed(&file_path, &asm_path) && !force {
+    if !file_changed(&file_path, &out_path) && !force {
         log!(silent && !run, "[INFO] Skipping rebuild, using cached output.");
         if run {
             run_exe(out_path)?;
@@ -165,16 +162,30 @@ fn compile(input_path: String, outpath: Option<String>, run: bool, silent: bool,
         run_exe(out_path)?;
     }
 
+    log!(silent, "[INFO] Cleaning up temporary files...");
+    for temp_file in [&ssa_path, &asm_path] {
+        if let Err(e) = fs::remove_file(temp_file) {
+            log!(
+                silent,
+                "[WARN] Failed to remove temp file {}: {}",
+                temp_file.display(),
+                e
+            );
+        }
+    }
+
     Ok(())
 }
 
-fn run_exe(out_path: PathBuf) -> Result<(), CHSError> {
+fn run_exe(path: PathBuf) -> CHSResult<()> {
     println!("[INFO] Running executable...");
-    Command::new(&out_path)
+    let output = Command::new(&path)
         .status()
-        .map_err(|e| chs_error!("Failed to execute binary: {}", e))?
-        .success()
-        .then_some(())
-        .ok_or_else(|| chs_error!("Execution failed"))?;
-    Ok(())
+        .map_err(|e| chs_error!("Failed to execute binary: {}", e))?;
+
+    if output.success() {
+        Ok(())
+    } else {
+        Err(chs_error!("Execution failed"))
+    }
 }
