@@ -1,9 +1,11 @@
 use clap::{Parser, Subcommand};
 
+use crate::config::VERSION;
+
 #[derive(Parser)]
 #[command(name = "chsc")]
 #[command(author = "Marcos V. Andrade <>")]
-#[command(version = "0.1")]
+#[command(version = VERSION)]
 #[command(about = "Compile and run chs files", long_about = None)]
 pub struct Cli {
     #[command(subcommand)]
