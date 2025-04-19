@@ -5,6 +5,8 @@ edition = "2024"
 
 [dependencies]
 qbe = "2.5.0"
+clap = { version = "4", features = ["derive"] }
+which = "4"
 
 [[bin]]
 name = "chs"
