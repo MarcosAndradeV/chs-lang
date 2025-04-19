@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+qbe = "2.5.0"
 
 [[bin]]
 name = "chs"

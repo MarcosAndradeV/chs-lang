@@ -5,6 +5,15 @@ version = 4
 [[package]]
 name = "chsc"
 version = "0.1.0"
+dependencies = [
+ "qbe",
+]
+
+[[package]]
+name = "qbe"
+version = "2.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c1ce54124980f3c530866c8145401764df3f0c428698f594ba8d634483af66e5"
 
 [[package]]
 name = "test_maker"
