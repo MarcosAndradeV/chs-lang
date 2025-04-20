@@ -222,7 +222,6 @@ impl<'src> Lexer<'src> {
                 }
                 b'\0' => return Token::new(TokenKind::Invalid, loc, begin, self.pos),
                 _ => buffer.push(ch as char),
-
             }
             self.advance();
         }

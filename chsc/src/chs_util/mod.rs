@@ -85,7 +85,8 @@ pub fn file_changed(src: &Path, artifact: &Path) -> bool {
 
     match (fs::metadata(src), fs::metadata(artifact)) {
         (Ok(src_meta), Ok(art_meta)) => {
-            src_meta.modified().unwrap_or(SystemTime::now()) > art_meta.modified().unwrap_or(SystemTime::now())
+            src_meta.modified().unwrap_or(SystemTime::now())
+                > art_meta.modified().unwrap_or(SystemTime::now())
         }
         _ => true, // Force rebuild if files are missing or error
     }

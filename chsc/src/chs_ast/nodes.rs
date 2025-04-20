@@ -19,10 +19,13 @@ pub struct Module<'src> {
 
 impl<'src> Module<'src> {
     pub fn imports(&self) -> Vec<&Use> {
-        self.items.iter().filter_map(|item| match item {
-            ModuleItem::MacroCall(MacroCall::Use(use_)) => Some(use_),
-            _ => None
-        }).collect()
+        self.items
+            .iter()
+            .filter_map(|item| match item {
+                ModuleItem::MacroCall(MacroCall::Use(use_)) => Some(use_),
+                _ => None,
+            })
+            .collect()
     }
 }
 
