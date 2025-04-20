@@ -89,6 +89,9 @@ impl<'src> QBEBackend<'src> {
                     mir::Statement::Return(None) => {
                         b.add_instr(Instr::Ret(None));
                     }
+                    mir::Statement::Expr(value) => {
+                       self.instr_from_rvalue(value, &locals);
+                    }
                 }
             }
             match block.terminator {
@@ -174,7 +177,14 @@ impl<'src> QBEBackend<'src> {
                     .add_data(DataDef::new(Linkage::private(), &v, None, items));
                 (Type::Word, Value::Global(v))
             }
-            Constant::Bool(_) => todo!(),
+            Constant::Bool(value) => (
+                Type::Byte,
+                Value::Const(if self.raw_module[&value].parse::<bool>().unwrap() {
+                    1
+                } else {
+                    0
+                }),
+            ),
             Constant::Char(_) => todo!(),
             Constant::Void => (Type::Zero, Value::Const(0)),
         }

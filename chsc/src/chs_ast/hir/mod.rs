@@ -81,8 +81,7 @@ impl HIRFunction {
                 .collect(),
             return_type: func.ret_type,
             body: HIRBlock {
-                expressions: func.body.into_iter().map(HIRExpr::from_ast_expr).collect(),
-                ty: None
+                statements: func.body.into_iter().map(HIRStmt::from_ast_expr).collect(),
             },
         }
     }
@@ -119,23 +118,96 @@ impl HIRParam {
 
 #[derive(Debug)]
 pub struct HIRBlock {
-    pub expressions: Vec<HIRExpr>,
-    pub ty: Option<CHSType>,
+    pub statements: Vec<HIRStmt>,
 }
 
 impl IntoIterator for HIRBlock {
-    type Item = HIRExpr;
+    type Item = HIRStmt;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.expressions.into_iter()
+        self.statements.into_iter()
     }
 
-    type IntoIter = std::vec::IntoIter<HIRExpr>;
+    type IntoIter = std::vec::IntoIter<HIRStmt>;
 }
 
-impl CHSInfer for HIRBlock {
-    fn infer(&self) -> CHSType {
-        self.ty.clone().unwrap_or(CHSType::Void)
+#[derive(Debug)]
+pub enum HIRStmt {
+    Assign {
+        span: Span<()>,
+        target: Box<HIRExpr>,
+        value: Box<HIRExpr>,
+    },
+    VarDecl {
+        name: Span<String>,
+        ty: Option<CHSType>,
+        value: Box<HIRExpr>,
+    },
+    If {
+        span: Span<()>,
+        condition: Box<HIRExpr>,
+        then_branch: HIRBlock,
+        else_branch: Option<HIRBlock>,
+    },
+    While {
+        span: Span<()>,
+        condition: Box<HIRExpr>,
+        body: HIRBlock,
+    },
+    Return {
+        span: Span<()>,
+        expr: Option<Box<HIRExpr>>,
+    },
+    ExprStmt {
+        // span: Span<()>, TODO: Implement span for ExprStmt
+        value: HIRExpr,
+    },
+}
+
+impl HIRStmt {
+    pub fn from_ast_expr(expr: nodes::Expression) -> Self {
+        match expr {
+            nodes::Expression::VarDecl(v) => Self::VarDecl {
+                name: v.token.source,
+                ty: v.ty,
+                value: HIRExpr::from_ast_expr(v.value).into(),
+            },
+            nodes::Expression::Assign(a) => Self::Assign {
+                span: Span::from(a.token),
+                target: HIRExpr::from_ast_expr(a.target).into(),
+                value: HIRExpr::from_ast_expr(a.value).into(),
+            },
+            nodes::Expression::IfExpression(i) => Self::If {
+                span: Span::from(i.token),
+                condition: HIRExpr::from_ast_expr(i.cond).into(),
+                then_branch: HIRBlock {
+                    statements: i.body.into_iter().map(Self::from_ast_expr).collect(),
+                },
+                else_branch: None,
+            },
+            nodes::Expression::IfElseExpression(i) => Self::If {
+                span: Span::from(i.token),
+                condition: HIRExpr::from_ast_expr(i.cond).into(),
+                then_branch: HIRBlock {
+                    statements: i.body.into_iter().map(Self::from_ast_expr).collect(),
+                },
+                else_branch: Some(HIRBlock {
+                    statements: i.else_body.into_iter().map(Self::from_ast_expr).collect(),
+                }),
+            },
+            nodes::Expression::WhileExpression(w) => Self::While {
+                span: Span::from(w.token),
+                condition: HIRExpr::from_ast_expr(w.cond).into(),
+                body: HIRBlock {
+                    statements: w.body.into_iter().map(Self::from_ast_expr).collect(),
+                },
+            },
+            nodes::Expression::ReturnExpression(r) => Self::Return {
+                span: Span::from(r.token),
+                expr: r.expr.map(|e| HIRExpr::from_ast_expr(e).into()),
+            },
+            e => HIRStmt::ExprStmt { value: HIRExpr::from_ast_expr(e).into() },
+        }
     }
 }
 
@@ -170,36 +242,10 @@ pub enum HIRExpr {
         base: Box<HIRExpr>,
         index: Box<HIRExpr>,
     },
-    Assign {
-        span: Span<()>,
-        target: Box<HIRExpr>,
-        value: Box<HIRExpr>,
-    },
-    VarDecl {
-        name: Span<String>,
-        ty: Option<CHSType>,
-        value: Box<HIRExpr>,
-    },
-    Block(HIRBlock),
-    If {
-        span: Span<()>,
-        condition: Box<HIRExpr>,
-        then_branch: HIRBlock,
-        else_branch: Option<HIRBlock>,
-    },
-    While {
-        span: Span<()>,
-        condition: Box<HIRExpr>,
-        body: HIRBlock,
-    },
     Syscall {
         span: Span<()>,
         arity: usize,
         args: Vec<HIRExpr>,
-    },
-    Return {
-        span: Span<()>,
-        expr: Option<Box<HIRExpr>>,
     },
 }
 
@@ -219,24 +265,7 @@ impl CHSInfer for HIRExpr {
             HIRExpr::Call { ty, .. } => ty.clone().unwrap_or(CHSType::Never),
             HIRExpr::Cast { .. } => todo!(),
             HIRExpr::Index { .. } => todo!(),
-            HIRExpr::Assign { target, .. } => target.infer(),
-            HIRExpr::VarDecl { .. } => CHSType::Void,
-            HIRExpr::Block(..) => todo!(),
-            HIRExpr::If {
-                else_branch: Some(else_branch),
-                ..
-            } => else_branch.infer(),
-            HIRExpr::If { .. } => CHSType::Void,
-            HIRExpr::While { .. } => CHSType::Void,
             HIRExpr::Syscall { .. } => todo!(),
-            HIRExpr::Return {
-                span: _,
-                expr: Some(e),
-            } => e.infer(),
-            HIRExpr::Return {
-                span: _,
-                expr: None,
-            } => CHSType::Void,
         }
     }
 }
@@ -268,6 +297,7 @@ impl HIRExpr {
                 callee: HIRExpr::from_ast_expr(c.callee).into(),
                 args: c.args.into_iter().map(HIRExpr::from_ast_expr).collect(),
             },
+            nodes::Expression::Group(e) => HIRExpr::from_ast_expr(*e),
             nodes::Expression::Cast(c) => HIRExpr::Cast {
                 span: Span::from(c.token),
                 expr: HIRExpr::from_ast_expr(c.casted).into(),
@@ -283,54 +313,7 @@ impl HIRExpr {
                 arity: s.arity,
                 args: s.args.into_iter().map(HIRExpr::from_ast_expr).collect(),
             },
-            nodes::Expression::VarDecl(v) => HIRExpr::VarDecl {
-                name: v.token.source,
-                ty: v.ty,
-                value: HIRExpr::from_ast_expr(v.value).into(),
-            },
-            nodes::Expression::Assign(a) => HIRExpr::Assign {
-                span: Span::from(a.token),
-                target: HIRExpr::from_ast_expr(a.target).into(),
-                value: HIRExpr::from_ast_expr(a.value).into(),
-            },
-            nodes::Expression::Group(e) => HIRExpr::from_ast_expr(*e),
-            nodes::Expression::IfExpression(i) => HIRExpr::If {
-                span: Span::from(i.token),
-                condition: HIRExpr::from_ast_expr(i.cond).into(),
-                then_branch: HIRBlock {
-                    expressions: i.body.into_iter().map(HIRExpr::from_ast_expr).collect(),
-                    ty: None,
-                },
-                else_branch: None,
-            },
-            nodes::Expression::IfElseExpression(i) => HIRExpr::If {
-                span: Span::from(i.token),
-                condition: HIRExpr::from_ast_expr(i.cond).into(),
-                then_branch: HIRBlock {
-                    expressions: i.body.into_iter().map(HIRExpr::from_ast_expr).collect(),
-                    ty: None,
-                },
-                else_branch: Some(HIRBlock {
-                    expressions: i
-                        .else_body
-                        .into_iter()
-                        .map(HIRExpr::from_ast_expr)
-                        .collect(),
-                    ty: None,
-                }),
-            },
-            nodes::Expression::WhileExpression(w) => HIRExpr::While {
-                span: Span::from(w.token),
-                condition: HIRExpr::from_ast_expr(w.cond).into(),
-                body: HIRBlock {
-                    expressions: w.body.into_iter().map(HIRExpr::from_ast_expr).collect(),
-                    ty: None,
-                },
-            },
-            nodes::Expression::ReturnExpression(r) => HIRExpr::Return {
-                span: Span::from(r.token),
-                expr: r.expr.map(|e| HIRExpr::from_ast_expr(e).into()),
-            },
+            _ => todo!(),
         }
     }
 }

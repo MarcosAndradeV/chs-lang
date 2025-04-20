@@ -67,11 +67,19 @@ pub struct LocalId(pub usize);
 #[derive(Debug)]
 pub enum Statement {
     /// Assign a value to a local variable
-    Assign { target: LocalId, value: Rvalue },
+    Assign {
+        target: LocalId,
+        value: Rvalue,
+    },
     /// Store a value to memory
-    Store { place: Place, value: Rvalue },
+    Store {
+        place: Place,
+        value: Rvalue,
+    },
     /// Return
     Return(Option<Operand>),
+    // Holds a expression
+    Expr(Rvalue),
 }
 
 /// MIR Terminator determines how control flow continues after a basic block
@@ -205,7 +213,7 @@ pub struct Local {
 }
 
 #[derive(Debug)]
-struct ExprBuilder<'src, 'env> {
+struct StmtBuilder<'src, 'env> {
     raw_module: &'src RawModule,
     env: &'env TypeEnv,
     blocks: &'src mut Vec<BasicBlock>,
@@ -214,7 +222,7 @@ struct ExprBuilder<'src, 'env> {
     next_local_id: &'src mut usize,
 }
 
-impl<'src, 'env> ExprBuilder<'src, 'env> {
+impl<'src, 'env> StmtBuilder<'src, 'env> {
     fn new(
         raw_module: &'src RawModule,
         env: &'env TypeEnv,
@@ -434,7 +442,68 @@ impl<'src, 'env> ExprBuilder<'src, 'env> {
                     projection: vec![],
                 })
             }
-            hir::HIRExpr::Assign {
+            hir::HIRExpr::Syscall {
+                span: _,
+                arity,
+                args,
+            } => {
+                let args = args.into_iter().map(|arg| self.build_expr(arg)).collect();
+                let ty = CHSType::Int;
+                let temp = self.add_local(None, ty);
+
+                let block = &mut self.blocks[self.current_block_id.0];
+                block.statements.push(Statement::Assign {
+                    target: temp,
+                    value: Rvalue::Syscall {
+                        number: arity as u32,
+                        args,
+                    },
+                });
+                Operand::Copy(Place {
+                    local: temp,
+                    projection: vec![],
+                })
+            }
+        }
+    }
+
+    fn build_literal(&mut self, lit: hir::HIRLiteral) -> Operand {
+        match lit {
+            hir::HIRLiteral::Int(span) => Operand::Constant(Constant::Int(span)),
+            hir::HIRLiteral::Bool(span) => Operand::Constant(Constant::Bool(span)),
+            hir::HIRLiteral::Str(span) => Operand::Constant(Constant::Str(span)),
+            hir::HIRLiteral::Char(span) => Operand::Constant(Constant::Char(span)),
+            hir::HIRLiteral::Void => Operand::Constant(Constant::Void),
+        }
+    }
+
+    fn lower_binop(&self, op: Operator) -> BinOp {
+        match op {
+            Operator::Plus => BinOp::Add,
+            Operator::Minus => BinOp::Sub,
+            Operator::Mult => BinOp::Mul,
+            Operator::Div => BinOp::Div,
+            Operator::Mod => BinOp::Rem,
+            Operator::BitAnd => BinOp::BitAnd,
+            Operator::BitOr => BinOp::BitOr,
+            Operator::Eq => BinOp::Eq,
+            Operator::Lt => BinOp::Lt,
+            Operator::NEq => BinOp::Ne,
+            Operator::Gt => BinOp::Gt,
+            Operator::LOr => BinOp::BitOr,
+            Operator::LAnd => BinOp::BitAnd,
+            Operator::Le => BinOp::Le,
+            Operator::Ge => BinOp::Ge,
+            Operator::Shl => BinOp::Shl,
+            Operator::Shr => BinOp::Shr,
+            Operator::BitXor => BinOp::BitXor,
+            _ => panic!("Unsupported binary operator"),
+        }
+    }
+
+    fn build_stmt(&mut self, stmt: hir::HIRStmt) {
+        match stmt {
+            hir::HIRStmt::Assign {
                 span: _,
                 target,
                 value,
@@ -452,10 +521,8 @@ impl<'src, 'env> ExprBuilder<'src, 'env> {
                     }
                     _ => panic!("Assignment target must be a place"),
                 }
-
-                Operand::Constant(Constant::Void)
             }
-            hir::HIRExpr::VarDecl { name, ty, value } => {
+            hir::HIRStmt::VarDecl { name, ty, value } => {
                 let ty = if let Some(ty) = ty { ty } else { value.infer() };
                 let local = self.add_local(Some(name), ty);
                 let value = self.build_expr(*value);
@@ -468,24 +535,8 @@ impl<'src, 'env> ExprBuilder<'src, 'env> {
                     place,
                     value: Rvalue::Use(value),
                 });
-                Operand::Constant(Constant::Void)
             }
-            hir::HIRExpr::Block(block) => {
-                // Process all expressions except the last one
-                let mut block_exprs = block.expressions;
-                if let Some(last_expr) = block_exprs.pop() {
-                    // Process all but the last expression
-                    for expr in block_exprs {
-                        self.build_expr(expr);
-                    }
-                    // The last expression is the result
-                    self.build_expr(last_expr)
-                } else {
-                    // No expressions, return void
-                    Operand::Constant(Constant::Void)
-                }
-            }
-            hir::HIRExpr::If {
+            hir::HIRStmt::If {
                 span: _,
                 condition,
                 then_branch,
@@ -523,76 +574,26 @@ impl<'src, 'env> ExprBuilder<'src, 'env> {
                     false_block: false_block_id,
                 };
 
-                // Create a temporary local to store the result
-                let result_ty = ty;
-                let result_local = self.add_local(None, result_ty.clone());
-
                 // Build then branch
                 let _old_block_id = self.current_block_id;
                 self.current_block_id = true_block_id;
 
-                // Process all expressions except the last one
-                let mut then_exprs = then_branch.expressions;
-                let then_result = if let Some(last_expr) = then_exprs.pop() {
-                    // Process all but the last expression
-                    for expr in then_exprs {
-                        self.build_expr(expr);
-                    }
-                    // The last expression is the result
-                    self.build_expr(last_expr)
-                } else {
-                    // No expressions, use void
-                    Operand::Constant(Constant::Void)
-                };
-
-                // Store the result in the temporary local
-                let then_block = &mut self.blocks[true_block_id.0];
-                then_block.statements.push(Statement::Store {
-                    place: Place {
-                        local: result_local,
-                        projection: vec![],
-                    },
-                    value: Rvalue::Use(then_result),
-                });
-
-                // Build else branch if it exists
+                let then_exprs = then_branch.statements;
+                for expr in then_exprs {
+                    self.build_stmt(expr);
+                }
 
                 self.current_block_id = false_block_id;
 
-                // Process all expressions except the last one
-                let mut else_exprs = else_branch.expressions;
-                let else_result = if let Some(last_expr) = else_exprs.pop() {
-                    // Process all but the last expression
-                    for expr in else_exprs {
-                        self.build_expr(expr);
-                    }
-                    // The last expression is the result
-                    self.build_expr(last_expr)
-                } else {
-                    // No expressions, use void
-                    Operand::Constant(Constant::Void)
-                };
-
-                // Store the result in the temporary local
-                let else_block = &mut self.blocks[false_block_id.0];
-                else_block.statements.push(Statement::Store {
-                    place: Place {
-                        local: result_local,
-                        projection: vec![],
-                    },
-                    value: Rvalue::Use(else_result),
-                });
+                let else_exprs = else_branch.statements;
+                for expr in else_exprs {
+                    self.build_stmt(expr);
+                }
 
                 // Restore current block
                 self.current_block_id = end_block_id;
-
-                // Return the value stored in the temporary local
-                Operand::Copy(Place {
-                    local: result_local,
-                    projection: vec![],
-                })
             }
-            hir::HIRExpr::If {
+            hir::HIRStmt::If {
                 span: _,
                 condition,
                 then_branch,
@@ -627,17 +628,15 @@ impl<'src, 'env> ExprBuilder<'src, 'env> {
                 let _old_block_id = self.current_block_id;
                 self.current_block_id = true_block_id;
 
-                // Process all expressions
-                for expr in then_branch.expressions {
-                    self.build_expr(expr);
+                // Process all statements
+                for stmt in then_branch.statements {
+                    self.build_stmt(stmt);
                 }
 
                 // Restore current block
                 self.current_block_id = end_block_id;
-
-                Operand::Constant(Constant::Void)
             }
-            hir::HIRExpr::While {
+            hir::HIRStmt::While {
                 span: _,
                 condition,
                 body,
@@ -682,80 +681,29 @@ impl<'src, 'env> ExprBuilder<'src, 'env> {
 
                 // Build body
                 self.current_block_id = body_block_id;
-                for expr in body.expressions {
-                    self.build_expr(expr);
+                for expr in body.statements {
+                    self.build_stmt(expr);
                 }
 
                 // Restore current block
                 self.current_block_id = end_block_id;
-
-                // While loops always return void
-                Operand::Constant(Constant::Void)
             }
-            hir::HIRExpr::Syscall {
-                span: _,
-                arity,
-                args,
-            } => {
-                let args = args.into_iter().map(|arg| self.build_expr(arg)).collect();
-                let ty = CHSType::Int;
-                let temp = self.add_local(None, ty);
-
-                let block = &mut self.blocks[self.current_block_id.0];
-                block.statements.push(Statement::Assign {
-                    target: temp,
-                    value: Rvalue::Syscall {
-                        number: arity as u32,
-                        args,
-                    },
-                });
-                Operand::Copy(Place {
-                    local: temp,
-                    projection: vec![],
-                })
-            }
-            hir::HIRExpr::Return { span: _, expr } => {
+            hir::HIRStmt::Return { span: _, expr } => {
                 let value = expr.map(|e| self.build_expr(*e));
                 let block = &mut self.blocks[self.current_block_id.0];
                 block.terminator = Terminator::Return;
                 block.statements.push(Statement::Return(value));
-                Operand::Constant(Constant::Void)
+            }
+            hir::HIRStmt::ExprStmt { value } => {
+                let value = self.build_expr_stmt(value);
+                let block = &mut self.blocks[self.current_block_id.0];
+                block.statements.push(Statement::Expr(value));
             }
         }
     }
 
-    fn build_literal(&mut self, lit: hir::HIRLiteral) -> Operand {
-        match lit {
-            hir::HIRLiteral::Int(span) => Operand::Constant(Constant::Int(span)),
-            hir::HIRLiteral::Bool(span) => Operand::Constant(Constant::Bool(span)),
-            hir::HIRLiteral::Str(span) => Operand::Constant(Constant::Str(span)),
-            hir::HIRLiteral::Char(span) => Operand::Constant(Constant::Char(span)),
-            hir::HIRLiteral::Void => Operand::Constant(Constant::Void),
-        }
-    }
-
-    fn lower_binop(&self, op: Operator) -> BinOp {
-        match op {
-            Operator::Plus => BinOp::Add,
-            Operator::Minus => BinOp::Sub,
-            Operator::Mult => BinOp::Mul,
-            Operator::Div => BinOp::Div,
-            Operator::Mod => BinOp::Rem,
-            Operator::BitAnd => BinOp::BitAnd,
-            Operator::BitOr => BinOp::BitOr,
-            Operator::Eq => BinOp::Eq,
-            Operator::Lt => BinOp::Lt,
-            Operator::NEq => BinOp::Ne,
-            Operator::Gt => BinOp::Gt,
-            Operator::LOr => BinOp::BitOr,
-            Operator::LAnd => BinOp::BitAnd,
-            Operator::Le => BinOp::Le,
-            Operator::Ge => BinOp::Ge,
-            Operator::Shl => BinOp::Shl,
-            Operator::Shr => BinOp::Shr,
-            Operator::BitXor => BinOp::BitXor,
-            _ => panic!("Unsupported binary operator"),
-        }
+    fn build_expr_stmt(&mut self, expr: hir::HIRExpr) -> Rvalue {
+        Rvalue::Use(self.build_expr(expr))
     }
 }
 
@@ -805,7 +753,7 @@ impl MIRFunction {
             .collect();
 
         // Create expr builder to handle expression lowering
-        let mut builder = ExprBuilder::new(
+        let mut builder = StmtBuilder::new(
             raw_module,
             env,
             &mut blocks,
@@ -815,19 +763,9 @@ impl MIRFunction {
         );
 
         // Build the function body
-        for expr in hir_fn.body {
-            let ty = expr.infer();
-            if ty == CHSType::Never {
-                blocks[0].terminator = Terminator::Unreachable;
-                break;
-            }
-            builder.build_expr(expr);
+        for stmt in hir_fn.body {
+            builder.build_stmt(stmt);
         }
-
-        // Ensure last block has proper terminator
-        // if matches!(blocks[0].terminator, Terminator::Unreachable) {
-        //     blocks[0].terminator = Terminator::Return;
-        // }
 
         MIRFunction {
             name: hir_fn.name,
