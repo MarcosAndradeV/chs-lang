@@ -258,7 +258,7 @@ impl<'src, 'env> ExprBuilder<'src, 'env> {
                         local: LocalId(local),
                         projection: vec![],
                     })
-                } else if let Some(f @ CHSType::Function(..)) =
+                } else if let Some(f @ CHSType::Function(..) | f @ CHSType::VariadicFunction(..)) =
                     self.env.global_get(self.get_span_str(&id))
                 {
                     Operand::Global(Global::Function(id, f.clone()))
@@ -816,13 +816,18 @@ impl MIRFunction {
 
         // Build the function body
         for expr in hir_fn.body {
+            let ty = expr.infer();
+            if ty == CHSType::Never {
+                blocks[0].terminator = Terminator::Unreachable;
+                break;
+            }
             builder.build_expr(expr);
         }
 
         // Ensure last block has proper terminator
-        if matches!(blocks[0].terminator, Terminator::Unreachable) {
-            blocks[0].terminator = Terminator::Return;
-        }
+        // if matches!(blocks[0].terminator, Terminator::Unreachable) {
+        //     blocks[0].terminator = Terminator::Return;
+        // }
 
         MIRFunction {
             name: hir_fn.name,

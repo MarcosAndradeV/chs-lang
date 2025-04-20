@@ -67,7 +67,7 @@ pub struct HIRFunction {
     pub fn_type: CHSType,
     pub params: Vec<HIRParam>,
     pub return_type: CHSType,
-    pub body: Vec<HIRExpr>,
+    pub body: HIRBlock,
 }
 impl HIRFunction {
     fn from_ast_function(func: nodes::FunctionDecl) -> HIRFunction {
@@ -80,7 +80,10 @@ impl HIRFunction {
                 .map(HIRParam::from_ast_param)
                 .collect(),
             return_type: func.ret_type,
-            body: func.body.into_iter().map(HIRExpr::from_ast_expr).collect(),
+            body: HIRBlock {
+                expressions: func.body.into_iter().map(HIRExpr::from_ast_expr).collect(),
+                ty: None
+            },
         }
     }
 }
@@ -118,6 +121,16 @@ impl HIRParam {
 pub struct HIRBlock {
     pub expressions: Vec<HIRExpr>,
     pub ty: Option<CHSType>,
+}
+
+impl IntoIterator for HIRBlock {
+    type Item = HIRExpr;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.expressions.into_iter()
+    }
+
+    type IntoIter = std::vec::IntoIter<HIRExpr>;
 }
 
 impl CHSInfer for HIRBlock {
@@ -203,7 +216,7 @@ impl CHSInfer for HIRExpr {
             HIRExpr::Identifier(_, ty) => ty.clone().unwrap(),
             HIRExpr::Binary { ty, .. } => ty.clone().unwrap(),
             HIRExpr::Unary { ty, .. } => ty.clone().unwrap(),
-            HIRExpr::Call { ty, .. } => ty.clone().unwrap(),
+            HIRExpr::Call { ty, .. } => ty.clone().unwrap_or(CHSType::Never),
             HIRExpr::Cast { .. } => todo!(),
             HIRExpr::Index { .. } => todo!(),
             HIRExpr::Assign { .. } => todo!(),
