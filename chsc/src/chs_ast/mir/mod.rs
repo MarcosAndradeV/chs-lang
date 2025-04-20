@@ -600,7 +600,7 @@ impl<'src, 'env> ExprBuilder<'src, 'env> {
             } => {
                 let condition = self.build_expr(*condition);
                 let true_block_id = BlockId(self.blocks.len());
-                let end_block_id = BlockId(self.blocks.len() + 2);
+                let end_block_id = BlockId(self.blocks.len() + 1);
 
                 // Create blocks
                 self.blocks.push(BasicBlock {
