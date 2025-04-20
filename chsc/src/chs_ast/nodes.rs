@@ -416,6 +416,7 @@ impl Operator {
 #[derive(Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum Precedence {
     Lowest = 1,
+    Assign,
     LOr,
     LAnd,
     BitOr,
@@ -426,7 +427,6 @@ pub enum Precedence {
     ShlShr,
     Sum,
     Product,
-    Assign,
     Prefix,
     Call,
 }

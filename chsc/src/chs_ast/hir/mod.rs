@@ -219,7 +219,7 @@ impl CHSInfer for HIRExpr {
             HIRExpr::Call { ty, .. } => ty.clone().unwrap_or(CHSType::Never),
             HIRExpr::Cast { .. } => todo!(),
             HIRExpr::Index { .. } => todo!(),
-            HIRExpr::Assign { .. } => todo!(),
+            HIRExpr::Assign { target, .. } => target.infer(),
             HIRExpr::VarDecl { .. } => CHSType::Void,
             HIRExpr::Block(..) => todo!(),
             HIRExpr::If {

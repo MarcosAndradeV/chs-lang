@@ -69,12 +69,13 @@ impl<'src> QBEBackend<'src> {
                 match stmt {
                     mir::Statement::Assign { target, value } => {
                         let Local { name, ty } = &locals[target.0];
+                            let ty = self.convert_type(ty.clone());
                         if let Some(name) = name {
                             let temp = Value::Temporary(self.raw_module[name].to_string());
-                            let ty = self.convert_type(ty.clone());
                             b.assign_instr(temp, ty, self.instr_from_rvalue(value, &locals));
                         } else {
-                            b.add_instr(self.instr_from_rvalue(value, &locals));
+                            let temp = Value::Temporary(format!("__l{}", target.0));
+                            b.assign_instr(temp, ty, self.instr_from_rvalue(value, &locals));
                         }
                     }
                     mir::Statement::Store { place, value } => {
@@ -95,7 +96,7 @@ impl<'src> QBEBackend<'src> {
                 Terminator::Switch { .. } => todo!(),
                 Terminator::Return => {
                     b.add_comment("return");
-                },
+                }
                 Terminator::Unreachable => todo!(),
             }
             func.blocks.push(b);
@@ -159,7 +160,9 @@ impl<'src> QBEBackend<'src> {
                     .add_data(DataDef::new(Linkage::private(), &v, None, items));
                 (Type::Word, Value::Global(v))
             }
-            _ => todo!(),
+            Constant::Bool(_) => todo!(),
+            Constant::Char(_) => todo!(),
+            Constant::Void => (Type::Zero, Value::Const(0)),
         }
     }
 
@@ -173,7 +176,7 @@ impl<'src> QBEBackend<'src> {
                 let (_, value) = self.convert_operand(operand, locals);
                 Instr::Copy(value)
             }
-            Rvalue::BinaryOp(..) => todo!(),
+            Rvalue::BinaryOp(binop, op1, op2) => self.convert_binop(binop, op1, op2, locals),
             Rvalue::UnaryOp(..) => todo!(),
             Rvalue::Call {
                 func: Operand::Global(Global::Function(func, _)),
@@ -191,6 +194,37 @@ impl<'src> QBEBackend<'src> {
             Rvalue::Syscall { .. } => todo!(),
             Rvalue::Index { .. } => todo!(),
             Rvalue::PointerArithmetic { .. } => todo!(),
+        }
+    }
+
+    fn convert_binop(
+        &mut self,
+        binop: BinOp,
+        op1: Operand,
+        op2: Operand,
+        locals: &[Local],
+    ) -> Instr<'src> {
+        match binop {
+            BinOp::Add => {
+                let (_, op1) = self.convert_operand(op1, locals);
+                let (_, op2) = self.convert_operand(op2, locals);
+                Instr::Add(op1, op2)
+            }
+            BinOp::Sub => todo!(),
+            BinOp::Mul => todo!(),
+            BinOp::Div => todo!(),
+            BinOp::Rem => todo!(),
+            BinOp::BitXor => todo!(),
+            BinOp::BitAnd => todo!(),
+            BinOp::BitOr => todo!(),
+            BinOp::Shl => todo!(),
+            BinOp::Shr => todo!(),
+            BinOp::Eq => todo!(),
+            BinOp::Lt => todo!(),
+            BinOp::Le => todo!(),
+            BinOp::Ne => todo!(),
+            BinOp::Ge => todo!(),
+            BinOp::Gt => todo!(),
         }
     }
 }
