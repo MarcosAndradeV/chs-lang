@@ -227,7 +227,7 @@ impl CHSInfer for HIRExpr {
                 ..
             } => else_branch.infer(),
             HIRExpr::If { .. } => CHSType::Void,
-            HIRExpr::While { .. } => todo!(),
+            HIRExpr::While { .. } => CHSType::Void,
             HIRExpr::Syscall { .. } => todo!(),
             HIRExpr::Return {
                 span: _,
