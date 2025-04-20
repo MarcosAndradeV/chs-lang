@@ -97,6 +97,7 @@ pub enum Terminator {
     Return,
     /// Unreachable code (after return/exit)
     Unreachable,
+    Nop,
 }
 
 impl Terminator {
@@ -238,6 +239,50 @@ impl<'src, 'env> StmtBuilder<'src, 'env> {
             current_block_id,
             locals,
             next_local_id,
+        }
+    }
+
+    pub fn finalize_blocks(&mut self) {
+        let mut reachable = vec![false; self.blocks.len()];
+        self.mark_reachable_blocks(BlockId(0), &mut reachable);
+
+        let len = self.blocks.len();
+        for (i, block) in self.blocks.iter_mut().enumerate() {
+            if !reachable[i] {
+                block.terminator = Terminator::Unreachable;
+            } else if matches!(block.terminator, Terminator::Nop) {
+                // Default fallthrough (if none set), jump to next block if it exists
+                if i + 1 < len {
+                    block.terminator = Terminator::Goto(BlockId(i + 1));
+                } else {
+                    block.terminator = Terminator::Unreachable;
+                }
+            }
+        }
+    }
+
+    fn mark_reachable_blocks(&self, start: BlockId, reachable: &mut Vec<bool>) {
+        let mut worklist = vec![start];
+
+        while let Some(block_id) = worklist.pop() {
+            let idx = block_id.0;
+            if idx >= self.blocks.len() || reachable[idx] {
+                continue;
+            }
+            reachable[idx] = true;
+
+            match &self.blocks[idx].terminator {
+                Terminator::Goto(target) => worklist.push(*target),
+                Terminator::Switch {
+                    true_block,
+                    false_block,
+                    ..
+                } => {
+                    worklist.push(*true_block);
+                    worklist.push(*false_block);
+                }
+                Terminator::Return | Terminator::Unreachable | Terminator::Nop => {}
+            }
         }
     }
 
@@ -503,18 +548,13 @@ impl<'src, 'env> StmtBuilder<'src, 'env> {
 
     fn build_stmt(&mut self, stmt: hir::HIRStmt) {
         match stmt {
-            hir::HIRStmt::Assign {
-                span: _,
-                target,
-                value,
-            } => {
+            hir::HIRStmt::Assign { target, value, .. } => {
                 let value = self.build_expr(*value);
                 let target = self.build_expr(*target);
 
                 match target {
                     Operand::Copy(place) => {
-                        let block = &mut self.blocks[self.current_block_id.0];
-                        block.statements.push(Statement::Store {
+                        self.blocks[self.current_block_id.0].statements.push(Statement::Store {
                             place,
                             value: Rvalue::Use(value),
                         });
@@ -522,173 +562,98 @@ impl<'src, 'env> StmtBuilder<'src, 'env> {
                     _ => panic!("Assignment target must be a place"),
                 }
             }
+
             hir::HIRStmt::VarDecl { name, ty, value } => {
-                let ty = if let Some(ty) = ty { ty } else { value.infer() };
+                let ty = ty.unwrap_or_else(|| value.infer());
                 let local = self.add_local(Some(name), ty);
                 let value = self.build_expr(*value);
-                let place = Place {
-                    local,
-                    projection: vec![],
-                };
-                let block = &mut self.blocks[self.current_block_id.0];
-                block.statements.push(Statement::Store {
+                let place = Place { local, projection: vec![] };
+                self.blocks[self.current_block_id.0].statements.push(Statement::Store {
                     place,
                     value: Rvalue::Use(value),
                 });
             }
             hir::HIRStmt::If {
-                span: _,
                 condition,
                 then_branch,
                 else_branch: Some(else_branch),
+                ..
             } => {
+                let cond_block = self.create_empty_block();
+                self.blocks[self.current_block_id.0].terminator = Terminator::Goto(cond_block);
+                self.current_block_id = cond_block;
                 let condition = self.build_expr(*condition);
-                let true_block_id = BlockId(self.blocks.len());
-                let false_block_id = BlockId(self.blocks.len() + 1);
-                let end_block_id = BlockId(self.blocks.len() + 2);
-
-                // Create blocks
-                self.blocks.push(BasicBlock {
-                    id: true_block_id,
-                    statements: Vec::new(),
-                    terminator: Terminator::Goto(end_block_id),
-                });
-
-                self.blocks.push(BasicBlock {
-                    id: false_block_id,
-                    statements: Vec::new(),
-                    terminator: Terminator::Goto(end_block_id),
-                });
-
-                self.blocks.push(BasicBlock {
-                    id: end_block_id,
-                    statements: Vec::new(),
-                    terminator: Terminator::Unreachable,
-                });
-
-                // Set up current block's terminator
-                let current_block = &mut self.blocks[self.current_block_id.0];
-                current_block.terminator = Terminator::Switch {
+                let true_block = self.create_empty_block();
+                let false_block = self.create_empty_block();
+                let end_block = self.create_empty_block();
+                self.blocks[cond_block.0].terminator = Terminator::Switch  {
                     condition,
-                    true_block: true_block_id,
-                    false_block: false_block_id,
+                    true_block,
+                    false_block,
                 };
 
-                // Build then branch
-                let _old_block_id = self.current_block_id;
-                self.current_block_id = true_block_id;
-
-                let then_exprs = then_branch.statements;
-                for expr in then_exprs {
-                    self.build_stmt(expr);
-                }
-
-                self.current_block_id = false_block_id;
-
-                let else_exprs = else_branch.statements;
-                for expr in else_exprs {
-                    self.build_stmt(expr);
-                }
-
-                // Restore current block
-                self.current_block_id = end_block_id;
-            }
-            hir::HIRStmt::If {
-                span: _,
-                condition,
-                then_branch,
-                else_branch: None,
-            } => {
-                let condition = self.build_expr(*condition);
-                let true_block_id = BlockId(self.blocks.len());
-                let end_block_id = BlockId(self.blocks.len() + 1);
-
-                // Create blocks
-                self.blocks.push(BasicBlock {
-                    id: true_block_id,
-                    statements: Vec::new(),
-                    terminator: Terminator::Goto(end_block_id),
-                });
-
-                self.blocks.push(BasicBlock {
-                    id: end_block_id,
-                    statements: Vec::new(),
-                    terminator: Terminator::Unreachable,
-                });
-
-                // Set up current block's terminator
-                let current_block = &mut self.blocks[self.current_block_id.0];
-                current_block.terminator = Terminator::Switch {
-                    condition,
-                    true_block: true_block_id,
-                    false_block: end_block_id,
-                };
-
-                // Build then branch
-                let _old_block_id = self.current_block_id;
-                self.current_block_id = true_block_id;
-
-                // Process all statements
+                self.current_block_id = true_block;
                 for stmt in then_branch.statements {
                     self.build_stmt(stmt);
                 }
+                self.blocks[self.current_block_id.0].terminator = Terminator::Goto(end_block);
 
-                // Restore current block
-                self.current_block_id = end_block_id;
+                self.current_block_id = false_block;
+                for stmt in else_branch.statements {
+                    self.build_stmt(stmt);
+                }
+                self.blocks[self.current_block_id.0].terminator = Terminator::Goto(end_block);
+
+                self.current_block_id = end_block;
+            }
+            hir::HIRStmt::If {
+                condition,
+                then_branch,
+                else_branch: None,
+                ..
+            } => {
+                let cond_block = self.create_empty_block();
+                self.blocks[self.current_block_id.0].terminator = Terminator::Goto(cond_block);
+                self.current_block_id = cond_block;
+                let condition = self.build_expr(*condition);
+                let true_block = self.create_empty_block();
+                let false_block = self.create_empty_block();
+                self.blocks[cond_block.0].terminator = Terminator::Switch  {
+                    condition,
+                    true_block,
+                    false_block,
+                };
+                self.current_block_id = true_block;
+                for stmt in then_branch.statements {
+                    self.build_stmt(stmt);
+                }
+                self.blocks[self.current_block_id.0].terminator = Terminator::Goto(false_block);
+                self.current_block_id = false_block;
             }
             hir::HIRStmt::While {
-                span: _,
                 condition,
                 body,
+                ..
             } => {
-                let start_block_id = self.current_block_id;
-                let condition_block_id = BlockId(self.blocks.len());
-                let body_block_id = BlockId(self.blocks.len() + 1);
-                let end_block_id = BlockId(self.blocks.len() + 2);
-
-                // Create blocks
-                self.blocks.push(BasicBlock {
-                    id: condition_block_id,
-                    statements: Vec::new(),
-                    terminator: Terminator::Unreachable,
-                });
-
-                self.blocks.push(BasicBlock {
-                    id: body_block_id,
-                    statements: Vec::new(),
-                    terminator: Terminator::Goto(condition_block_id),
-                });
-
-                self.blocks.push(BasicBlock {
-                    id: end_block_id,
-                    statements: Vec::new(),
-                    terminator: Terminator::Unreachable,
-                });
-
-                // Set up current block's terminator to go to condition block
-                let current_block = &mut self.blocks[start_block_id.0];
-                current_block.terminator = Terminator::Goto(condition_block_id);
-
-                // Build condition
-                self.current_block_id = condition_block_id;
+                let cond_block = self.create_empty_block();
+                self.blocks[self.current_block_id.0].terminator = Terminator::Goto(cond_block);
+                self.current_block_id = cond_block;
                 let condition = self.build_expr(*condition);
-                let condition_block = &mut self.blocks[condition_block_id.0];
-                condition_block.terminator = Terminator::Switch {
+                let true_block = self.create_empty_block();
+                let false_block = self.create_empty_block();
+                self.blocks[cond_block.0].terminator = Terminator::Switch  {
                     condition,
-                    true_block: body_block_id,
-                    false_block: end_block_id,
+                    true_block,
+                    false_block,
                 };
-
-                // Build body
-                self.current_block_id = body_block_id;
-                for expr in body.statements {
-                    self.build_stmt(expr);
+                self.current_block_id = true_block;
+                for stmt in body.statements {
+                    self.build_stmt(stmt);
                 }
-
-                // Restore current block
-                self.current_block_id = end_block_id;
+                self.blocks[self.current_block_id.0].terminator = Terminator::Goto(cond_block);
+                self.current_block_id = false_block;
             }
-            hir::HIRStmt::Return { span: _, expr } => {
+            hir::HIRStmt::Return { expr, .. } => {
                 let value = expr.map(|e| self.build_expr(*e));
                 let block = &mut self.blocks[self.current_block_id.0];
                 block.terminator = Terminator::Return;
@@ -696,10 +661,19 @@ impl<'src, 'env> StmtBuilder<'src, 'env> {
             }
             hir::HIRStmt::ExprStmt { value } => {
                 let value = self.build_expr_stmt(value);
-                let block = &mut self.blocks[self.current_block_id.0];
-                block.statements.push(Statement::Expr(value));
+                self.blocks[self.current_block_id.0].statements.push(Statement::Expr(value));
             }
         }
+    }
+
+    fn create_empty_block(&mut self) -> BlockId {
+        let id = BlockId(self.blocks.len());
+        self.blocks.push(BasicBlock {
+            id,
+            statements: Vec::new(),
+            terminator: Terminator::Nop,
+        });
+        id
     }
 
     fn build_expr_stmt(&mut self, expr: hir::HIRExpr) -> Rvalue {
@@ -766,6 +740,8 @@ impl MIRFunction {
         for stmt in hir_fn.body {
             builder.build_stmt(stmt);
         }
+
+        builder.finalize_blocks();
 
         MIRFunction {
             name: hir_fn.name,
