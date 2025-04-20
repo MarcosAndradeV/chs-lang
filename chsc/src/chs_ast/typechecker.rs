@@ -337,9 +337,17 @@ impl<'src> TypeChecker<'src> {
                 let (then_type, then_flow) = self.check_block(then_branch)?;
                 if let Some(else_branch) = else_branch {
                     let (else_type, flow) = self.check_block(else_branch)?;
-                    self.env.unify(&then_type, &else_type)?;
-                    Ok((else_type, ReturnFlow::combine(then_flow, flow)))
+                    self.env
+                        .unify(&then_type, &CHSType::Void)
+                        .map_err(|_| chs_error!("{} Expected if-block to be void", span.loc))?;
+                    self.env
+                        .unify(&else_type, &CHSType::Void)
+                        .map_err(|_| chs_error!("{} Expected else-block to be void", span.loc))?;
+                    Ok((CHSType::Void, ReturnFlow::combine(then_flow, flow)))
                 } else {
+                    self.env
+                        .unify(&then_type, &CHSType::Void)
+                        .map_err(|_| chs_error!("{} Expected if-block to be void", span.loc))?;
                     Ok((
                         CHSType::Void,
                         ReturnFlow::combine(then_flow, ReturnFlow::Never),
