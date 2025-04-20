@@ -100,13 +100,21 @@ impl<'src> Parser<'src> {
                     KeywordFn => {
                         let ident_token = self.expect_kind(Identifier)?;
                         self.expect_kind(OpenParen)?;
-                        let (params, ret_type) = self.parse_fn_type_iterative()?;
+                        let (params, ret_type, is_variadic) = self.parse_fn_type_iterative()?;
                         let body = self.parse_expr_list_iterative(|tk| tk.kind == KeywordEnd)?;
-                        let fn_type = CHSType::Function(
-                            params.iter().map(|t| t.ty.clone()).collect(),
-                            Box::new(ret_type.clone()),
-                        );
+                        let fn_type = if is_variadic {
+                            CHSType::VariadicFunction(
+                                params.iter().map(|t| t.ty.clone()).collect(),
+                                Box::new(ret_type.clone()),
+                            )
+                        } else {
+                            CHSType::Function(
+                                params.iter().map(|t| t.ty.clone()).collect(),
+                                Box::new(ret_type.clone()),
+                            )
+                        };
                         let function_decl = FunctionDecl {
+                            is_variadic,
                             name: ident_token,
                             fn_type,
                             params,
@@ -119,11 +127,18 @@ impl<'src> Parser<'src> {
                         self.expect_kind(KeywordFn)?;
                         let ident_token = self.expect_kind(Identifier)?;
                         self.expect_kind(OpenParen)?;
-                        let (args, ret_type) = self.parse_fn_type_iterative()?;
-                        let fn_type = CHSType::Function(
-                            args.into_iter().map(|t| t.ty).collect(),
-                            Box::new(ret_type),
-                        );
+                        let (params, ret_type, is_variadic) = self.parse_fn_type_iterative()?;
+                        let fn_type = if is_variadic {
+                            CHSType::VariadicFunction(
+                                params.iter().map(|t| t.ty.clone()).collect(),
+                                Box::new(ret_type.clone()),
+                            )
+                        } else {
+                            CHSType::Function(
+                                params.iter().map(|t| t.ty.clone()).collect(),
+                                Box::new(ret_type.clone()),
+                            )
+                        };
                         let function_decl = ExternFunctionDecl {
                             name: ident_token,
                             fn_type,
@@ -506,10 +521,11 @@ impl<'src> Parser<'src> {
     }
 
     /// Iterative version of parsing a function type.
-    fn parse_fn_type_iterative(&mut self) -> CHSResult<(Vec<Param>, CHSType)> {
+    fn parse_fn_type_iterative(&mut self) -> CHSResult<(Vec<Param>, CHSType, bool)> {
         use TokenKind::*;
         let mut list = vec![];
         let mut ret_type = CHSType::Void;
+        let mut is_variadic = false;
         loop {
             let ptoken = self.peek();
             match ptoken.kind {
@@ -519,11 +535,19 @@ impl<'src> Parser<'src> {
                         self.next();
                         ret_type = self.parse_type_iterative()?;
                     }
-                    return Ok((list, ret_type));
+                    return Ok((list, ret_type, is_variadic));
                 }
                 Comma => {
                     self.next();
                     continue;
+                }
+                Identifier if is_variadic => {
+                    let token = self.next();
+                    return_chs_error!(
+                        "{} Unexpected token in function type `{}` after variadic parameter",
+                        token.loc,
+                        &self.module[&token]
+                    )
                 }
                 Identifier => {
                     let token = self.next();
@@ -533,6 +557,10 @@ impl<'src> Parser<'src> {
                         name: token,
                         ty: value,
                     });
+                }
+                Splat => {
+                    self.next();
+                    is_variadic = true;
                 }
                 _ => {
                     let token = self.next();
@@ -598,11 +626,8 @@ impl<'src> Parser<'src> {
             }
             KeywordFn => {
                 self.next();
-                let (args, ret) = self.parse_fn_type_iterative()?;
+                let (args, ret, _) = self.parse_fn_type_iterative()?;
                 CHSType::Function(args.into_iter().map(|t| t.ty).collect(), Box::new(ret))
-            }
-            Splat => {
-                CHSType::Variadic
             }
             _ => return_chs_error!(
                 "{} Type not implemented {}",

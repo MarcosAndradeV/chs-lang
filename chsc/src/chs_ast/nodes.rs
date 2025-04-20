@@ -136,6 +136,7 @@ fn split_alias(s: &str) -> Result<(&str, Option<String>), CHSError> {
 pub struct FunctionDecl {
     pub name: Token,
     pub fn_type: CHSType,
+    pub is_variadic: bool,
     pub params: Vec<Param>,
     pub ret_type: CHSType,
     pub body: Vec<Expression>,

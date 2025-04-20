@@ -43,15 +43,17 @@ pub enum CHSType {
     /// Composite types
     Pointer(Box<CHSType>),
     Function(Vec<CHSType>, Box<CHSType>),
+    VariadicFunction(Vec<CHSType>, Box<CHSType>),
     Slice(Box<CHSType>),
 
     /// Generic types
     Generic(String, Vec<CHSType>),
-    Variadic,
     Any,
 
     /// Error type for type checking
     Error,
+    /// Never type for type checking
+    Never,
 }
 
 impl fmt::Display for CHSType {
@@ -64,12 +66,20 @@ impl fmt::Display for CHSType {
             CHSType::Boolean => write!(f, "bool"),
             CHSType::String => write!(f, "string"),
             CHSType::Var(tv) => write!(f, "{}", tv),
-            CHSType::Variadic => write!(f, "..."),
             CHSType::Any => write!(f, "any"),
             CHSType::Pointer(t) => write!(f, "*{}", t),
             CHSType::Function(args, ret) => write!(
                 f,
                 "fn({}) -> {}",
+                args.iter()
+                    .map(|a| a.to_string())
+                    .collect::<Vec<String>>()
+                    .join(", "),
+                ret
+            ),
+            CHSType::VariadicFunction(args, ret) => write!(
+                f,
+                "fn({} ...) -> {}",
                 args.iter()
                     .map(|a| a.to_string())
                     .collect::<Vec<String>>()
@@ -88,6 +98,7 @@ impl fmt::Display for CHSType {
                     .join(", ")
             ),
             CHSType::Error => write!(f, "error"),
+            CHSType::Never => write!(f, "never"),
         }
     }
 }
