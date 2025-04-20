@@ -90,7 +90,7 @@ impl<'src> QBEBackend<'src> {
                         b.add_instr(Instr::Ret(None));
                     }
                     mir::Statement::Expr(value) => {
-                       self.instr_from_rvalue(value, &locals);
+                        self.instr_from_rvalue(value, &locals);
                     }
                 }
             }
@@ -113,7 +113,7 @@ impl<'src> QBEBackend<'src> {
                 Terminator::Return => {
                     b.add_comment("return");
                 }
-                Terminator::Unreachable => todo!(),
+                _ => todo!(),
             }
             func.blocks.push(b);
         }
@@ -228,27 +228,32 @@ impl<'src> QBEBackend<'src> {
         op2: Operand,
         locals: &[Local],
     ) -> Instr<'src> {
+        let (ty1, op1) = self.convert_operand(op1, locals);
+        let (ty2, op2) = self.convert_operand(op2, locals);
+
         match binop {
-            BinOp::Add => {
-                let (_, op1) = self.convert_operand(op1, locals);
-                let (_, op2) = self.convert_operand(op2, locals);
-                Instr::Add(op1, op2)
-            }
+            BinOp::Add => Instr::Add(op1, op2),
             BinOp::Sub => todo!(),
             BinOp::Mul => todo!(),
             BinOp::Div => todo!(),
-            BinOp::Rem => todo!(),
+            BinOp::Rem => Instr::Rem(op1, op2),
             BinOp::BitXor => todo!(),
             BinOp::BitAnd => todo!(),
             BinOp::BitOr => todo!(),
             BinOp::Shl => todo!(),
             BinOp::Shr => todo!(),
-            BinOp::Eq => todo!(),
+            BinOp::Eq => {
+                debug_assert_eq!(
+                    ty1, ty2,
+                    "TODO: Implement comparison instructions for different types"
+                );
+                Instr::Cmp(ty1, Cmp::Eq, op1, op2)
+            }
             BinOp::Lt => {
-                let (ty1, op1) = self.convert_operand(op1, locals);
-                let (ty2, op2) = self.convert_operand(op2, locals);
-                debug_assert_eq!(ty1, ty2);
-                // TODO: Implement comparison instructions for different types
+                debug_assert_eq!(
+                    ty1, ty2,
+                    "TODO: Implement comparison instructions for different types"
+                );
                 Instr::Cmp(ty1, Cmp::Slt, op1, op2)
             }
             BinOp::Le => todo!(),
