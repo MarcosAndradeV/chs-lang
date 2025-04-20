@@ -601,6 +601,9 @@ impl<'src> Parser<'src> {
                 let (args, ret) = self.parse_fn_type_iterative()?;
                 CHSType::Function(args.into_iter().map(|t| t.ty).collect(), Box::new(ret))
             }
+            Splat => {
+                CHSType::Variadic
+            }
             _ => return_chs_error!(
                 "{} Type not implemented {}",
                 ttoken.loc,

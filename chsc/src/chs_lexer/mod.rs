@@ -69,6 +69,11 @@ impl<'src> Lexer<'src> {
                     self.advance();
                     return Token::new(TokenKind::Deref, loc, begin, self.pos);
                 }
+                b'.' if self.read_char() == b'.' && self.read_char() == b'.' => {
+                    self.advance();
+                    self.advance();
+                    return Token::new(TokenKind::Splat, loc, begin, self.pos);
+                }
                 b'a'..=b'z' | b'A'..=b'Z' | b'_' => {
                     return self.lex_identfier_or_keyword(begin);
                 }
@@ -312,6 +317,7 @@ pub enum TokenKind {
     CharacterLiteral,
 
     Dot,
+    Splat,
     Comma,
     Colon,
     SemiColon,
