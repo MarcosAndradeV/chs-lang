@@ -1,4 +1,4 @@
-extern fn printf(s: string, va: ...) -> int
+extern fn printf(s: string, ...) -> int
 
 fn main() -> int
     printf("Hello, World!\n");
