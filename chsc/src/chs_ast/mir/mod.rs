@@ -70,6 +70,8 @@ pub enum Statement {
     Assign { target: LocalId, value: Rvalue },
     /// Store a value to memory
     Store { place: Place, value: Rvalue },
+    /// Return
+    Return(Option<Operand>),
 }
 
 /// MIR Terminator determines how control flow continues after a basic block
@@ -84,14 +86,14 @@ pub enum Terminator {
         false_block: BlockId,
     },
     /// Return from function
-    Return(Option<Operand>),
+    Return,
     /// Unreachable code (after return/exit)
     Unreachable,
 }
 
 impl Terminator {
     pub fn is_return(&self) -> bool {
-        matches!(self, Self::Return(..))
+        matches!(self, Self::Return)
     }
 
     pub fn is_unreachable(&self) -> bool {
@@ -715,11 +717,8 @@ impl<'src, 'env> ExprBuilder<'src, 'env> {
             hir::HIRExpr::Return { span: _, expr } => {
                 let value = expr.map(|e| self.build_expr(*e));
                 let block = &mut self.blocks[self.current_block_id.0];
-                if block.terminator.is_return() || block.terminator.is_unreachable() {
-                    block.terminator = Terminator::Unreachable;
-                } else {
-                    block.terminator = Terminator::Return(value);
-                }
+                block.terminator = Terminator::Return;
+                block.statements.push(Statement::Return(value));
                 Operand::Constant(Constant::Void)
             }
         }
@@ -821,9 +820,9 @@ impl MIRFunction {
         }
 
         // Ensure last block has proper terminator
-        // if matches!(blocks[0].terminator, Terminator::Unreachable) {
-        //     blocks[0].terminator = Terminator::Return(None);
-        // }
+        if matches!(blocks[0].terminator, Terminator::Unreachable) {
+            blocks[0].terminator = Terminator::Return;
+        }
 
         MIRFunction {
             name: hir_fn.name,

@@ -1,7 +1,7 @@
 use core::fmt;
 use std::collections::HashSet;
 
-use super::mir::{BlockId, MIRFunction, MIRModule, MIRModuleItem, Terminator};
+use super::mir::{BlockId, MIRFunction, MIRModule, MIRModuleItem, Statement, Terminator};
 
 /// Error types that can be encountered during flow checking
 #[derive(Debug)]
@@ -186,24 +186,20 @@ impl<'src> FlowChecker<'src> {
 
     fn check_unreachable_code(&self, func: &MIRFunction, errors: &mut Vec<FlowError>) {
         for block in &func.blocks {
-            if block.terminator.is_return() {
-                let next_block_id = BlockId(block.id.0 + 1);
-                if next_block_id.0 < func.blocks.len() {
-                    errors.push(FlowError::UnreachableCodeAfterReturn {
-                        file_and_line: format!(
-                            "{}:{}",
-                            self.module.raw_module.file_path, func.name.loc
-                        ),
-                        function: self.module.raw_module[&func.name].to_string(),
-                        unreachable_block: next_block_id,
-                    });
+            for (i, stmt) in block.statements.iter().enumerate() {
+                match stmt {
+                    Statement::Return(_) if i < block.statements.len() - 1 => {
+                        errors.push(FlowError::UnreachableCodeAfterReturn {
+                            file_and_line: format!(
+                                "{}:{}",
+                                self.module.raw_module.file_path, func.name.loc
+                            ),
+                            function: self.module.raw_module[&func.name].to_string(),
+                            unreachable_block: block.id,
+                        });
+                    }
+                    _ => {}
                 }
-            } else if block.terminator.is_unreachable() {
-                errors.push(FlowError::UnreachableBlock {
-                    location: format!("{}:{}", self.module.raw_module.file_path, func.name.loc),
-                    function: self.module.raw_module[&func.name].to_string(),
-                    block_id: block.id,
-                });
             }
         }
     }

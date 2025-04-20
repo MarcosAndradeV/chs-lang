@@ -81,16 +81,21 @@ impl<'src> QBEBackend<'src> {
                         let (ty, temp) = self.convert_place(place, &locals);
                         b.assign_instr(temp, ty, self.instr_from_rvalue(value, &locals));
                     }
+                    mir::Statement::Return(Some(operand)) => {
+                        let (_, value) = self.convert_operand(operand, &locals);
+                        b.add_instr(Instr::Ret(Some(value)));
+                    }
+                    mir::Statement::Return(None) => {
+                        b.add_instr(Instr::Ret(None));
+                    }
                 }
             }
             match block.terminator {
                 Terminator::Goto(..) => todo!(),
                 Terminator::Switch { .. } => todo!(),
-                Terminator::Return(Some(operand)) => {
-                    let (_, value) = self.convert_operand(operand, &locals);
-                    b.add_instr(Instr::Ret(Some(value)));
-                }
-                Terminator::Return(None) => todo!(),
+                Terminator::Return => {
+                    b.add_comment("return");
+                },
                 Terminator::Unreachable => todo!(),
             }
             func.blocks.push(b);
