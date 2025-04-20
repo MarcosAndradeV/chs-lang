@@ -107,13 +107,14 @@ fn reset_tests(test_folder: &path::PathBuf) {
     for entry in fs::read_dir(test_folder).unwrap() {
         let entry = entry.unwrap();
         let file_path = entry.path();
-        reset_test(&file_path);
+        if file_path.extension().is_some_and(|ext| ext == "bi") {
+            reset_test(&file_path);
+        }
     }
 }
 
 #[inline]
 fn reset_test(file_path: &Path) {
-    let file_path = file_path.with_extension("list.bi");
     if file_path.is_file() {
         println!("[INFO] Found test file: {}", file_path.display());
         println!("[INFO] Removing test file: {}", file_path.display());
@@ -129,13 +130,14 @@ fn replay_tests(test_folder: &Path) {
     for entry in fs::read_dir(test_folder).unwrap() {
         let entry = entry.unwrap();
         let file_path = entry.path();
-        replay_test(&file_path);
+        if file_path.extension().is_some_and(|ext| ext == "list") {
+            replay_test(&file_path);
+        }
     }
 }
 
 #[inline]
 fn replay_test(file_path: &Path) {
-    let file_path = file_path.with_extension("list");
     if file_path.is_file() {
         println!("[INFO] Found test file: {}", file_path.display());
         let output = Command::new(RERE_PATH)
@@ -164,13 +166,14 @@ fn record_tests(test_folder: &Path) {
     for entry in fs::read_dir(test_folder).unwrap() {
         let entry = entry.unwrap();
         let file_path = entry.path();
-        record_test(&file_path);
+        if file_path.extension().is_some_and(|ext| ext == "list") {
+            record_test(&file_path);
+        }
     }
 }
 
 #[inline]
 fn record_test(file_path: &Path) {
-    let file_path = file_path.with_extension("list");
     if file_path.is_file() {
         println!("[INFO] Found test file: {}", file_path.display());
         let output = Command::new(RERE_PATH)
@@ -200,7 +203,7 @@ fn write_tests(test_folder: &Path) {
     for entry in fs::read_dir(test_folder).unwrap() {
         let entry = entry.unwrap();
         let file_path = entry.path();
-        if file_path.is_file() && file_path.extension().unwrap() == "chs" {
+        if file_path.extension().is_some_and(|ext| ext == "chs") {
             write_test(&file_path);
         }
     }
