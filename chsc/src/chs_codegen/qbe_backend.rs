@@ -69,7 +69,7 @@ impl<'src> QBEBackend<'src> {
                 match stmt {
                     mir::Statement::Assign { target, value } => {
                         let Local { name, ty } = &locals[target.0];
-                            let ty = self.convert_type(ty.clone());
+                        let ty = self.convert_type(ty.clone());
                         if let Some(name) = name {
                             let temp = Value::Temporary(self.raw_module[name].to_string());
                             b.assign_instr(temp, ty, self.instr_from_rvalue(value, &locals));
@@ -92,8 +92,21 @@ impl<'src> QBEBackend<'src> {
                 }
             }
             match block.terminator {
-                Terminator::Goto(..) => todo!(),
-                Terminator::Switch { .. } => todo!(),
+                Terminator::Goto(bid) => {
+                    b.add_instr(Instr::Jmp(format!("b{}", bid.0)));
+                }
+                Terminator::Switch {
+                    condition,
+                    true_block,
+                    false_block,
+                } => {
+                    let (_, value) = self.convert_operand(condition, &locals);
+                    b.add_instr(Instr::Jnz(
+                        value,
+                        format!("b{}", true_block.0),
+                        format!("b{}", false_block.0),
+                    ));
+                }
                 Terminator::Return => {
                     b.add_comment("return");
                 }
@@ -119,7 +132,8 @@ impl<'src> QBEBackend<'src> {
         match ty {
             CHSType::Int => Type::Word,
             CHSType::String => Type::Word,
-            _ => todo!(),
+            CHSType::Boolean => Type::Byte,
+            _ => todo!("Implement type: {:?}", ty),
         }
     }
 
@@ -220,7 +234,13 @@ impl<'src> QBEBackend<'src> {
             BinOp::Shl => todo!(),
             BinOp::Shr => todo!(),
             BinOp::Eq => todo!(),
-            BinOp::Lt => todo!(),
+            BinOp::Lt => {
+                let (ty1, op1) = self.convert_operand(op1, locals);
+                let (ty2, op2) = self.convert_operand(op2, locals);
+                debug_assert_eq!(ty1, ty2);
+                // TODO: Implement comparison instructions for different types
+                Instr::Cmp(ty1, Cmp::Slt, op1, op2)
+            }
             BinOp::Le => todo!(),
             BinOp::Ne => todo!(),
             BinOp::Ge => todo!(),
