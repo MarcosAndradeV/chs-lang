@@ -89,6 +89,16 @@ pub enum Terminator {
     Unreachable,
 }
 
+impl Terminator {
+    pub fn is_return(&self) -> bool {
+        matches!(self, Self::Return(..))
+    }
+
+    pub fn is_unreachable(&self) -> bool {
+        matches!(self, Self::Unreachable)
+    }
+}
+
 /// A place represents a location in memory where a value can be stored
 #[derive(Debug)]
 pub struct Place {
@@ -444,11 +454,7 @@ impl<'src, 'env> ExprBuilder<'src, 'env> {
                 Operand::Constant(Constant::Void)
             }
             hir::HIRExpr::VarDecl { name, ty, value } => {
-                let ty = if let Some(ty) = ty {
-                    ty
-                } else {
-                    value.infer()
-                };
+                let ty = if let Some(ty) = ty { ty } else { value.infer() };
                 let local = self.add_local(Some(name), ty);
                 let value = self.build_expr(*value);
                 let place = Place {
@@ -709,7 +715,11 @@ impl<'src, 'env> ExprBuilder<'src, 'env> {
             hir::HIRExpr::Return { span: _, expr } => {
                 let value = expr.map(|e| self.build_expr(*e));
                 let block = &mut self.blocks[self.current_block_id.0];
-                block.terminator = Terminator::Return(value);
+                if block.terminator.is_return() || block.terminator.is_unreachable() {
+                    block.terminator = Terminator::Unreachable;
+                } else {
+                    block.terminator = Terminator::Return(value);
+                }
                 Operand::Constant(Constant::Void)
             }
         }
@@ -811,9 +821,9 @@ impl MIRFunction {
         }
 
         // Ensure last block has proper terminator
-        if matches!(blocks[0].terminator, Terminator::Unreachable) {
-            blocks[0].terminator = Terminator::Return(None);
-        }
+        // if matches!(blocks[0].terminator, Terminator::Unreachable) {
+        //     blocks[0].terminator = Terminator::Return(None);
+        // }
 
         MIRFunction {
             name: hir_fn.name,
