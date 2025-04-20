@@ -230,12 +230,23 @@ impl<'src> TypeChecker<'src> {
                 let callee_type = self.check_expr(callee)?;
                 match callee_type {
                     CHSType::Function(param_types, return_type) => {
-                        if args.len() != param_types.len() {
+                        let is_variadic = param_types
+                            .last()
+                            .map_or(false, |t| *t == CHSType::Variadic);
+                        if args.len()
+                            < param_types
+                                .len()
+                                .saturating_sub(if is_variadic { 1 } else { 0 })
+                        {
                             return_chs_error!("{} Wrong number of arguments", span.loc);
                         }
                         for (arg, expected_type) in args.iter_mut().zip(param_types.iter()) {
                             let arg_type = self.check_expr(arg)?;
-                            self.env.unify(&arg_type, expected_type)?;
+                            if expected_type == &CHSType::Variadic {
+                                self.env.unify(&arg_type, &CHSType::Any)?;
+                            } else {
+                                self.env.unify(&arg_type, expected_type)?;
+                            }
                         }
                         *ty = Some((*return_type).clone());
                         Ok(*return_type)
@@ -457,6 +468,7 @@ impl TypeEnv {
                 }
                 self.unify(ret1, ret2)
             }
+            (CHSType::Any, _) | (_, CHSType::Any) => Ok(()),
             (a, b) if a == b => Ok(()),
             _ => return_chs_error!("Types cannot be unified"),
         }
