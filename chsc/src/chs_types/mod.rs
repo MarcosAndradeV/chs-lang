@@ -47,6 +47,8 @@ pub enum CHSType {
 
     /// Generic types
     Generic(String, Vec<CHSType>),
+    Variadic,
+    Any,
 
     /// Error type for type checking
     Error,
@@ -62,6 +64,8 @@ impl fmt::Display for CHSType {
             CHSType::Boolean => write!(f, "bool"),
             CHSType::String => write!(f, "string"),
             CHSType::Var(tv) => write!(f, "{}", tv),
+            CHSType::Variadic => write!(f, "..."),
+            CHSType::Any => write!(f, "any"),
             CHSType::Pointer(t) => write!(f, "*{}", t),
             CHSType::Function(args, ret) => write!(
                 f,
