@@ -53,14 +53,14 @@ impl<'src> Lexer<'src> {
                     self.advance();
                     return Token::new(TokenKind::Eq, loc, begin, self.pos);
                 }
-                // b'=' if self.read_char() == b'=' => {
-                //     self.advance();
-                //     Token::from_string(loc, TokenKind::Eq, "==".to_string())
-                // }
-                // b'!' if self.read_char() == b'=' => {
-                //     self.advance();
-                //     Token::from_string(loc, TokenKind::NotEq, "!=".to_string())
-                // }
+                b'!' if self.read_char() == b'=' => {
+                    self.advance();
+                    return Token::new(TokenKind::NotEq, loc, begin, self.pos);
+                }
+                b'&' if self.read_char() == b'&' => {
+                    self.advance();
+                    return Token::new(TokenKind::DoubleAmpersand, loc, begin, self.pos);
+                }
                 b'|' if self.read_char() == b'|' => {
                     self.advance();
                     return Token::new(TokenKind::DoublePipe, loc, begin, self.pos);
@@ -113,8 +113,12 @@ impl<'src> Lexer<'src> {
                 b']' => {
                     return Token::new(TokenKind::CloseSquare, loc, begin, self.pos);
                 }
-                // b'{' => Token::from_u8(loc, TokenKind::CurlyOpen, ch),
-                // b'}' => Token::from_u8(loc, TokenKind::CurlyClose, ch),
+                b'{' => {
+                    return Token::new(TokenKind::OpenBrace, loc, begin, self.pos);
+                }
+                b'}' => {
+                    return Token::new(TokenKind::CloseBrace, loc, begin, self.pos);
+                }
                 ch if ch.is_ascii_whitespace() => continue,
                 0 => return Token::new(TokenKind::EOF, self.loc, 0, 0),
                 _ => return Token::new(TokenKind::Invalid, loc, begin, self.pos),
@@ -293,6 +297,8 @@ pub enum TokenKind {
     CloseParen,
     OpenSquare,
     CloseSquare,
+    OpenBrace,
+    CloseBrace,
 
     Macro,
     MacroWithArgs,
