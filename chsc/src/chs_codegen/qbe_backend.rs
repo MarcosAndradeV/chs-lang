@@ -45,9 +45,9 @@ impl<'src> QBEBackend<'src> {
         let arguments = params
             .into_iter()
             .map(|local_id| {
-                let Local { name, ty } = &locals[local_id.0];
+                let Local { name: _, ty } = &locals[local_id.0];
                 let ty = self.convert_type(ty.clone());
-                let val = Value::Temporary(self.raw_module[name.as_ref().unwrap()].to_string());
+                let val = Value::Temporary(format!("__l{}", local_id.0));
                 (ty, val)
             })
             .collect();
@@ -68,15 +68,11 @@ impl<'src> QBEBackend<'src> {
             for stmt in block.statements {
                 match stmt {
                     mir::Statement::Assign { target, value } => {
-                        let Local { name, ty } = &locals[target.0];
+                        let Local { name: _, ty } = &locals[target.0];
                         let ty = self.convert_type(ty.clone());
-                        if let Some(name) = name {
-                            let temp = Value::Temporary(self.raw_module[name].to_string());
-                            b.assign_instr(temp, ty, self.instr_from_rvalue(value, &locals));
-                        } else {
-                            let temp = Value::Temporary(format!("__l{}", target.0));
-                            b.assign_instr(temp, ty, self.instr_from_rvalue(value, &locals));
-                        }
+
+                        let temp = Value::Temporary(format!("__l{}", target.0));
+                        b.assign_instr(temp, ty, self.instr_from_rvalue(value, &locals));
                     }
                     mir::Statement::Store { place, value } => {
                         let (ty, temp) = self.convert_place(place, &locals);
@@ -139,6 +135,7 @@ impl<'src> QBEBackend<'src> {
             CHSType::Boolean => Type::Byte,
             _ => todo!("Implement type: {:?}", ty),
         }
+        .into_abi()
     }
 
     fn convert_operand(&mut self, operand: Operand, locals: &[Local]) -> (Type<'src>, Value) {
@@ -153,7 +150,7 @@ impl<'src> QBEBackend<'src> {
             }
             Operand::Move(..) => todo!(),
             Operand::Global(Global::Function(name, _)) => (
-                Type::Zero,
+                Type::Long,
                 Value::Global(self.raw_module[&name].to_string()),
             ),
         }
@@ -162,19 +159,19 @@ impl<'src> QBEBackend<'src> {
     fn convert_constant(&mut self, constant: Constant) -> (Type<'src>, Value) {
         match constant {
             Constant::I32(value) => (
-                Type::Word,
+                Type::Word.into_abi(),
                 Value::Const(self.raw_module[&value].parse::<i32>().unwrap() as u64),
             ),
             Constant::U32(value) => (
-                Type::Word,
+                Type::Word.into_abi(),
                 Value::Const(self.raw_module[&value].parse::<u32>().unwrap() as u64),
             ),
             Constant::I64(value) => (
-                Type::Long,
+                Type::Long.into_abi(),
                 Value::Const(self.raw_module[&value].parse::<i64>().unwrap() as u64),
             ),
             Constant::U64(value) => (
-                Type::Long,
+                Type::Long.into_abi(),
                 Value::Const(self.raw_module[&value].parse::<u64>().unwrap() as u64),
             ),
             Constant::Str(s) => {
@@ -188,10 +185,10 @@ impl<'src> QBEBackend<'src> {
                 ];
                 self.module
                     .add_data(DataDef::new(Linkage::private(), &v, None, items));
-                (Type::Word, Value::Global(v))
+                (Type::Long.into_abi(), Value::Global(v))
             }
             Constant::Bool(value) => (
-                Type::Byte,
+                Type::Byte.into_abi(),
                 Value::Const(if self.raw_module[&value].parse::<bool>().unwrap() {
                     1
                 } else {
@@ -199,7 +196,7 @@ impl<'src> QBEBackend<'src> {
                 }),
             ),
             Constant::Char(_) => todo!(),
-            Constant::Void => (Type::Zero, Value::Const(0)),
+            Constant::Void => (Type::Zero.into_abi(), Value::Const(0)),
         }
     }
 
@@ -253,8 +250,8 @@ impl<'src> QBEBackend<'src> {
 
         match binop {
             BinOp::Add => Instr::Add(op1, op2),
-            BinOp::Sub => todo!(),
-            BinOp::Mul => todo!(),
+            BinOp::Sub => Instr::Sub(op1, op2),
+            BinOp::Mul => Instr::Mul(op1, op2),
             BinOp::Div => Instr::Div(op1, op2),
             BinOp::Rem => Instr::Rem(op1, op2),
             BinOp::BitXor => todo!(),

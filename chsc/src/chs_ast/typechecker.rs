@@ -36,7 +36,18 @@ impl<'src> TypeChecker<'src> {
     pub fn check_module(&mut self, module: &mut HIRModule) -> CHSResult<()> {
         for item in &mut module.items {
             match item {
-                HIRModuleItem::Function(func) => self.check_function(func)?,
+                HIRModuleItem::Function(func) => {
+                    let name = self.get_span_str(&func.name);
+                    if let Some(_) = self.env.global_get(name) {
+                        return_chs_error!(
+                            "{}:{}: Duplicate function declaration: {}",
+                            self.raw_module.file_path,
+                            func.name.loc,
+                            name
+                        );
+                    }
+                    self.env.global_insert(name, Rc::new(func.fn_type.clone()));
+                }
                 HIRModuleItem::ExternFunction(func) => {
                     let name = self.get_span_str(&func.name);
                     if let Some(_) = self.env.global_get(name) {
@@ -51,6 +62,12 @@ impl<'src> TypeChecker<'src> {
                 }
             }
         }
+        for item in &mut module.items {
+            match item {
+                HIRModuleItem::Function(func) => self.check_function(func)?,
+                HIRModuleItem::ExternFunction(_) => {}
+            }
+        }
         if let Some(CHSType::Function(args, ret)) = self.env.global_get("main") {
             if args.is_empty() && **ret == CHSType::I32 {
                 // Main function is valid
@@ -62,9 +79,8 @@ impl<'src> TypeChecker<'src> {
     }
 
     fn check_function(&mut self, func: &mut HIRFunction) -> CHSResult<()> {
-        // Register function in global scope
-        let name = self.get_span_str(&func.name);
-        self.env.global_insert(name, Rc::new(func.fn_type.clone()));
+
+        self.env.locals_new();
 
         // Add parameters to local scope
         for param in &func.params {
@@ -133,19 +149,19 @@ impl<'src> TypeChecker<'src> {
                     | Operator::Mult
                     | Operator::Div
                     | Operator::Mod => {
-                        self.env.unify(&lhs_type, &rhs_type).or_else(|_|{
-                            lhs.cast(rhs_type.clone())
-                        }).or_else(|_|{
-                            rhs.cast(lhs_type.clone())
-                        }).map_err(|_| {
-                            chs_error!(
-                                "{} Cannot compare values of type {} and {}",
-                                op.span.loc,
-                                lhs_type,
-                                rhs_type
-                            )
-                        })?;
-                        match lhs_type {
+                        self.env
+                            .unify(&lhs_type, &rhs_type)
+                            .or_else(|_| lhs.cast(rhs_type.clone()))
+                            .or_else(|_| rhs.cast(lhs_type.clone()))
+                            .map_err(|_| {
+                                chs_error!(
+                                    "{} Cannot compare values of type {} and {}",
+                                    op.span.loc,
+                                    lhs_type,
+                                    rhs_type
+                                )
+                            })?;
+                        match lhs.infer() {
                             CHSType::I32 => CHSType::I32,
                             CHSType::U32 => CHSType::U32,
                             CHSType::I64 => CHSType::I64,
@@ -158,18 +174,18 @@ impl<'src> TypeChecker<'src> {
                     }
                     // Comparison operators
                     Operator::Le | Operator::Ge | Operator::Lt | Operator::Gt => {
-                        self.env.unify(&lhs_type, &rhs_type).or_else(|_|{
-                            lhs.cast(rhs_type.clone())
-                        }).or_else(|_|{
-                            rhs.cast(lhs_type.clone())
-                        }).map_err(|_| {
-                            chs_error!(
-                                "{} Cannot compare values of type {} and {}",
-                                op.span.loc,
-                                lhs_type,
-                                rhs_type
-                            )
-                        })?;
+                        self.env
+                            .unify(&lhs_type, &rhs_type)
+                            .or_else(|_| lhs.cast(rhs_type.clone()))
+                            .or_else(|_| rhs.cast(lhs_type.clone()))
+                            .map_err(|_| {
+                                chs_error!(
+                                    "{} Cannot compare values of type {} and {}",
+                                    op.span.loc,
+                                    lhs_type,
+                                    rhs_type
+                                )
+                            })?;
                         match lhs_type {
                             CHSType::I32 => CHSType::Boolean,
                             CHSType::U32 => CHSType::Boolean,
@@ -183,18 +199,18 @@ impl<'src> TypeChecker<'src> {
                     }
                     // Equality operators
                     Operator::Eq | Operator::NEq => {
-                        self.env.unify(&lhs_type, &rhs_type).or_else(|_|{
-                            lhs.cast(rhs_type.clone())
-                        }).or_else(|_|{
-                            rhs.cast(lhs_type.clone())
-                        }).map_err(|_| {
-                            chs_error!(
-                                "{} Cannot compare values of type {} and {}",
-                                op.span.loc,
-                                lhs_type,
-                                rhs_type
-                            )
-                        })?;
+                        self.env
+                            .unify(&lhs_type, &rhs_type)
+                            .or_else(|_| lhs.cast(rhs_type.clone()))
+                            .or_else(|_| rhs.cast(lhs_type.clone()))
+                            .map_err(|_| {
+                                chs_error!(
+                                    "{} Cannot compare values of type {} and {}",
+                                    op.span.loc,
+                                    lhs_type,
+                                    rhs_type
+                                )
+                            })?;
                         CHSType::Boolean
                     }
                     // Logical operators
