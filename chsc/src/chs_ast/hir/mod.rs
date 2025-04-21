@@ -1,7 +1,8 @@
 use crate::{
     chs_lexer::{Span, Token},
     chs_types::CHSType,
-    chs_util::CHSResult,
+    chs_util::*,
+    return_chs_error,
 };
 
 use super::{
@@ -206,14 +207,16 @@ impl HIRStmt {
                 span: Span::from(r.token),
                 expr: r.expr.map(|e| HIRExpr::from_ast_expr(e).into()),
             },
-            e => HIRStmt::ExprStmt { value: HIRExpr::from_ast_expr(e).into() },
+            e => HIRStmt::ExprStmt {
+                value: HIRExpr::from_ast_expr(e).into(),
+            },
         }
     }
 }
 
 #[derive(Debug)]
 pub enum HIRExpr {
-    Literal(HIRLiteral),
+    Literal(HIRLiteral, Option<CHSType>),
     Identifier(Span<String>, Option<CHSType>),
     Binary {
         ty: Option<CHSType>,
@@ -250,20 +253,56 @@ pub enum HIRExpr {
 }
 
 impl CHSInfer for HIRExpr {
+    fn cast(&mut self, ty: CHSType) -> CHSResult<()> {
+        let actual_ty = self.infer();
+        match self {
+            HIRExpr::Literal(_, lit_ty_opt @ None) => match (&actual_ty, &ty) {
+                (CHSType::Int, CHSType::I32)
+                | (CHSType::Int, CHSType::U32)
+                | (CHSType::Int, CHSType::I64)
+                | (CHSType::Int, CHSType::U64) => {
+                    *lit_ty_opt = Some(ty);
+                    Ok(())
+                }
+                (CHSType::I32, CHSType::Int)
+                | (CHSType::U32, CHSType::Int)
+                | (CHSType::I64, CHSType::Int)
+                | (CHSType::U64, CHSType::Int) => {
+                    *lit_ty_opt = Some(ty);
+                    Ok(())
+                }
+                _ => {
+                    return_chs_error!(
+                        "Automatic casting literal of type {} to incompatible type {}.",
+                        actual_ty,
+                        ty
+                    );
+                }
+            },
+            _ => {
+                return_chs_error!(
+                    "Automatic casting expression of type {} to incompatible type {}.",
+                    actual_ty,
+                    ty
+                );
+            }
+        }
+    }
     fn infer(&self) -> CHSType {
         match self {
-            HIRExpr::Literal(l) => match l {
+            HIRExpr::Literal(l, None) => match l {
                 HIRLiteral::Int(_) => CHSType::Int,
                 HIRLiteral::Bool(_) => CHSType::Boolean,
                 HIRLiteral::Str(_) => CHSType::String,
                 HIRLiteral::Char(_) => CHSType::Char,
                 HIRLiteral::Void => CHSType::Void,
             },
-            HIRExpr::Identifier(_, ty) => ty.clone().unwrap(),
-            HIRExpr::Binary { ty, .. } => ty.clone().unwrap(),
-            HIRExpr::Unary { ty, .. } => ty.clone().unwrap(),
+            HIRExpr::Literal(_, Some(ty)) => ty.clone(),
+            HIRExpr::Identifier(_, ty) => ty.clone().unwrap_or(CHSType::Never),
+            HIRExpr::Binary { ty, .. } => ty.clone().unwrap_or(CHSType::Never),
+            HIRExpr::Unary { ty, .. } => ty.clone().unwrap_or(CHSType::Never),
             HIRExpr::Call { ty, .. } => ty.clone().unwrap_or(CHSType::Never),
-            HIRExpr::Cast { .. } => todo!(),
+            HIRExpr::Cast { to_type, .. } => to_type.clone(),
             HIRExpr::Index { .. } => todo!(),
             HIRExpr::Syscall { .. } => todo!(),
         }
@@ -271,14 +310,38 @@ impl CHSInfer for HIRExpr {
 }
 
 impl HIRExpr {
-    fn from_ast_expr(expr: nodes::Expression) -> Self {
+    pub fn from_ast_expr(expr: nodes::Expression) -> Self {
         match expr {
             nodes::Expression::ConstExpression(cexp) => match cexp {
-                nodes::ConstExpression::IntegerLiteral(s) => HIRExpr::Literal(HIRLiteral::Int(s)),
-                nodes::ConstExpression::BooleanLiteral(s) => HIRExpr::Literal(HIRLiteral::Bool(s)),
+                nodes::ConstExpression::IntegerDefault(s) => {
+                    HIRExpr::Literal(HIRLiteral::Int(s), None)
+                }
+                nodes::ConstExpression::IntegerLiteral(s) => {
+                    // HIRExpr::Literal(HIRLiteral::I32(s), None)
+                    HIRExpr::Literal(HIRLiteral::Int(s), Some(CHSType::I32))
+                }
+                nodes::ConstExpression::UnsignedIntegerLiteral(s) => {
+                    // HIRExpr::Literal(HIRLiteral::U32(s), None)
+                    HIRExpr::Literal(HIRLiteral::Int(s), Some(CHSType::U32))
+                }
+                nodes::ConstExpression::LongIntegerLiteral(s) => {
+                    // HIRExpr::Literal(HIRLiteral::I64(s), None)
+                    HIRExpr::Literal(HIRLiteral::Int(s), Some(CHSType::I64))
+                }
+                nodes::ConstExpression::LongUnsignedIntegerLiteral(s) => {
+                    // HIRExpr::Literal(HIRLiteral::U64(s), None)
+                    HIRExpr::Literal(HIRLiteral::Int(s), Some(CHSType::U64))
+                }
+                nodes::ConstExpression::BooleanLiteral(s) => {
+                    HIRExpr::Literal(HIRLiteral::Bool(s), None)
+                }
                 nodes::ConstExpression::Identifier(s) => HIRExpr::Identifier(s, None),
-                nodes::ConstExpression::StringLiteral(s) => HIRExpr::Literal(HIRLiteral::Str(s)),
-                nodes::ConstExpression::CharLiteral(s) => HIRExpr::Literal(HIRLiteral::Char(s)),
+                nodes::ConstExpression::StringLiteral(s) => {
+                    HIRExpr::Literal(HIRLiteral::Str(s), None)
+                }
+                nodes::ConstExpression::CharLiteral(s) => {
+                    HIRExpr::Literal(HIRLiteral::Char(s), None)
+                }
             },
             nodes::Expression::Binop(b) => HIRExpr::Binary {
                 ty: None,
@@ -320,7 +383,11 @@ impl HIRExpr {
 
 #[derive(Debug)]
 pub enum HIRLiteral {
-    Int(Span<i64>),
+    Int(Span<u64>),
+    // I32(Span<i32>),
+    // U32(Span<u32>),
+    // I64(Span<i64>),
+    // U64(Span<u64>),
     Bool(Span<bool>),
     Str(Span<String>),
     Char(Span<char>),
