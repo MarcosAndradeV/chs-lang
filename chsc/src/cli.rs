@@ -4,7 +4,7 @@ use crate::config::VERSION;
 
 #[derive(Parser)]
 #[command(name = "chsc")]
-#[command(author = "Marcos V. Andrade <>")]
+#[command(author = "Marcos V. Andrade Almeida <mastermarcos1212@hotmail.com>")]
 #[command(version = VERSION)]
 #[command(about = "Compile and run chs files", long_about = None)]
 pub struct Cli {
