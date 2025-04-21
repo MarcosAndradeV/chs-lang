@@ -1,13 +1,15 @@
-fn main() -> int
-    fac := 2
-    n := 600851475143
+extern fn printf(s: string, ...) -> i32
+
+fn main() -> i32
+    fac := 2u64
+    n := 600851475143u64
     while(n > 1)
         if(n % fac == 0)
-            set n = n / fac
+            n = n / fac
         else
-            set fac = fac + 1
+            fac = fac + 1
         end
     end
-    print_int(fac)
-    0
+    printf("Answer: %d\n", fac)
+    return 0
 end

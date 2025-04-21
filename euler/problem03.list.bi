@@ -1,9 +1,10 @@
 :i count 2
-:b shell 59
-cargo run -q --bin chs -- compile euler/problem03.chs -r -s
+:b shell 65
+cargo run -q --bin chs -- compile-run euler/problem03.chs --force
 :i returncode 0
-:b stdout 5
-6857
+:b stdout 42
+[INFO] Running executable...
+Answer: 6857
 
 :b stderr 0
 

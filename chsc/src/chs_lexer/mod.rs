@@ -26,6 +26,28 @@ impl<'src> Lexer<'src> {
         ch
     }
 
+    fn peek_suffix(&self) -> Option<String> {
+        let mut buf = String::new();
+        let mut i = self.pos;
+        while i < self.data.len() && self.data[i].is_ascii_alphanumeric() {
+            buf.push(self.data[i] as char);
+            i += 1;
+            if buf.len() > 3 {
+                break;
+            }
+        }
+        match buf.as_str() {
+            "i32" | "u32" | "i64" | "u64" => Some(buf),
+            _ => None,
+        }
+    }
+
+    fn advance_n(&mut self, n: usize) {
+        for _ in 0..n {
+            self.advance();
+        }
+    }
+
     fn read_char(&mut self) -> u8 {
         let pos = self.pos;
         if pos >= self.data.len() {
@@ -133,6 +155,7 @@ impl<'src> Lexer<'src> {
             let ch = self.read_char();
             match ch {
                 b'a'..=b'z' | b'A'..=b'Z' | b'_' => (),
+                b'0'..=b'9' => (),
                 _ => break,
             }
             self.advance();
@@ -154,20 +177,40 @@ impl<'src> Lexer<'src> {
     }
 
     fn lex_number(&mut self, begin: usize) -> Token {
-        let mut kind = TokenKind::IntegerNumber;
         let loc = self.loc();
-        loop {
-            let ch = self.read_char();
-            match ch {
-                b'0'..=b'9' => (),
-                b'.' if kind != TokenKind::RealNumber => {
-                    kind = TokenKind::RealNumber;
-                }
-                _ => break,
-            }
+        let mut kind = TokenKind::Integer;
+
+        while let b'0'..=b'9' = self.read_char() {
             self.advance();
         }
-        Token::new(kind, loc, begin, self.pos)
+
+        let suffix_start = self.pos;
+        let suffix = self.peek_suffix();
+
+        match suffix.as_deref() {
+            Some("i32") => {
+                kind = TokenKind::IntegerNumber;
+                self.advance_n(3);
+            }
+            Some("u32") => {
+                kind = TokenKind::UnsignedIntegerNumber;
+                self.advance_n(3);
+            }
+            Some("i64") => {
+                kind = TokenKind::LongIntegerNumber;
+                self.advance_n(3);
+            }
+            Some("u64") => {
+                kind = TokenKind::LongUnsignedIntegerNumber;
+                self.advance_n(3);
+            }
+            Some(_) => {
+                return Token::new(TokenKind::Invalid, loc, begin, self.pos);
+            }
+            None => (),
+        }
+
+        Token::new(kind, loc, begin, suffix_start)
     }
 
     // TODO: Fix the lexer. `lex_string` should handle escape sequences or RawModule should handle escape sequences
@@ -246,6 +289,18 @@ pub struct Span<T> {
     pub end: usize,
 }
 
+impl<T> Span<T> {
+    pub fn to_span<E>(self) -> Span<E> {
+        Span { _marker: PhantomData, loc: self.loc, start: self.start, end: self.end }
+    }
+}
+
+impl<T> Span<T> {
+    pub fn new(loc: Loc, start: usize, end: usize) -> Self {
+        Self { _marker: PhantomData, loc, start, end }
+    }
+}
+
 impl<T> From<Token> for Span<T> {
     fn from(value: Token) -> Self {
         Span {
@@ -317,8 +372,12 @@ pub enum TokenKind {
     KeywordSyscall,
     KeywordReturn,
 
-    IntegerNumber,
     RealNumber,
+    Integer,
+    IntegerNumber,
+    LongIntegerNumber,
+    UnsignedIntegerNumber,
+    LongUnsignedIntegerNumber,
     StringLiteral,
     CharacterLiteral,
 
@@ -425,15 +484,10 @@ mod tests {
         assert!(lex.next_token().kind == TokenKind::KeywordEnd);
     }
 
-    // #[test]
-    // fn test_lexer_source() {
-    //     let source = "fn main() 123 end";
-    //     let mut lex = Lexer::new(source);
-    //     assert!(*lex.next().source == *"fn");
-    //     assert!(*lex.next().source == *"main");
-    //     assert!(*lex.next().source == *"(");
-    //     assert!(*lex.next().source == *")");
-    //     assert!(*lex.next().source == *"123");
-    //     assert!(*lex.next().source == *"end");
-    // }
+    #[test]
+    fn test_lexer_numbers() {
+        let source = "9000000000000000000u64";
+        let mut lex = Lexer::new(source);
+        assert!(lex.next_token().kind == TokenKind::LongUnsignedIntegerNumber);
+    }
 }

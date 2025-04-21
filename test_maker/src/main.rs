@@ -21,14 +21,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .long("test-folder")
                 .value_name("FOLDER")
                 .help("Set test folder (default: ./tests)")
-                .required(false)
+                .required(false),
         )
         .arg(
             Arg::new("test-file")
                 .long("test-file")
                 .value_name("FILE")
                 .help("Switch to single file mode")
-                .required(false)
+                .required(false),
         )
         .arg(
             Arg::new("record")
@@ -81,28 +81,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ) {
         (true, false, false, false) => {
             if test_file {
-                record_test(&test_path);
+                record_test(&test_path.with_extension("list"));
             } else {
                 record_tests(&test_path);
             }
         }
         (false, true, false, false) => {
             if test_file {
-                replay_test(&test_path);
+                replay_test(&test_path.with_extension("list"));
             } else {
                 replay_tests(&test_path);
             }
         }
         (false, false, true, false) => {
             if test_file {
-                write_test(&test_path);
+                write_test(&test_path.with_extension("chs"));
             } else {
                 write_tests(&test_path);
             }
         }
         (false, false, false, true) => {
             if test_file {
-                reset_test(&test_path);
+                reset_test(&test_path.with_extension("bi"));
             } else {
                 reset_tests(&test_path);
             }

@@ -30,8 +30,12 @@ pub enum TypeConstraint {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CHSType {
     /// Basic types
+    /// Generic Int type
     Int,
-    UInt,
+    /// Specific Int types
+    I32, I64,
+    U32, U64,
+
     Void,
     Char,
     Boolean,
@@ -60,7 +64,10 @@ impl fmt::Display for CHSType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             CHSType::Int => write!(f, "int"),
-            CHSType::UInt => write!(f, "uint"),
+            CHSType::I32 => write!(f, "i32"),
+            CHSType::I64 => write!(f, "i64"),
+            CHSType::U32 => write!(f, "u32"),
+            CHSType::U64 => write!(f, "u64"),
             CHSType::Void => write!(f, "void"),
             CHSType::Char => write!(f, "char"),
             CHSType::Boolean => write!(f, "bool"),

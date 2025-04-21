@@ -133,7 +133,8 @@ impl<'src> QBEBackend<'src> {
 
     fn convert_type(&self, ty: CHSType) -> Type<'src> {
         match ty {
-            CHSType::Int => Type::Word,
+            CHSType::I32 | CHSType::U32 => Type::Word,
+            CHSType::I64 | CHSType::U64 => Type::Long,
             CHSType::String => Type::Word,
             CHSType::Boolean => Type::Byte,
             _ => todo!("Implement type: {:?}", ty),
@@ -160,9 +161,21 @@ impl<'src> QBEBackend<'src> {
 
     fn convert_constant(&mut self, constant: Constant) -> (Type<'src>, Value) {
         match constant {
-            Constant::Int(value) => (
+            Constant::I32(value) => (
                 Type::Word,
-                Value::Const(self.raw_module[&value].parse::<u64>().unwrap()),
+                Value::Const(self.raw_module[&value].parse::<i32>().unwrap() as u64),
+            ),
+            Constant::U32(value) => (
+                Type::Word,
+                Value::Const(self.raw_module[&value].parse::<u32>().unwrap() as u64),
+            ),
+            Constant::I64(value) => (
+                Type::Long,
+                Value::Const(self.raw_module[&value].parse::<i64>().unwrap() as u64),
+            ),
+            Constant::U64(value) => (
+                Type::Long,
+                Value::Const(self.raw_module[&value].parse::<u64>().unwrap() as u64),
             ),
             Constant::Str(s) => {
                 let s = self.raw_module[&s].to_string();
@@ -214,7 +227,14 @@ impl<'src> QBEBackend<'src> {
                 Instr::Call(func, args, None)
             }
             Rvalue::Call { .. } => todo!(),
-            Rvalue::Cast { .. } => todo!(),
+            Rvalue::Cast { value, target_ty } => {
+                let (ty, value) = self.convert_operand(value, locals);
+                match (ty, target_ty) {
+                    (Type::Word, CHSType::I32) => Instr::Copy(value),
+                    (Type::Word, CHSType::U32) => Instr::Copy(value),
+                    _ => todo!(),
+                }
+            }
             Rvalue::Syscall { .. } => todo!(),
             Rvalue::Index { .. } => todo!(),
             Rvalue::PointerArithmetic { .. } => todo!(),
@@ -235,11 +255,11 @@ impl<'src> QBEBackend<'src> {
             BinOp::Add => Instr::Add(op1, op2),
             BinOp::Sub => todo!(),
             BinOp::Mul => todo!(),
-            BinOp::Div => todo!(),
+            BinOp::Div => Instr::Div(op1, op2),
             BinOp::Rem => Instr::Rem(op1, op2),
             BinOp::BitXor => todo!(),
             BinOp::BitAnd => todo!(),
-            BinOp::BitOr => todo!(),
+            BinOp::BitOr => Instr::Or(op1, op2),
             BinOp::Shl => todo!(),
             BinOp::Shr => todo!(),
             BinOp::Eq => {
@@ -259,7 +279,13 @@ impl<'src> QBEBackend<'src> {
             BinOp::Le => todo!(),
             BinOp::Ne => todo!(),
             BinOp::Ge => todo!(),
-            BinOp::Gt => todo!(),
+            BinOp::Gt => {
+                debug_assert_eq!(
+                    ty1, ty2,
+                    "TODO: Implement comparison instructions for different types"
+                );
+                Instr::Cmp(ty1, Cmp::Sgt, op1, op2)
+            }
         }
     }
 }

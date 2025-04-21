@@ -18,11 +18,13 @@ pub struct Module<'src> {
 }
 
 impl<'src> Module<'src> {
-    pub fn imports(&self) -> Vec<&Use> {
+    pub fn imports(&self) -> Vec<(&Token, &ImportSyntax)> {
         self.items
             .iter()
             .filter_map(|item| match item {
-                ModuleItem::MacroCall(MacroCall::Use(use_)) => Some(use_),
+                ModuleItem::MacroCall(MacroCall::Use(token, import_syntax)) => {
+                    Some((token, import_syntax))
+                }
                 _ => None,
             })
             .collect()
@@ -39,7 +41,11 @@ pub enum ModuleItem {
 #[derive(Debug)]
 pub enum ConstExpression {
     Identifier(Span<String>),
-    IntegerLiteral(Span<i64>),
+    IntegerDefault(Span<u64>),
+    IntegerLiteral(Span<u64>),
+    UnsignedIntegerLiteral(Span<u64>),
+    LongIntegerLiteral(Span<u64>),
+    LongUnsignedIntegerLiteral(Span<u64>),
     BooleanLiteral(Span<bool>),
     StringLiteral(Span<String>),
     CharLiteral(Span<char>),
@@ -47,6 +53,7 @@ pub enum ConstExpression {
 
 #[derive(Debug)]
 pub enum Expression {
+    MacroCall(MacroCall),
     ConstExpression(ConstExpression),
     Binop(Box<Binop>),
     Unop(Box<Unop>),
@@ -67,9 +74,21 @@ impl Expression {
     pub fn from_literal_token(token: Token) -> Result<Self, CHSError> {
         use TokenKind::*;
         match token.kind {
+            Integer => Ok(Self::ConstExpression(ConstExpression::IntegerDefault(
+                Span::from(token),
+            ))),
             IntegerNumber => Ok(Self::ConstExpression(ConstExpression::IntegerLiteral(
                 Span::from(token),
             ))),
+            UnsignedIntegerNumber => Ok(Self::ConstExpression(
+                ConstExpression::UnsignedIntegerLiteral(Span::from(token)),
+            )),
+            LongIntegerNumber => Ok(Self::ConstExpression(ConstExpression::LongIntegerLiteral(
+                Span::from(token),
+            ))),
+            LongUnsignedIntegerNumber => Ok(Self::ConstExpression(
+                ConstExpression::LongUnsignedIntegerLiteral(Span::from(token)),
+            )),
             CharacterLiteral => Ok(Self::ConstExpression(ConstExpression::CharLiteral(
                 Span::from(token),
             ))),
@@ -79,11 +98,18 @@ impl Expression {
 }
 
 #[derive(Debug)]
-pub struct Use(pub Token, pub ImportSyntax);
-
-#[derive(Debug)]
 pub enum MacroCall {
-    Use(Use),
+    Use(Token, ImportSyntax),
+    TypeOf(Token, String),
+}
+
+impl MacroCall {
+    pub fn macro_use(token: Token, import_syntax: ImportSyntax) -> Self {
+        Self::Use(token, import_syntax)
+    }
+    pub fn macro_type_of(token: Token, arg: String) -> Self {
+        Self::TypeOf(token, arg)
+    }
 }
 
 #[derive(Debug)]
@@ -362,8 +388,10 @@ impl Operator {
                         }
                     }
                     // Regular numeric arithmetic
-                    (CHSType::Int, CHSType::Int) => Ok(CHSType::Int),
-                    (CHSType::UInt, CHSType::UInt) => Ok(CHSType::UInt),
+                    (CHSType::I32, CHSType::I32) => Ok(CHSType::I32),
+                    (CHSType::U32, CHSType::U32) => Ok(CHSType::U32),
+                    (CHSType::I64, CHSType::I64) => Ok(CHSType::I64),
+                    (CHSType::U64, CHSType::U64) => Ok(CHSType::U64),
                     _ => return_chs_error!(
                         "Arithmetic operators require numeric types of the same kind"
                     ),
@@ -396,8 +424,10 @@ impl Operator {
             | Operator::BitXor
             | Operator::Shl
             | Operator::Shr => match (lty, rty) {
-                (CHSType::Int, CHSType::Int) => Ok(CHSType::Int),
-                (CHSType::UInt, CHSType::UInt) => Ok(CHSType::UInt),
+                (CHSType::I32, CHSType::I32) => Ok(CHSType::I32),
+                (CHSType::U32, CHSType::U32) => Ok(CHSType::U32),
+                (CHSType::I64, CHSType::I64) => Ok(CHSType::I64),
+                (CHSType::U64, CHSType::U64) => Ok(CHSType::U64),
                 _ => {
                     return_chs_error!("Bitwise operators require numeric types of the same kind")
                 }
