@@ -107,13 +107,14 @@ fn reset_tests(test_folder: &path::PathBuf) {
     for entry in fs::read_dir(test_folder).unwrap() {
         let entry = entry.unwrap();
         let file_path = entry.path();
-        reset_test(&file_path);
+        if file_path.extension().is_some_and(|ext| ext == "bi") {
+            reset_test(&file_path);
+        }
     }
 }
 
 #[inline]
 fn reset_test(file_path: &Path) {
-    let file_path = file_path.with_extension("list.bi");
     if file_path.is_file() {
         println!("[INFO] Found test file: {}", file_path.display());
         println!("[INFO] Removing test file: {}", file_path.display());
@@ -129,13 +130,14 @@ fn replay_tests(test_folder: &Path) {
     for entry in fs::read_dir(test_folder).unwrap() {
         let entry = entry.unwrap();
         let file_path = entry.path();
-        replay_test(&file_path);
+        if file_path.extension().is_some_and(|ext| ext == "list") {
+            replay_test(&file_path);
+        }
     }
 }
 
 #[inline]
 fn replay_test(file_path: &Path) {
-    let file_path = file_path.with_extension("list");
     if file_path.is_file() {
         println!("[INFO] Found test file: {}", file_path.display());
         let output = Command::new(RERE_PATH)
@@ -164,13 +166,14 @@ fn record_tests(test_folder: &Path) {
     for entry in fs::read_dir(test_folder).unwrap() {
         let entry = entry.unwrap();
         let file_path = entry.path();
-        record_test(&file_path);
+        if file_path.extension().is_some_and(|ext| ext == "list") {
+            record_test(&file_path);
+        }
     }
 }
 
 #[inline]
 fn record_test(file_path: &Path) {
-    let file_path = file_path.with_extension("list");
     if file_path.is_file() {
         println!("[INFO] Found test file: {}", file_path.display());
         let output = Command::new(RERE_PATH)
@@ -200,47 +203,43 @@ fn write_tests(test_folder: &Path) {
     for entry in fs::read_dir(test_folder).unwrap() {
         let entry = entry.unwrap();
         let file_path = entry.path();
-        write_test(&file_path);
+        if file_path.extension().is_some_and(|ext| ext == "chs") {
+            write_test(&file_path);
+        }
     }
 }
 
 #[inline]
 fn write_test(file_path: &Path) {
-    let file_path = file_path.with_extension("chs");
     if file_path.is_file() {
         println!("[INFO] Found test file: {}", file_path.display());
-        let res = create_test_file_if_not_exists(&file_path);
+        let res = create_test_file(&file_path);
         if res.is_err() {
             process::exit(1);
         }
-        if let Some(mut f) = res.unwrap() {
-            println!("[INFO] Writing test file: {}", file_path.display());
-            let res = write_tests_to_file(&mut f, &file_path);
-            if res.is_err() {
-                process::exit(1);
-            }
+        let mut f = res.unwrap();
+        println!("[INFO] Writing test file: {}", file_path.display());
+        let res = write_tests_to_file(&mut f, &file_path);
+        if res.is_err() {
+            process::exit(1);
         }
     }
 }
 
-fn create_test_file_if_not_exists(file_path: &Path) -> Result<Option<File>, ()> {
+fn create_test_file(file_path: &Path) -> Result<File, ()> {
     let file_path = file_path.with_extension("list");
-    if !file_path.exists() {
-        let mut f = File::create(file_path).map_err(|e| {
-            eprintln!("[ERROR] Failed to create file: {}", e);
-        })?;
-        f.write_all(b"").map_err(|e| {
-            eprintln!("[ERROR] Failed to write to file: {}", e);
-        })?;
-        Ok(Some(f))
-    } else {
-        Ok(None)
-    }
+    let mut f = File::create(file_path).map_err(|e| {
+        eprintln!("[ERROR] Failed to create file: {}", e);
+    })?;
+    f.write_all(b"").map_err(|e| {
+        eprintln!("[ERROR] Failed to write to file: {}", e);
+    })?;
+    Ok(f)
 }
 
 fn write_tests_to_file(f: &mut File, test_file_path: &Path) -> Result<(), ()> {
     let run_cmd = format!(
-        "cargo run -q --bin chs -- compile {} -r -s\n",
+        "cargo run -q --bin chs -- compile-run {} --force\n",
         test_file_path.display()
     );
     let rm_cmd = format!("rm {}\n", test_file_path.with_extension("").display());

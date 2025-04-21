@@ -1,13 +1,12 @@
 [package]
 name = "chsc"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
-chs_lexer = { path = "../chs_lexer/" }
-chs_ast = { path = "../chs_ast/" }
-chs_util = { path = "../chs_util/" }
-chs_codegen = { path = "../chs_codegen" }
+qbe = "2.5.0"
+clap = { version = "4", features = ["derive"] }
+which = "4"
 
 [[bin]]
 name = "chs"

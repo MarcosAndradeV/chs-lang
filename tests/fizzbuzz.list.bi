@@ -1,17 +1,18 @@
 :i count 2
-:b shell 58
-cargo run -q --bin chs -- compile tests/fizzbuzz.chs -r -s
+:b shell 64
+cargo run -q --bin chs -- compile-run tests/fizzbuzz.chs --force
 :i returncode 0
-:b stdout 35
+:b stdout 77
+[INFO] Running executable...
 1
-2
-4
-7
-8
-Fizz
 Fizz
 Buzz
 Fizz
+FizzBuzz
+Fizz
+7
+Fizz
+Buzz
 Fizz
 
 :b stderr 0

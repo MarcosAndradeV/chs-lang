@@ -1,6 +1,4 @@
-use std::{fmt, path::PathBuf};
-
-use chs_util::{CHSResult, chs_error};
+use std::fmt;
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -39,23 +37,6 @@ impl SizeOperator {
 
     pub fn bit_size(&self) -> usize {
         self.byte_size() * 8
-    }
-
-    pub fn from_chstype(
-        ttype: &chs_types::CHSType,
-        type_map: &chs_types::TypeMap,
-    ) -> CHSResult<Self> {
-        match ttype {
-            chs_types::CHSType::Pointer(_)
-            | chs_types::CHSType::Function(_, _)
-            | chs_types::CHSType::String
-            | chs_types::CHSType::Int
-            | chs_types::CHSType::UInt => Ok(Self::Qword),
-            chs_types::CHSType::Char | chs_types::CHSType::Boolean => Ok(Self::Byte),
-            chs_types::CHSType::Void => {
-                chs_error!("Cannot get size form void. Bug in type checker")
-            }
-        }
     }
 
     pub fn register_for_size(&self, reg: Register) -> Register {
@@ -208,40 +189,63 @@ impl Register {
     }
 }
 
-// #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-// /// Scale: A 2-bit constant factor that is either 1, 2, 4, or 8.
-// ///
-// /// Index: Any general purpose register.
-// ///
-// /// Base: Any general purpose register.
-// ///
-// /// Displacement: An integral offset. (normally limited to 32 bits even in 64-bit mode but can be 64-bits with a few select encodings)
-// pub enum Addr {
-//     Base(Register),
-//     BaseIndex(Register, Register),
-//     BaseDisplacement(Register, i32),
-//     BaseIndexDisplacement(Register, Register, i32),
-//     BaseIndexXScale(Register, Register, u8),
-//     IndexXScaleDisplacement(Register, u8, i32),
-//     BaseIndexXScaleDisplacement(Register, Register, u8, i32),
-//     Displacement(i32)
-// }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Scale: A 2-bit constant factor that is either 1, 2, 4, or 8.
+///
+/// Index: Any general purpose register.
+///
+/// Base: Any general purpose register.
+///
+/// Displacement: An integral offset. (normally limited to 32 bits even in 64-bit mode but can be 64-bits with a few select encodings)
+pub enum Addr {
+    Base(Register),
+    BaseIndex(Register, Register),
+    BaseDisplacement(Register, i32),
+    BaseIndexDisplacement(Register, Register, i32),
+    BaseIndexXScale(Register, Register, u8),
+    IndexXScaleDisplacement(Register, u8, i32),
+    BaseIndexXScaleDisplacement(Register, Register, u8, i32),
+    Displacement(i32),
+}
 
-// impl fmt::Display for Addr {
-//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-//         match self {
-//             Addr::Base(reg) => write!(f, "{reg}"),
-//             Addr::BaseIndex(reg1, reg2) => write!(f, "{reg1}+{reg2}"),
-//             Addr::BaseDisplacement(reg, dis) => if *dis > 0 { write!(f, "{reg}+{dis}")} else {write!(f, "{reg}{dis}")},
-//             Addr::BaseIndexDisplacement(reg1, reg2, dis) => if *dis > 0 { write!(f, "{reg1}{reg2}+{dis}")} else {write!(f, "{reg1}{reg2}{dis}")},
-//             Addr::BaseIndexXScale(reg1, reg2, s) =>  write!(f, "{reg1}+{reg2}*{s}"),
-//             Addr::IndexXScaleDisplacement(reg1, s, dis) => if *dis > 0 { write!(f, "{reg1}*{s}+{dis}")} else {write!(f, "{reg1}*{s}{dis}")},
-//             Addr::BaseIndexXScaleDisplacement(reg1, reg2, s, dis) =>
-//                 if *dis > 0 { write!(f, "{reg1}+{reg2}*{s}+{dis}")} else {write!(f, "{reg1}+{reg2}*{s}{dis}")},
-//             Addr::Displacement(_) => todo!(),
-//         }
-//     }
-// }
+impl fmt::Display for Addr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Addr::Base(reg) => write!(f, "{reg}"),
+            Addr::BaseIndex(reg1, reg2) => write!(f, "{reg1}+{reg2}"),
+            Addr::BaseDisplacement(reg, dis) => {
+                if *dis > 0 {
+                    write!(f, "{reg}+{dis}")
+                } else {
+                    write!(f, "{reg}")
+                }
+            }
+            Addr::BaseIndexDisplacement(reg1, reg2, dis) => {
+                if *dis > 0 {
+                    write!(f, "{reg1}{reg2}+{dis}")
+                } else {
+                    write!(f, "{reg1}{reg2}{dis}")
+                }
+            }
+            Addr::BaseIndexXScale(reg1, reg2, s) => write!(f, "{reg1}+{reg2}*{s}"),
+            Addr::IndexXScaleDisplacement(reg1, s, dis) => {
+                if *dis > 0 {
+                    write!(f, "{reg1}*{s}+{dis}")
+                } else {
+                    write!(f, "{reg1}*{s}{dis}")
+                }
+            }
+            Addr::BaseIndexXScaleDisplacement(reg1, reg2, s, dis) => {
+                if *dis > 0 {
+                    write!(f, "{reg1}+{reg2}*{s}+{dis}")
+                } else {
+                    write!(f, "{reg1}+{reg2}*{s}{dis}")
+                }
+            }
+            Addr::Displacement(_) => todo!(),
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Value {
@@ -252,7 +256,7 @@ pub enum Value {
     /// Base: Any general purpose register.
     ///
     /// Displacement: An integral offset. (normally limited to 32 bits even in 64-bit mode but can be 64-bits with a few select encodings)
-    Memory(SizeOperator, String),
+    Memory(SizeOperator, Addr),
     Register(Register),
     Const(SizeOperator, i64),
     Label(String),
@@ -503,6 +507,10 @@ impl Block {
     pub fn push_instr(&mut self, instr: Instr) {
         self.instrs.push(instr);
     }
+
+    fn extend_instr(&mut self, instr: Vec<Instr>) {
+        self.instrs.extend(instr);
+    }
 }
 
 impl fmt::Display for Block {
@@ -553,6 +561,13 @@ impl Function {
             .last_mut()
             .expect("Last block must be present")
             .push_instr(instr);
+    }
+
+    pub fn extend_instr(&mut self, instr: Vec<Instr>) {
+        self.blocks
+            .last_mut()
+            .expect("Last block must be present")
+            .extend_instr(instr);
     }
 
     pub fn last_instr(&mut self) -> &Instr {
@@ -617,21 +632,16 @@ impl fmt::Display for Function {
 #[derive(Debug, Default, Clone)]
 pub struct Module {
     link_with_c: bool,
-    extrn: Vec<String>,
-    out_path: PathBuf,
     start: Block,
     functions: Vec<Function>,
+    extrn: Vec<String>,
     data: Vec<DataDef>,
 }
 
 impl Module {
-    pub fn new(out_path: PathBuf, extrn: Vec<String>) -> Module {
-        let start = Block::new("");
+    pub fn new() -> Module {
         Module {
-            link_with_c: false,
-            extrn,
-            out_path,
-            start,
+            start: Block::new(""),
             ..Default::default()
         }
     }
@@ -650,12 +660,12 @@ impl Module {
         self.start.push_instr(Instr::Raw(instr.into()));
     }
 
-    pub fn out_path(&self) -> &PathBuf {
-        &self.out_path
-    }
-
     pub fn link_with_c(&mut self, arg: bool) {
         self.link_with_c = arg;
+    }
+
+    pub fn push_extrn(&mut self, name: &str) {
+        self.extrn.push(name.to_string());
     }
 }
 
@@ -672,9 +682,7 @@ impl fmt::Display for Module {
             writeln!(f, "format ELF64 executable")?;
             writeln!(f, "entry _start")?;
             writeln!(f, "segment executable")?;
-            // for instr in self.start.instrs.iter() {
-            //     writeln!(f, "\t{}", instr)?;
-            // }
+            writeln!(f, "_start:")?;
             writeln!(f, "\tcall _main")?;
             writeln!(f, "\tmov rax, 60")?;
             writeln!(f, "\tmov rdi, 0")?;

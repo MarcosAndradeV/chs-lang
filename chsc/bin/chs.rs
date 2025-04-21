@@ -1,142 +1,216 @@
-#![allow(unused)]
-mod my_cli;
-use std::{
-    env::Args,
-    fs::File,
-    io::{Empty, Write},
-    os::unix::process::CommandExt,
-    path::PathBuf,
-    process::{self, exit, ExitCode, Stdio},
+use std::{fs, path::PathBuf, process::Command};
+
+use chsc::{
+    chs_ast::{
+        self, RawModule, flow_checker::FlowChecker, hir::HIRModule, mir::MIRModule, parser::Parser,
+        typechecker::TypeChecker,
+    },
+    chs_codegen::qbe_backend::QBEBackend,
+    chs_error,
+    chs_util::{CHSError, CHSResult, binary_exists, file_changed},
+    cli,
+    config::Config,
+    return_chs_error,
 };
-
-use chs_ast::{nodes::TypedModule, parser::Parser, RawModule};
-use chs_codegen::FasmGenerator;
-use chs_util::{chs_error, CHSError, CHSResult};
-
-use my_cli::{Cmd, MyCLI};
+use clap::Parser as _;
 
 fn main() {
-    let cl = MyCLI::create_from_args()
-        .add_cmd("help", Cmd::new().help("Print help message"))
-        .add_cmd(
-            "compile",
-            Cmd::new()
-                .help("Compiles the program.")
-                .arg("INPUT", 0)
-                .flag("o", "OUTPUT", false)
-                .flag_bool("r")
-                .flag_bool("s")
-                .flag_bool("emit-asm"),
-        );
-    match cl.get_matches() {
-        Some(("help", ..)) => cl.usage(),
-        Some(("compile", flags, args)) => {
-            if let Some(file_path) = args.get(0).cloned() {
-                if let Err(err) = compile(
-                    file_path,
-                    flags.get("o").cloned(),
-                    flags.is_present("r"),
-                    flags.is_present("s"),
-                    flags.is_present("emit-asm"),
-                ) {
-                    eprintln!("{err}");
+    let _chs_config = Config::default();
+
+    if !binary_exists("qbe") {
+        eprintln!("[ERROR] qbe binary not found. Please install it.");
+        std::process::exit(1);
+    }
+
+    if !binary_exists("cc") {
+        eprintln!("[ERROR] cc binary not found.");
+        std::process::exit(1);
+    }
+
+    let cli = cli::Cli::parse();
+
+    match cli.command {
+        cli::Commands::Compile {
+            input,
+            output,
+            silent,
+            force,
+        } => {
+            if !silent {
+                println!("[INFO] Compiling file: {}", input);
+                if let Some(ref out) = output {
+                    println!("[INFO] Output: {}", out);
                 }
-            } else {
-                eprintln!("No file provided")
+            }
+            let result = compile(input, output, false, silent, force);
+            if let Err(err) = result {
+                eprintln!("[ERROR] {}", err);
+                std::process::exit(1);
             }
         }
-        _ => cl.usage(),
+
+        cli::Commands::CompileRun {
+            input,
+            output,
+            force,
+        } => {
+            let result = compile(input, output, true, true, force);
+            if let Err(err) = result {
+                eprintln!("[ERROR] {}", err);
+                std::process::exit(1);
+            }
+        }
+    }
+}
+
+macro_rules! log {
+    ($silent:expr, $($arg:tt)*) => {
+        if !$silent {
+            println!($($arg)*);
+        }
     }
 }
 
 fn compile(
-    file_path: String,
+    input_path: String,
     outpath: Option<String>,
     run: bool,
     silent: bool,
-    emit_asm: bool,
+    force: bool,
 ) -> CHSResult<()> {
+    let file_path = PathBuf::from(&input_path);
+    let ssa_path = file_path.with_extension("ssa");
+    let asm_path = file_path.with_extension("s");
+    let out_path = outpath
+        .map(PathBuf::from)
+        .unwrap_or_else(|| file_path.with_extension(""));
 
-    let raw_module = RawModule::new(chs_ast::read_flie(&file_path), file_path);
+    if !file_changed(&file_path, &out_path) && !force {
+        log!(
+            silent && !run,
+            "[INFO] Skipping rebuild, using cached output."
+        );
+        if run {
+            run_exe(out_path)?;
+        }
+        return Ok(());
+    }
 
+    log!(silent, "[INFO] Reading module from file: {}", input_path);
+    let raw_module = RawModule::new(chs_ast::read_file(&input_path), input_path);
+
+    log!(silent, "[INFO] Parsing module...");
     let module = Parser::new(&raw_module).parse()?;
 
-    let typed_module = TypedModule::from_module(module)?;
+    log!(silent, "[INFO] Converting to HIR...");
+    let mut module = HIRModule::from_ast(module);
 
-    let fasm_code = FasmGenerator::generate(typed_module)?;
+    log!(silent, "[INFO] Running type checker...");
+    let mut checker = TypeChecker::new(module.raw_module);
+    checker.check_module(&mut module)?;
 
-    let fasm_path = fasm_code.out_path();
-    let mut out_file = File::create(fasm_path).map_err(|err| CHSError(err.to_string()))?;
-    write!(out_file, "{}", fasm_code).map_err(|err| CHSError(err.to_string()))?;
-    if !silent {
-        println!("[INFO] Generating {}", fasm_path.display());
+    log!(silent, "[INFO] Converting to MIR...");
+    let tenv = checker.env();
+    let module = MIRModule::from_hir(module, tenv);
+
+    log!(silent, "[INFO] Running flow checker...");
+    let checker = FlowChecker::new(&module);
+    checker.check_module().map_err(|errors| {
+        CHSError(
+            errors
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join("\n"),
+        )
+    })?;
+
+    log!(silent, "[INFO] Generating code using QBE backend...");
+    let mut backend = QBEBackend::new(&raw_module);
+    backend.generate_module(module);
+    let module = backend.finish();
+
+    fs::write(&ssa_path, module.to_string())
+        .map_err(|e| chs_error!("Failed to write SSA file: {}", e))?;
+
+    log!(
+        silent,
+        "[INFO] CMD: qbe -o {} {}",
+        asm_path.display(),
+        ssa_path.display()
+    );
+
+    let output = Command::new("qbe")
+        .arg("-o")
+        .arg(&asm_path)
+        .arg(&ssa_path)
+        .output()
+        .map_err(|e| chs_error!("Failed to run qbe: {}", e))?;
+
+    if !output.status.success() {
+        return_chs_error!(
+            "qbe failed to generate assembly\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
-    let fasm_output_path = match outpath {
-        Some(ref a) => PathBuf::from(a).with_extension("o"),
-        None => fasm_path.with_extension("o"),
-    };
-    let mut fasm_proc = process::Command::new("fasm");
-    fasm_proc.arg(fasm_path).arg(&fasm_output_path);
 
-    if silent {
-        fasm_proc.stdout(Stdio::null());
+    log!(
+        silent,
+        "[INFO] CMD: cc -o {} {}",
+        out_path.display(),
+        asm_path.display()
+    );
+    let output = Command::new("cc")
+        .arg("-o")
+        .arg(&out_path)
+        .arg(&asm_path)
+        .output()
+        .map_err(|e| chs_error!("Failed to run cc: {}", e))?;
+
+    if !output.status.success() {
+        return_chs_error!(
+            "cc failed to generate final executable\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 
-    let result = fasm_proc
-        .spawn()
-        .expect("Failed to spawn fasm process")
-        .wait_with_output()
-        .expect("Failed to wait for fasm");
-    if !result.status.success() {
-        chs_error!(String::from_utf8_lossy(&result.stderr));
-    }
-
-    let gcc_output_path = match outpath {
-        Some(a) => PathBuf::from(a),
-        None => fasm_path.with_extension(""),
-    };
-
-    let mut gcc_proc = process::Command::new("gcc");
-    gcc_proc.arg("-static").arg("-o").arg(&gcc_output_path).arg(&fasm_output_path);
-
-    if silent {
-        gcc_proc.stdout(Stdio::null());
-    }
-
-    let result = gcc_proc
-        .spawn()
-        .expect("Failed to spawn gcc process")
-        .wait_with_output()
-        .expect("Failed to wait for gcc");
-    if !result.status.success() {
-        chs_error!(String::from_utf8_lossy(&result.stderr));
-    }
-
-    if !emit_asm {
-        let mut rm_proc = process::Command::new("rm")
-            .arg(fasm_path)
-            .arg(fasm_output_path)
-            .spawn()
-            .expect("Failed to spawn rm process");
-
-        let result = rm_proc.wait_with_output().expect("Failed to wait for rm");
-        if !result.status.success() {
-            chs_error!("Failed {}", String::from_utf8_lossy(&result.stderr));
-        }
-    }
+    log!(silent, "[INFO] Compilation completed successfully!");
 
     if run {
-        let mut run_proc = process::Command::new(format!("./{}", gcc_output_path.display()))
-            .spawn()
-            .expect("Failed to spawn run process");
-
-        let result = run_proc
-            .wait_with_output()
-            .expect("Failed to wait for run");
-        if !result.status.success() {
-            chs_error!("Failed {}", String::from_utf8_lossy(&result.stderr));
-        }
+        run_exe(out_path)?;
     }
 
+    log!(silent, "[INFO] Cleaning up temporary files...");
+    let paths = &[&ssa_path, &asm_path];
+    cleanup_files(silent, paths);
+
     Ok(())
+}
+
+fn cleanup_files(silent: bool, paths: &[&PathBuf]) {
+    for temp_file in paths {
+        if let Err(e) = fs::remove_file(temp_file) {
+            log!(
+                silent,
+                "[WARN] Failed to remove temp file {}: {}",
+                temp_file.display(),
+                e
+            );
+        }
+    }
+}
+
+fn run_exe(path: PathBuf) -> CHSResult<()> {
+    println!("[INFO] Running executable...");
+    let output = Command::new(&path)
+        .status()
+        .map_err(|e| chs_error!("Failed to execute binary: {}", e))?;
+
+    if output.success() {
+        Ok(())
+    } else {
+        Err(chs_error!("Execution failed"))
+    }
 }
