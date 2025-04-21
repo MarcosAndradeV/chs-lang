@@ -1,7 +1,5 @@
 use std::str::FromStr;
 
-use Use;
-
 use crate::{
     chs_ast::nodes::{FunctionDecl, ModuleItem},
     chs_lexer::{Lexer, Span, Token, TokenKind},
@@ -72,31 +70,7 @@ impl<'src> Parser<'src> {
                     );
                 }
                 match token.kind {
-                    MacroWithArgs => {
-                        let src = &self.module[&token.source];
-                        let (macro_, args) = src
-                            .split_once("(")
-                            .expect("macro with args always have `(`");
-                        match macro_ {
-                            "use" => {
-                                let (args, _) = args
-                                    .split_once(")")
-                                    .expect("macro with args always have `)`");
-                                items.push(ModuleItem::MacroCall(MacroCall::Use(Use(
-                                    token,
-                                    ImportSyntax::from_str(args)?,
-                                ))));
-                            }
-                            _ => {
-                                return_chs_error!(
-                                    "{}:{} Unknown macro '{}'",
-                                    self.module.file_path,
-                                    token.loc,
-                                    macro_
-                                );
-                            }
-                        }
-                    }
+                    MacroWithArgs => self.parse_macro_in_top_level(&mut items, token)?,
                     KeywordFn => {
                         let ident_token = self.expect_kind(Identifier)?;
                         self.expect_kind(OpenParen)?;
@@ -162,7 +136,55 @@ impl<'src> Parser<'src> {
         })
     }
 
-    fn parse_expression_iterative(
+    fn parse_macro_in_top_level(
+        &mut self,
+        items: &mut Vec<ModuleItem>,
+        token: Token,
+    ) -> Result<(), CHSError> {
+        let src = &self.module[&token.source];
+        let (macro_, args) = src
+            .split_once("(")
+            .expect("macro with args always have `(`");
+        match macro_ {
+            "use" => {
+                let (args, _) = args
+                    .split_once(")")
+                    .expect("macro with args always have `)`");
+                items.push(ModuleItem::MacroCall(MacroCall::macro_use(
+                    token,
+                    ImportSyntax::from_str(args)?,
+                )));
+            }
+            _ => {
+                return_chs_error!(
+                    "{}:{} Unknown macro '{}'",
+                    self.module.file_path,
+                    token.loc,
+                    macro_
+                );
+            }
+        }
+        Ok(())
+    }
+
+    fn parse_macro(&mut self, _items: &mut Vec<Expression>, token: Token) -> Result<(), CHSError> {
+        let src = &self.module[&token.source];
+        let (macro_, _args) = src
+            .split_once("(")
+            .expect("macro with args always have `(`");
+        match macro_ {
+            _ => {
+                return_chs_error!(
+                    "{}:{} Unknown macro '{}'",
+                    self.module.file_path,
+                    token.loc,
+                    macro_
+                );
+            }
+        }
+    }
+
+    pub fn parse_expression_iterative(
         &mut self,
         lowest_precedence: Precedence,
     ) -> CHSResult<Expression> {
@@ -347,7 +369,12 @@ impl<'src> Parser<'src> {
                     body,
                 })))
             }
-            IntegerNumber | CharacterLiteral => Expression::from_literal_token(token),
+            Integer
+            | IntegerNumber
+            | UnsignedIntegerNumber
+            | LongIntegerNumber
+            | LongUnsignedIntegerNumber
+            | CharacterLiteral => Expression::from_literal_token(token),
             KeywordTrue | KeywordFalse => Ok(Expression::ConstExpression(
                 ConstExpression::BooleanLiteral(Span::from(token)),
             )),
@@ -491,6 +518,10 @@ impl<'src> Parser<'src> {
             }
 
             match ptoken.kind {
+                MacroWithArgs => {
+                    let token = self.next();
+                    self.parse_macro(&mut exprs, token)?;
+                }
                 Comma => {
                     self.next(); // skip comma, but don't treat it as end
                     continue;
@@ -575,45 +606,41 @@ impl<'src> Parser<'src> {
     }
 
     /// Iterative version of parsing a function type.
-    fn parse_generic_type_iterative(&mut self) -> CHSResult<Vec<CHSType>> {
-        use TokenKind::*;
-        let mut list = vec![];
-        loop {
-            let ptoken = self.peek();
-            match ptoken.kind {
-                Gt => {
-                    self.next();
-                    return Ok(list);
-                }
-                Comma => {
-                    self.next();
-                    continue;
-                }
-                _ => {
-                    let value = self.parse_type_iterative()?;
-                    list.push(value);
-                }
-            }
-        }
-    }
+    // fn parse_generic_type_iterative(&mut self) -> CHSResult<Vec<CHSType>> {
+    //     use TokenKind::*;
+    //     let mut list = vec![];
+    //     loop {
+    //         let ptoken = self.peek();
+    //         match ptoken.kind {
+    //             Gt => {
+    //                 self.next();
+    //                 return Ok(list);
+    //             }
+    //             Comma => {
+    //                 self.next();
+    //                 continue;
+    //             }
+    //             _ => {
+    //                 let value = self.parse_type_iterative()?;
+    //                 list.push(value);
+    //             }
+    //         }
+    //     }
+    // }
 
     /// Iterative version of parsing a type.
     fn parse_type_iterative(&mut self) -> CHSResult<CHSType> {
         use TokenKind::*;
         let ttoken = self.next();
         let ttype = match ttoken.kind {
-            Identifier if &self.module[&ttoken] == "int" => CHSType::Int,
-            Identifier if &self.module[&ttoken] == "uint" => CHSType::UInt,
+            Identifier if &self.module[&ttoken] == "int" => CHSType::I32,
+            Identifier if &self.module[&ttoken] == "uint" => CHSType::U32,
+            Identifier if &self.module[&ttoken] == "i32" => CHSType::I32,
+            Identifier if &self.module[&ttoken] == "u32" => CHSType::U32,
             Identifier if &self.module[&ttoken] == "void" => CHSType::Void,
             Identifier if &self.module[&ttoken] == "bool" => CHSType::Boolean,
             Identifier if &self.module[&ttoken] == "char" => CHSType::Char,
             Identifier if &self.module[&ttoken] == "string" => CHSType::String,
-            Identifier if self.peek().kind == TokenKind::Lt => {
-                self.next();
-                let v = self.parse_generic_type_iterative()?;
-                CHSType::Generic(self.module[&ttoken].to_string(), v)
-            }
-            Identifier => CHSType::Generic(self.module[&ttoken].to_string(), vec![]),
             OpenSquare => {
                 // TODO: Add support for [<type>; <size>] array types
                 let ttp = self.parse_type_iterative()?;
