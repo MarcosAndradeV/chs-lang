@@ -21,6 +21,12 @@ impl RawModule {
     }
 }
 
+pub trait ModuleImpl<'src> {
+    fn get_span_str<T>(&self, span: &Span<T>) -> &'src str;
+    fn get_token_str(&self, token: &Token) -> &'src str;
+    fn get_file_path(&self) -> &'src str;
+}
+
 impl<T> ops::Index<&Span<T>> for RawModule {
     type Output = str;
 
@@ -37,6 +43,7 @@ impl ops::Index<&Token> for RawModule {
     }
 }
 
+// TODO: Use CHSResult<String> instead of String
 pub fn read_file<P: AsRef<Path>>(file_path: P) -> String {
     match fs::read_to_string(file_path) {
         Ok(ok) => ok,

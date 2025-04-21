@@ -290,7 +290,7 @@ pub struct Span<T> {
 }
 
 impl<T> Span<T> {
-    pub fn to_span<E>(self) -> Span<E> {
+    pub fn to_span<E>(&self) -> Span<E> {
         Span { _marker: PhantomData, loc: self.loc, start: self.start, end: self.end }
     }
 }

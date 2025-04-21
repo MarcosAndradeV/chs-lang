@@ -6,9 +6,7 @@ use crate::{
 };
 
 use super::{
-    RawModule,
-    nodes::{self, Operator},
-    typechecker::CHSInfer,
+    nodes::{self, Operator}, typechecker::CHSInfer, ModuleImpl, RawModule
 };
 
 #[derive(Debug)]
@@ -36,8 +34,22 @@ pub struct HIRModule<'src> {
     pub items: Vec<HIRModuleItem>,
 }
 
+impl<'src> ModuleImpl<'src> for HIRModule<'src> {
+    fn get_span_str<T>(&self, span: &Span<T>) -> &'src str {
+        &self.raw_module[span]
+    }
+
+    fn get_token_str(&self, token: &Token) -> &'src str {
+        &self.raw_module[token]
+    }
+
+    fn get_file_path(&self) -> &'src str {
+        &self.raw_module.file_path
+    }
+}
+
 impl<'src> HIRModule<'src> {
-    pub fn from_ast(ast: nodes::Module<'src>) -> Self {
+    pub fn from_ast(ast: nodes::ASTModule<'src>) -> Self {
         let raw_module = ast.raw_module;
         let items = ast
             .items

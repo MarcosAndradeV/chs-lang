@@ -8,19 +8,33 @@ use crate::{
     return_chs_error,
 };
 
-use super::{RawModule, nodes::*};
+use super::{ModuleImpl, RawModule, nodes::*};
 
 pub struct Parser<'src> {
-    module: &'src RawModule,
+    raw_module: &'src RawModule,
     lexer: Lexer<'src>,
     peeked: Option<Token>,
+}
+
+impl<'src> ModuleImpl<'src> for Parser<'src> {
+    fn get_span_str<T>(&self, span: &Span<T>) -> &'src str {
+        &self.raw_module[span]
+    }
+
+    fn get_token_str(&self, token: &Token) -> &'src str {
+        &self.raw_module[token]
+    }
+
+    fn get_file_path(&self) -> &'src str {
+        &self.raw_module.file_path
+    }
 }
 
 impl<'src> Parser<'src> {
     pub fn new(module: &'src RawModule) -> Self {
         let lexer = Lexer::new(&module.source);
         Self {
-            module,
+            raw_module: module,
             lexer,
             peeked: None,
         }
@@ -38,7 +52,7 @@ impl<'src> Parser<'src> {
             return_chs_error!(
                 "{} Unexpected token {}, Expect: {:?}",
                 token.loc,
-                &self.module[&token],
+                &self.raw_module[&token],
                 kind
             )
         }
@@ -53,7 +67,7 @@ impl<'src> Parser<'src> {
     }
 
     /// Top-level parser loop.
-    pub fn parse(mut self) -> CHSResult<Module<'src>> {
+    pub fn parse(mut self) -> CHSResult<ASTModule<'src>> {
         use TokenKind::*;
         let mut items: Vec<ModuleItem> = vec![];
         while {
@@ -64,9 +78,9 @@ impl<'src> Parser<'src> {
                 if token.is_invalid() {
                     return_chs_error!(
                         "{}:{} Invalid token '{}'",
-                        self.module.file_path,
+                        self.get_file_path(),
                         token.loc,
-                        &self.module[&token]
+                        self.get_token_str(&token)
                     );
                 }
                 match token.kind {
@@ -121,17 +135,18 @@ impl<'src> Parser<'src> {
                     }
                     _ => {
                         return_chs_error!(
-                            "{} Invalid Expression on top level `{}`",
+                            "{}:{} Invalid Expression on top level `{}`",
+                            self.get_file_path(),
                             token.loc,
-                            &self.module[&token]
+                            self.get_token_str(&token)
                         )
                     }
                 }
                 true
             }
         } {}
-        Ok(Module {
-            raw_module: self.module,
+        Ok(ASTModule {
+            raw_module: self.raw_module,
             items,
         })
     }
@@ -141,7 +156,7 @@ impl<'src> Parser<'src> {
         items: &mut Vec<ModuleItem>,
         token: Token,
     ) -> Result<(), CHSError> {
-        let src = &self.module[&token.source];
+        let src = self.get_token_str(&token);
         let (macro_, args) = src
             .split_once("(")
             .expect("macro with args always have `(`");
@@ -158,7 +173,7 @@ impl<'src> Parser<'src> {
             _ => {
                 return_chs_error!(
                     "{}:{} Unknown macro '{}'",
-                    self.module.file_path,
+                    self.get_file_path(),
                     token.loc,
                     macro_
                 );
@@ -168,7 +183,7 @@ impl<'src> Parser<'src> {
     }
 
     fn parse_macro(&mut self, _items: &mut Vec<Expression>, token: Token) -> Result<(), CHSError> {
-        let src = &self.module[&token.source];
+        let src = &self.raw_module[&token.source];
         let (macro_, _args) = src
             .split_once("(")
             .expect("macro with args always have `(`");
@@ -176,7 +191,7 @@ impl<'src> Parser<'src> {
             _ => {
                 return_chs_error!(
                     "{}:{} Unknown macro '{}'",
-                    self.module.file_path,
+                    self.get_file_path(),
                     token.loc,
                     macro_
                 );
@@ -196,25 +211,12 @@ impl<'src> Parser<'src> {
         // First parse a “primary” expression (which itself may be built iteratively).
         expr_stack.push(self.parse_primary_iterative()?);
 
-        // Check for assignment immediately after a primary expression
-        // if self.peek().kind == TokenKind::Assign {
-        //     let assign_token = self.next(); // consume '='
-        //     let value = self.parse_expression_iterative(Precedence::Lowest)?;
-        //     let target = expr_stack.pop().unwrap();
-        //     return Ok(Expression::Assign(Box::new(nodes::Assign {
-        //         token: assign_token,
-        //         target,
-        //         value,
-        //     })));
-        // }
-
         loop {
             let ptoken = self.peek().clone();
             // Handle non-binary postfix operators such as function calls or indexing:
             match ptoken.kind {
                 TokenKind::OpenParen => {
-                    // Function call: consume the '(' then parse arguments.
-                    self.next(); // consume ParenOpen
+                    self.next();
                     let args =
                         self.parse_expr_list_iterative(|tk| tk.kind == TokenKind::CloseParen)?;
                     let callee = expr_stack.pop().unwrap();
@@ -287,8 +289,10 @@ impl<'src> Parser<'src> {
         while let Some((op, token)) = op_stack.pop() {
             if expr_stack.len() < 2 {
                 return_chs_error!(
-                    "Insufficient operands for operator at {}",
-                    &self.module[&token]
+                    "{}:{} Insufficient operands for operator at {}",
+                    self.get_file_path(),
+                    token.loc,
+                    self.get_token_str(&token)
                 );
             }
             let right = expr_stack.pop().unwrap();
@@ -302,7 +306,9 @@ impl<'src> Parser<'src> {
         }
         if expr_stack.len() != 1 {
             return_chs_error!(
-                "Error combining expression, remaining stack: {:?}",
+                "{}:{} Error combining expression, remaining stack: {:?}",
+                self.get_file_path(),
+                expr_stack[0].loc(),
                 expr_stack
             );
         }
@@ -400,7 +406,8 @@ impl<'src> Parser<'src> {
                 let args = self.parse_expr_list_iterative(|tk| tk.kind == CloseParen)?;
                 if !args.is_empty() {
                     return_chs_error!(
-                        "{} Syscall must have at least one argument the syscall number",
+                        "{}:{} Syscall must have at least one argument the syscall number",
+                        self.get_file_path(),
                         ptoken.loc
                     );
                 }
@@ -425,7 +432,12 @@ impl<'src> Parser<'src> {
                 Ok(Expression::Group(Box::new(expr)))
             }
             // CurlyOpen => self.parse_init_list_iterative(),
-            _ => return_chs_error!("{} Unexpected token {}", token.loc, &self.module[&token]),
+            _ => return_chs_error!(
+                "{}:{} Unexpected token {}",
+                self.get_file_path(),
+                token.loc,
+                self.get_token_str(&token)
+            ),
         }
     }
 
@@ -494,7 +506,11 @@ impl<'src> Parser<'src> {
                     self.next();
                     continue;
                 }
-                TokenKind::EOF => return_chs_error!("Expected closing token, found EOF"),
+                TokenKind::EOF => return_chs_error!(
+                    "{}:{} Expected `end|else` closing token, found EOF",
+                    self.get_file_path(),
+                    token.loc
+                ),
                 _ => {
                     let value = self.parse_expression_iterative(Precedence::Lowest)?;
                     body.push(value);
@@ -530,7 +546,14 @@ impl<'src> Parser<'src> {
                     self.next(); // skip `;`, but also treat it as end of current expr
                     continue;
                 }
-                EOF => return_chs_error!("Expected closing token, found EOF"),
+                EOF => {
+                    let token = self.next();
+                    return_chs_error!(
+                        "{}:{} Expected `end` closing token, found EOF",
+                        self.get_file_path(),
+                        token.loc
+                    )
+                }
                 _ => {
                     let value = self.parse_expression_iterative(Precedence::Lowest)?;
                     exprs.push(value);
@@ -575,9 +598,10 @@ impl<'src> Parser<'src> {
                 Identifier if is_variadic => {
                     let token = self.next();
                     return_chs_error!(
-                        "{} Unexpected token in function type `{}` after variadic parameter",
+                        "{}:{} Unexpected token in function type `{}` after variadic parameter",
+                        self.get_file_path(),
                         token.loc,
-                        &self.module[&token]
+                        self.get_token_str(&token)
                     )
                 }
                 Identifier => {
@@ -596,9 +620,10 @@ impl<'src> Parser<'src> {
                 _ => {
                     let token = self.next();
                     return_chs_error!(
-                        "{} Unexpected token in function type `{}`",
+                        "{}:{} Unexpected token in function type `{}`",
+                        self.get_file_path(),
                         token.loc,
-                        &self.module[&token]
+                        self.get_token_str(&token)
                     )
                 }
             }
@@ -633,14 +658,14 @@ impl<'src> Parser<'src> {
         use TokenKind::*;
         let ttoken = self.next();
         let ttype = match ttoken.kind {
-            Identifier if &self.module[&ttoken] == "int" => CHSType::I32,
-            Identifier if &self.module[&ttoken] == "uint" => CHSType::U32,
-            Identifier if &self.module[&ttoken] == "i32" => CHSType::I32,
-            Identifier if &self.module[&ttoken] == "u32" => CHSType::U32,
-            Identifier if &self.module[&ttoken] == "void" => CHSType::Void,
-            Identifier if &self.module[&ttoken] == "bool" => CHSType::Boolean,
-            Identifier if &self.module[&ttoken] == "char" => CHSType::Char,
-            Identifier if &self.module[&ttoken] == "string" => CHSType::String,
+            Identifier if self.get_token_str(&ttoken) == "int" => CHSType::I32,
+            Identifier if self.get_token_str(&ttoken) == "uint" => CHSType::U32,
+            Identifier if self.get_token_str(&ttoken) == "i32" => CHSType::I32,
+            Identifier if self.get_token_str(&ttoken) == "u32" => CHSType::U32,
+            Identifier if self.get_token_str(&ttoken) == "void" => CHSType::Void,
+            Identifier if self.get_token_str(&ttoken) == "bool" => CHSType::Boolean,
+            Identifier if self.get_token_str(&ttoken) == "char" => CHSType::Char,
+            Identifier if self.get_token_str(&ttoken) == "string" => CHSType::String,
             OpenSquare => {
                 // TODO: Add support for [<type>; <size>] array types
                 let ttp = self.parse_type_iterative()?;
@@ -657,9 +682,10 @@ impl<'src> Parser<'src> {
                 CHSType::Function(args.into_iter().map(|t| t.ty).collect(), Box::new(ret))
             }
             _ => return_chs_error!(
-                "{} Type not implemented {}",
+                "{}:{} Type not implemented {}",
+                self.get_file_path(),
                 ttoken.loc,
-                &self.module[&ttoken]
+                self.get_token_str(&ttoken)
             ),
         };
         Ok(ttype)
