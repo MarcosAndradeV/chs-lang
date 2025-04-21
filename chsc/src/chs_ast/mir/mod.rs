@@ -174,7 +174,10 @@ pub enum Global {
 
 #[derive(Debug)]
 pub enum Constant {
-    Int(Span<i64>),
+    I32(Span<i32>),
+    U32(Span<u32>),
+    I64(Span<i64>),
+    U64(Span<u64>),
     Bool(Span<bool>),
     Str(Span<String>),
     Char(Span<char>),
@@ -300,7 +303,7 @@ impl<'src, 'env> StmtBuilder<'src, 'env> {
     fn build_expr(&mut self, expr: hir::HIRExpr) -> Operand {
         let ty = expr.infer();
         match expr {
-            hir::HIRExpr::Literal(lit) => self.build_literal(lit),
+            hir::HIRExpr::Literal(lit, _) => self.build_literal(lit, ty),
             hir::HIRExpr::Identifier(id, _) => {
                 if let Some(local) = self.locals.iter().position(|l| {
                     l.name
@@ -512,9 +515,15 @@ impl<'src, 'env> StmtBuilder<'src, 'env> {
         }
     }
 
-    fn build_literal(&mut self, lit: hir::HIRLiteral) -> Operand {
+    fn build_literal(&mut self, lit: hir::HIRLiteral, ty: CHSType) -> Operand {
         match lit {
-            hir::HIRLiteral::Int(span) => Operand::Constant(Constant::Int(span)),
+            hir::HIRLiteral::Int(span) => match ty {
+                CHSType::I32 => Operand::Constant(Constant::I32(span.to_span())),
+                CHSType::U32 => Operand::Constant(Constant::U32(span.to_span())),
+                CHSType::I64 => Operand::Constant(Constant::I64(span.to_span())),
+                CHSType::U64 => Operand::Constant(Constant::U64(span.to_span())),
+                _ => todo!("{} Untyped int found in MIR. This is a bug.", span.loc)
+            },
             hir::HIRLiteral::Bool(span) => Operand::Constant(Constant::Bool(span)),
             hir::HIRLiteral::Str(span) => Operand::Constant(Constant::Str(span)),
             hir::HIRLiteral::Char(span) => Operand::Constant(Constant::Char(span)),
