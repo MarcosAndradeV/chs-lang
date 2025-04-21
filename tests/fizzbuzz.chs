@@ -1,7 +1,7 @@
 extern fn printf(s: string, ...) -> int
 
 fn main() -> int
-    i := 0;
+    i := 0i32;
     while(i<10) i = i + 1;
         if(i % 2 == 0)
             printf("Fizz\n");
