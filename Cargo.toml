@@ -13,3 +13,6 @@ panic = "abort"
 [profile.release-debug]
 inherits = "release"
 debug = true
+
+[workspace.dependencies]
+clap = { version = "4", features = ["derive"] }

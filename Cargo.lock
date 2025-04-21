@@ -225,6 +225,9 @@ dependencies = [
 [[package]]
 name = "test_maker"
 version = "0.1.0"
+dependencies = [
+ "clap",
+]
 
 [[package]]
 name = "unicode-ident"
