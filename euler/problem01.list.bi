@@ -1,10 +1,10 @@
 :i count 2
-:b shell 59
-cargo run -q --bin chs -- compile euler/problem01.chs -r -s
+:b shell 65
+cargo run -q --bin chs -- compile-run euler/problem01.chs --force
 :i returncode 0
-:b stdout 7
-233168
-
+:b stdout 47
+[INFO] Running executable...
+The sum is: 233168
 :b stderr 0
 
 :b shell 18

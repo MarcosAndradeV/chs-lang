@@ -1,2 +1,2 @@
-cargo run -q --bin chs -- compile euler/problem02.chs -r -s
+cargo run -q --bin chs -- compile-run euler/problem02.chs --force
 rm euler/problem02

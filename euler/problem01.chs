@@ -1,12 +1,14 @@
+extern fn printf(s: string, ...) -> int
+
 fn main() -> int
-    acc := 0
-    i := 0
+    acc := 0i32
+    i := 0i32
     while(i < 1000)
         if(i%3 == 0 || i%5 == 0)
-            set acc = acc + i
+            acc = acc + i
         end
-        set i = i + 1
+        i = i + 1
     end
-    print_int(acc)
-    0
+    printf("The sum is: %d", acc)
+    return 0;
 end
