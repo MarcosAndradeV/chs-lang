@@ -3,21 +3,36 @@ use std::str::FromStr;
 
 use crate::{
     chs_error,
-    chs_lexer::{Span, Token, TokenKind},
+    chs_lexer::{Loc, Span, Token, TokenKind},
     chs_types::CHSType,
     chs_util::{CHSError, CHSResult},
     return_chs_error,
 };
 
-use super::RawModule;
+use super::{ModuleImpl, RawModule};
+
 
 #[derive(Debug)]
-pub struct Module<'src> {
+pub struct ASTModule<'src> {
     pub raw_module: &'src RawModule,
     pub items: Vec<ModuleItem>,
 }
 
-impl<'src> Module<'src> {
+impl<'src> ModuleImpl<'src> for ASTModule<'src> {
+    fn get_span_str<T>(&self, span: &Span<T>) -> &'src str {
+        &self.raw_module[span]
+    }
+
+    fn get_token_str(&self, token: &Token) -> &'src str {
+        &self.raw_module[token]
+    }
+
+    fn get_file_path(&self) -> &'src str {
+        &self.raw_module.file_path
+    }
+}
+
+impl<'src> ASTModule<'src> {
     pub fn imports(&self) -> Vec<(&Token, &ImportSyntax)> {
         self.items
             .iter()
@@ -51,6 +66,22 @@ pub enum ConstExpression {
     CharLiteral(Span<char>),
 }
 
+impl ConstExpression {
+    pub fn loc(&self) -> &Loc {
+        match self {
+            ConstExpression::Identifier(span) => &span.loc,
+            ConstExpression::IntegerDefault(span) => &span.loc,
+            ConstExpression::IntegerLiteral(span) => &span.loc,
+            ConstExpression::UnsignedIntegerLiteral(span) => &span.loc,
+            ConstExpression::LongIntegerLiteral(span) => &span.loc,
+            ConstExpression::LongUnsignedIntegerLiteral(span) => &span.loc,
+            ConstExpression::BooleanLiteral(span) => &span.loc,
+            ConstExpression::StringLiteral(span) => &span.loc,
+            ConstExpression::CharLiteral(span) => &span.loc,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum Expression {
     MacroCall(MacroCall),
@@ -68,6 +99,29 @@ pub enum Expression {
     IfElseExpression(Box<IfElseExpression>),
     WhileExpression(Box<WhileExpression>),
     ReturnExpression(Box<ReturnExpression>),
+}
+
+impl Expression {
+    pub fn loc(&self) -> &Loc {
+        match self {
+            Expression::MacroCall(MacroCall::Use(token, ..)) => &token.loc,
+            Expression::MacroCall(MacroCall::TypeOf(token, .. )) => &token.loc,
+            Expression::ConstExpression(e) => e.loc(),
+            Expression::Binop(e) => &e.token.loc,
+            Expression::Unop(e) => &e.token.loc,
+            Expression::Call(e) => &e.token.loc,
+            Expression::Cast(e) => &e.token.loc,
+            Expression::Index(e) => &e.token.loc,
+            Expression::Syscall(e) => &e.token.loc,
+            Expression::VarDecl(e) => &e.token.loc,
+            Expression::Assign(e) => &e.token.loc,
+            Expression::Group(e) => &e.loc(),
+            Expression::IfExpression(e) => &e.token.loc,
+            Expression::IfElseExpression(e) => &e.token.loc,
+            Expression::WhileExpression(e) => &e.token.loc,
+            Expression::ReturnExpression(e) => &e.token.loc,
+        }
+    }
 }
 
 impl Expression {

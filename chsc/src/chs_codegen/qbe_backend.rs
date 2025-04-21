@@ -2,16 +2,28 @@ use qbe::*;
 
 use crate::{
     chs_ast::{
-        RawModule,
-        mir::{self, *},
-    },
-    chs_types::CHSType,
+        mir::{self, *}, ModuleImpl, RawModule
+    }, chs_lexer::{Span, Token}, chs_types::CHSType
 };
 
 pub struct QBEBackend<'src> {
     raw_module: &'src RawModule,
     module: Module<'src>,
     str_count: u32,
+}
+
+impl<'src> ModuleImpl<'src> for QBEBackend<'src> {
+    fn get_span_str<T>(&self, span: &Span<T>) -> &'src str {
+        &self.raw_module[span]
+    }
+
+    fn get_token_str(&self, token: &Token) -> &'src str {
+        &self.raw_module[token]
+    }
+
+    fn get_file_path(&self) -> &'src str {
+        &self.raw_module.file_path
+    }
 }
 
 impl<'src> QBEBackend<'src> {

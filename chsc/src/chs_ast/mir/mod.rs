@@ -1,9 +1,7 @@
-use crate::{chs_lexer::Span, chs_types::CHSType};
+use crate::{chs_lexer::{Span, Token}, chs_types::CHSType};
 
 use super::{
-    RawModule, hir,
-    nodes::Operator,
-    typechecker::{CHSInfer as _, TypeEnv},
+    hir, nodes::Operator, typechecker::{CHSInfer as _, TypeEnv}, ModuleImpl, RawModule
 };
 
 /// MIR Module
@@ -11,6 +9,20 @@ use super::{
 pub struct MIRModule<'src> {
     pub raw_module: &'src RawModule,
     pub items: Vec<MIRModuleItem>,
+}
+
+impl<'src> ModuleImpl<'src> for MIRModule<'src> {
+    fn get_span_str<T>(&self, span: &Span<T>) -> &'src str {
+        &self.raw_module[span]
+    }
+
+    fn get_token_str(&self, token: &Token) -> &'src str {
+        &self.raw_module[token]
+    }
+
+    fn get_file_path(&self) -> &'src str {
+        &self.raw_module.file_path
+    }
 }
 
 impl<'src> MIRModule<'src> {
@@ -226,6 +238,20 @@ struct StmtBuilder<'src, 'env> {
     next_local_id: &'src mut usize,
 }
 
+impl<'src> ModuleImpl<'src> for StmtBuilder<'src, '_> {
+    fn get_span_str<T>(&self, span: &Span<T>) -> &'src str {
+        &self.raw_module[span]
+    }
+
+    fn get_token_str(&self, token: &Token) -> &'src str {
+        &self.raw_module[token]
+    }
+
+    fn get_file_path(&self) -> &'src str {
+        &self.raw_module.file_path
+    }
+}
+
 impl<'src, 'env> StmtBuilder<'src, 'env> {
     fn new(
         raw_module: &'src RawModule,
@@ -294,10 +320,6 @@ impl<'src, 'env> StmtBuilder<'src, 'env> {
         *self.next_local_id += 1;
         self.locals.push(Local { name, ty });
         id
-    }
-
-    fn get_span_str(&self, span: &Span<String>) -> &'src str {
-        &self.raw_module[span]
     }
 
     fn build_expr(&mut self, expr: hir::HIRExpr) -> Operand {
