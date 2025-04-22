@@ -1,10 +1,13 @@
 # Project TODOs
 
-## High Priority
+## ideas
+- [ ] // args: [string] = slice(argc, argv);
 
+## High Priority
 
 - [ ] Add a Module trait to RawModule
 - [ ] Fix integer overflow and allow literal to have the default type i32
+
 
 ### Compiler Core (chsc/src/chs_ast)
 - **HIR Implementation** (mod.rs):
