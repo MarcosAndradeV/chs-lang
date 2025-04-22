@@ -33,8 +33,10 @@ fn main() {
         cli::Commands::Compile {
             input,
             output,
+            compiler_flags,
             silent,
             force,
+            keep,
         } => {
             if !silent {
                 println!("[INFO] Compiling file: {}", input);
@@ -42,7 +44,7 @@ fn main() {
                     println!("[INFO] Output: {}", out);
                 }
             }
-            let result = compile(input, output, false, silent, force);
+            let result = compile(input, output, compiler_flags, false, silent, force, keep);
             if let Err(err) = result {
                 eprintln!("[ERROR] {}", err);
                 std::process::exit(1);
@@ -53,8 +55,9 @@ fn main() {
             input,
             output,
             force,
+            compiler_flags,
         } => {
-            let result = compile(input, output, true, true, force);
+            let result = compile(input, output, compiler_flags, true, true, force, false);
             if let Err(err) = result {
                 eprintln!("[ERROR] {}", err);
                 std::process::exit(1);
@@ -74,9 +77,11 @@ macro_rules! log {
 fn compile(
     input_path: String,
     outpath: Option<String>,
+    compiler_flags: Vec<String>,
     run: bool,
     silent: bool,
     force: bool,
+    keep: bool,
 ) -> CHSResult<()> {
     let file_path = PathBuf::from(&input_path);
     let ssa_path = file_path.with_extension("ssa");
@@ -157,17 +162,21 @@ fn compile(
 
     log!(
         silent,
-        "[INFO] CMD: cc -o {} {}",
+        "[INFO] CMD: cc -o {} {} {}",
         out_path.display(),
-        asm_path.display()
+        asm_path.display(),
+        compiler_flags.join(" ")
     );
-    let output = Command::new("cc")
-        .arg("-o")
-        .arg(&out_path)
-        .arg(&asm_path)
+    let mut cc_command = Command::new("cc");
+    cc_command.arg("-o").arg(&out_path).arg(&asm_path);
+
+    if !compiler_flags.is_empty() {
+        cc_command.args(&compiler_flags);
+    }
+
+    let output = cc_command
         .output()
         .map_err(|e| chs_error!("Failed to run cc: {}", e))?;
-
     if !output.status.success() {
         return_chs_error!(
             "cc failed to generate final executable\nstdout:\n{}\nstderr:\n{}",
@@ -182,9 +191,11 @@ fn compile(
         run_exe(out_path)?;
     }
 
-    log!(silent, "[INFO] Cleaning up temporary files...");
-    let paths = &[&ssa_path, &asm_path];
-    cleanup_files(silent, paths);
+    if !keep {
+        log!(silent, "[INFO] Cleaning up temporary files...");
+        let paths = &[&ssa_path, &asm_path];
+        cleanup_files(silent, paths);
+    }
 
     Ok(())
 }
