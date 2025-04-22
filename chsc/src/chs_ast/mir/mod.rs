@@ -1,7 +1,13 @@
-use crate::{chs_lexer::{Span, Token}, chs_types::CHSType};
+use crate::{
+    chs_lexer::{Span, Token},
+    chs_types::CHSType,
+};
 
 use super::{
-    hir, nodes::Operator, typechecker::{CHSInfer as _, TypeEnv}, ModuleImpl, RawModule
+    ModuleImpl, RawModule,
+    hir::{self, HIRExpr},
+    nodes::Operator,
+    typechecker::{CHSInfer as _, TypeEnv},
 };
 
 /// MIR Module
@@ -78,20 +84,14 @@ pub struct LocalId(pub usize);
 /// MIR Statement represents a single operation
 #[derive(Debug)]
 pub enum Statement {
+    /// Call a function
+    Call { func: Operand, args: Vec<Operand> },
     /// Assign a value to a local variable
-    Assign {
-        target: LocalId,
-        value: Rvalue,
-    },
+    Assign { target: LocalId, value: Rvalue },
     /// Store a value to memory
-    Store {
-        place: Place,
-        value: Rvalue,
-    },
+    Store { place: Place, value: Rvalue },
     /// Return
     Return(Option<Operand>),
-    // Holds a expression
-    Expr(Rvalue),
 }
 
 /// MIR Terminator determines how control flow continues after a basic block
@@ -544,7 +544,7 @@ impl<'src, 'env> StmtBuilder<'src, 'env> {
                 CHSType::U32 => Operand::Constant(Constant::U32(span.to_span())),
                 CHSType::I64 => Operand::Constant(Constant::I64(span.to_span())),
                 CHSType::U64 => Operand::Constant(Constant::U64(span.to_span())),
-                _ => todo!("{} Untyped int found in MIR. This is a bug.", span.loc)
+                _ => todo!("{} Untyped int found in MIR. This is a bug.", span.loc),
             },
             hir::HIRLiteral::Bool(span) => Operand::Constant(Constant::Bool(span)),
             hir::HIRLiteral::Str(span) => Operand::Constant(Constant::Str(span)),
@@ -585,10 +585,12 @@ impl<'src, 'env> StmtBuilder<'src, 'env> {
 
                 match target {
                     Operand::Copy(place) => {
-                        self.blocks[self.current_block_id.0].statements.push(Statement::Store {
-                            place,
-                            value: Rvalue::Use(value),
-                        });
+                        self.blocks[self.current_block_id.0]
+                            .statements
+                            .push(Statement::Store {
+                                place,
+                                value: Rvalue::Use(value),
+                            });
                     }
                     _ => panic!("Assignment target must be a place"),
                 }
@@ -598,11 +600,16 @@ impl<'src, 'env> StmtBuilder<'src, 'env> {
                 let ty = ty.unwrap_or_else(|| value.infer());
                 let local = self.add_local(Some(name), ty);
                 let value = self.build_expr(*value);
-                let place = Place { local, projection: vec![] };
-                self.blocks[self.current_block_id.0].statements.push(Statement::Store {
-                    place,
-                    value: Rvalue::Use(value),
-                });
+                let place = Place {
+                    local,
+                    projection: vec![],
+                };
+                self.blocks[self.current_block_id.0]
+                    .statements
+                    .push(Statement::Store {
+                        place,
+                        value: Rvalue::Use(value),
+                    });
             }
             hir::HIRStmt::If {
                 condition,
@@ -617,7 +624,7 @@ impl<'src, 'env> StmtBuilder<'src, 'env> {
                 let true_block = self.create_empty_block();
                 let false_block = self.create_empty_block();
                 let end_block = self.create_empty_block();
-                self.blocks[cond_block.0].terminator = Terminator::Switch  {
+                self.blocks[cond_block.0].terminator = Terminator::Switch {
                     condition,
                     true_block,
                     false_block,
@@ -649,7 +656,7 @@ impl<'src, 'env> StmtBuilder<'src, 'env> {
                 let condition = self.build_expr(*condition);
                 let true_block = self.create_empty_block();
                 let false_block = self.create_empty_block();
-                self.blocks[cond_block.0].terminator = Terminator::Switch  {
+                self.blocks[cond_block.0].terminator = Terminator::Switch {
                     condition,
                     true_block,
                     false_block,
@@ -662,9 +669,7 @@ impl<'src, 'env> StmtBuilder<'src, 'env> {
                 self.current_block_id = false_block;
             }
             hir::HIRStmt::While {
-                condition,
-                body,
-                ..
+                condition, body, ..
             } => {
                 let cond_block = self.create_empty_block();
                 self.blocks[self.current_block_id.0].terminator = Terminator::Goto(cond_block);
@@ -672,7 +677,7 @@ impl<'src, 'env> StmtBuilder<'src, 'env> {
                 let condition = self.build_expr(*condition);
                 let true_block = self.create_empty_block();
                 let false_block = self.create_empty_block();
-                self.blocks[cond_block.0].terminator = Terminator::Switch  {
+                self.blocks[cond_block.0].terminator = Terminator::Switch {
                     condition,
                     true_block,
                     false_block,
@@ -690,10 +695,17 @@ impl<'src, 'env> StmtBuilder<'src, 'env> {
                 block.terminator = Terminator::Return;
                 block.statements.push(Statement::Return(value));
             }
-            hir::HIRStmt::ExprStmt { value } => {
-                let value = self.build_expr_stmt(value);
-                self.blocks[self.current_block_id.0].statements.push(Statement::Expr(value));
+            hir::HIRStmt::ExprStmt {
+                value: HIRExpr::Call { callee, args, .. },
+            } => {
+                let callee = self.build_expr(*callee);
+                let args = args.into_iter().map(|arg| self.build_expr(arg)).collect();
+                let block = &mut self.blocks[self.current_block_id.0];
+                block
+                    .statements
+                    .push(Statement::Call { func: callee, args });
             }
+            hir::HIRStmt::ExprStmt { .. } => {}
         }
     }
 
@@ -705,10 +717,6 @@ impl<'src, 'env> StmtBuilder<'src, 'env> {
             terminator: Terminator::Nop,
         });
         id
-    }
-
-    fn build_expr_stmt(&mut self, expr: hir::HIRExpr) -> Rvalue {
-        Rvalue::Use(self.build_expr(expr))
     }
 }
 

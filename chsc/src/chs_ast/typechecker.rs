@@ -323,6 +323,7 @@ impl<'src> TypeChecker<'src> {
                 let expr_type = self.check_expr(expr)?;
                 // For now, only allow numeric casts
                 match (&expr_type, &to_type) {
+                    (a, b) if a == *b => Ok(to_type.clone()),
                     (CHSType::I32, CHSType::U32) | (CHSType::U32, CHSType::I32) => {
                         Ok(to_type.clone())
                     }

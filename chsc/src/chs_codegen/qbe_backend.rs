@@ -2,8 +2,11 @@ use qbe::*;
 
 use crate::{
     chs_ast::{
-        mir::{self, *}, ModuleImpl, RawModule
-    }, chs_lexer::{Span, Token}, chs_types::CHSType
+        ModuleImpl, RawModule,
+        mir::{self, *},
+    },
+    chs_lexer::{Span, Token},
+    chs_types::CHSType,
 };
 
 pub struct QBEBackend<'src> {
@@ -84,11 +87,13 @@ impl<'src> QBEBackend<'src> {
                         let ty = self.convert_type(ty.clone());
 
                         let temp = Value::Temporary(format!("__l{}", target.0));
-                        b.assign_instr(temp, ty, self.instr_from_rvalue(value, &locals));
+                        let instr = self.instr_from_rvalue(value, &locals);
+                        b.assign_instr(temp, ty, instr);
                     }
                     mir::Statement::Store { place, value } => {
                         let (ty, temp) = self.convert_place(place, &locals);
-                        b.assign_instr(temp, ty, self.instr_from_rvalue(value, &locals));
+                        let instr = self.instr_from_rvalue(value, &locals);
+                        b.assign_instr(temp, ty, instr);
                     }
                     mir::Statement::Return(Some(operand)) => {
                         let (_, value) = self.convert_operand(operand, &locals);
@@ -97,9 +102,18 @@ impl<'src> QBEBackend<'src> {
                     mir::Statement::Return(None) => {
                         b.add_instr(Instr::Ret(None));
                     }
-                    mir::Statement::Expr(value) => {
-                        self.instr_from_rvalue(value, &locals);
+                    mir::Statement::Call {
+                        func: Operand::Global(Global::Function(func, _)),
+                        args,
+                    } => {
+                        let func = self.raw_module[&func].to_string();
+                        let args = args
+                            .into_iter()
+                            .map(|operand| self.convert_operand(operand, &locals))
+                            .collect();
+                        b.add_instr(Instr::Call(func, args, None))
                     }
+                    mir::Statement::Call { .. } => todo!(),
                 }
             }
             match block.terminator {
@@ -197,7 +211,7 @@ impl<'src> QBEBackend<'src> {
                 ];
                 self.module
                     .add_data(DataDef::new(Linkage::private(), &v, None, items));
-                (Type::Long.into_abi(), Value::Global(v))
+                (Type::Long, Value::Global(v))
             }
             Constant::Bool(value) => (
                 Type::Byte.into_abi(),
@@ -223,7 +237,7 @@ impl<'src> QBEBackend<'src> {
                 Instr::Copy(value)
             }
             Rvalue::BinaryOp(binop, op1, op2) => self.convert_binop(binop, op1, op2, locals),
-            Rvalue::UnaryOp(..) => todo!(),
+            Rvalue::UnaryOp(unop, op1) => self.convert_unop(unop, op1, locals),
             Rvalue::Call {
                 func: Operand::Global(Global::Function(func, _)),
                 args,
@@ -238,10 +252,12 @@ impl<'src> QBEBackend<'src> {
             Rvalue::Call { .. } => todo!(),
             Rvalue::Cast { value, target_ty } => {
                 let (ty, value) = self.convert_operand(value, locals);
-                match (ty, target_ty) {
+                match (&ty, &target_ty) {
                     (Type::Word, CHSType::I32) => Instr::Copy(value),
                     (Type::Word, CHSType::U32) => Instr::Copy(value),
-                    _ => todo!(),
+                    (Type::Word, CHSType::U64) => Instr::Extuw(value),
+                    (Type::Word, CHSType::I64) => Instr::Extsw(value),
+                    _ => todo!("Implement cast between types {} and {}", ty, target_ty),
                 }
             }
             Rvalue::Syscall { .. } => todo!(),
@@ -286,7 +302,7 @@ impl<'src> QBEBackend<'src> {
                 Instr::Cmp(ty1, Cmp::Slt, op1, op2)
             }
             BinOp::Le => todo!(),
-            BinOp::Ne => todo!(),
+            BinOp::Ne => Instr::Cmp(ty1, Cmp::Ne, op1, op2),
             BinOp::Ge => todo!(),
             BinOp::Gt => {
                 debug_assert_eq!(
@@ -295,6 +311,15 @@ impl<'src> QBEBackend<'src> {
                 );
                 Instr::Cmp(ty1, Cmp::Sgt, op1, op2)
             }
+        }
+    }
+
+    fn convert_unop(&mut self, unop: UnOp, op1: Operand, locals: &[Local]) -> Instr<'src> {
+        let (_, op1) = self.convert_operand(op1, locals);
+
+        match unop {
+            UnOp::Neg => Instr::Cmp(Type::Word, Cmp::Eq, op1, Value::Const(0)),
+            UnOp::Not => Instr::Cmp(Type::Word, Cmp::Eq, op1, Value::Const(0)),
         }
     }
 }
