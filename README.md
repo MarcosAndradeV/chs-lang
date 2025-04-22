@@ -31,7 +31,7 @@ The CHS compiler supports essential language features including static typing, t
 - [x] Native code compiler (x86_64-linux)
 - [x] Static type system with type inference
 - [x] Basic control flow and function support
-- [x] Advanced type system features (Generics, Sum types, Pattern matching)
+- [ ] Advanced type system features (Generics, Sum types, Pattern matching)
 - [ ] Module system
 - [ ] Standard library with core data structures
 - [ ] Multi-platform support (Windows, macOS)
