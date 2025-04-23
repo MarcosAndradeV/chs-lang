@@ -203,12 +203,12 @@ impl<'src> FlowChecker<'src> {
                     worklist.push(*true_block);
                     worklist.push(*false_block);
                 }
-                Terminator::Return | Terminator::Unreachable | Terminator::Nop => {}
+                Terminator::Return(_) | Terminator::Unreachable | Terminator::Nop => {}
             }
         }
 
         for (i, block) in func.blocks.iter().enumerate() {
-            if let Terminator::Return = &block.terminator {
+            if let Terminator::Return(_) = &block.terminator {
                 let next_id = i + 1;
                 if next_id < func.blocks.len() {
                     let next_block_id = BlockId(next_id);

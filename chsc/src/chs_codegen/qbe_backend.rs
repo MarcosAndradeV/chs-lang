@@ -95,13 +95,6 @@ impl<'src> QBEBackend<'src> {
                         let instr = self.instr_from_rvalue(value, &locals);
                         b.assign_instr(temp, ty, instr);
                     }
-                    mir::Statement::Return(Some(operand)) => {
-                        let (_, value) = self.convert_operand(operand, &locals);
-                        b.add_instr(Instr::Ret(Some(value)));
-                    }
-                    mir::Statement::Return(None) => {
-                        b.add_instr(Instr::Ret(None));
-                    }
                     mir::Statement::Call {
                         func: Operand::Global(Global::Function(func, _)),
                         args,
@@ -132,8 +125,12 @@ impl<'src> QBEBackend<'src> {
                         format!("b{}", false_block.0),
                     ));
                 }
-                Terminator::Return => {
-                    b.add_comment("return");
+                Terminator::Return(Some(operand)) => {
+                    let (_, value) = self.convert_operand(operand, &locals);
+                    b.add_instr(Instr::Ret(Some(value)));
+                }
+                Terminator::Return(None) => {
+                    b.add_instr(Instr::Ret(None));
                 }
                 _ => todo!(),
             }

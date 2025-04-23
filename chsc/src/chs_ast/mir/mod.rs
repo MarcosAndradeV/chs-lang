@@ -90,8 +90,6 @@ pub enum Statement {
     Assign { target: LocalId, value: Rvalue },
     /// Store a value to memory
     Store { place: Place, value: Rvalue },
-    /// Return
-    Return(Option<Operand>),
 }
 
 /// MIR Terminator determines how control flow continues after a basic block
@@ -106,7 +104,7 @@ pub enum Terminator {
         false_block: BlockId,
     },
     /// Return from function
-    Return,
+    Return(Option<Operand>),
     /// Unreachable code (after return/exit)
     Unreachable,
     Nop,
@@ -114,7 +112,7 @@ pub enum Terminator {
 
 impl Terminator {
     pub fn is_return(&self) -> bool {
-        matches!(self, Self::Return)
+        matches!(self, Self::Return(..))
     }
 
     pub fn is_unreachable(&self) -> bool {
@@ -310,7 +308,7 @@ impl<'src, 'env> StmtBuilder<'src, 'env> {
                     worklist.push(*true_block);
                     worklist.push(*false_block);
                 }
-                Terminator::Return | Terminator::Unreachable | Terminator::Nop => {}
+                Terminator::Return(_) | Terminator::Unreachable | Terminator::Nop => {}
             }
         }
     }
@@ -692,8 +690,7 @@ impl<'src, 'env> StmtBuilder<'src, 'env> {
             hir::HIRStmt::Return { expr, .. } => {
                 let value = expr.map(|e| self.build_expr(*e));
                 let block = &mut self.blocks[self.current_block_id.0];
-                block.terminator = Terminator::Return;
-                block.statements.push(Statement::Return(value));
+                block.terminator = Terminator::Return(value);
             }
             hir::HIRStmt::ExprStmt {
                 value: HIRExpr::Call { callee, args, .. },
