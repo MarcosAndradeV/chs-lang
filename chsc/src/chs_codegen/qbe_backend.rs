@@ -4,6 +4,7 @@ use crate::{
     chs_ast::{
         ModuleImpl, RawModule,
         mir::{self, *},
+        nodes::Operator,
     },
     chs_lexer::{Span, Token},
     chs_types::CHSType,
@@ -265,7 +266,7 @@ impl<'src> QBEBackend<'src> {
 
     fn convert_binop(
         &mut self,
-        binop: BinOp,
+        binop: Operator,
         op1: Operand,
         op2: Operand,
         locals: &[Local],
@@ -274,49 +275,48 @@ impl<'src> QBEBackend<'src> {
         let (ty2, op2) = self.convert_operand(op2, locals);
 
         match binop {
-            BinOp::Add => Instr::Add(op1, op2),
-            BinOp::Sub => Instr::Sub(op1, op2),
-            BinOp::Mul => Instr::Mul(op1, op2),
-            BinOp::Div => Instr::Div(op1, op2),
-            BinOp::Rem => Instr::Rem(op1, op2),
-            BinOp::BitXor => todo!(),
-            BinOp::BitAnd => todo!(),
-            BinOp::BitOr => Instr::Or(op1, op2),
-            BinOp::Shl => todo!(),
-            BinOp::Shr => todo!(),
-            BinOp::Eq => {
+            Operator::Plus => Instr::Add(op1, op2),
+            Operator::Minus => Instr::Sub(op1, op2),
+            Operator::Mult => Instr::Mul(op1, op2),
+            Operator::Div => Instr::Div(op1, op2),
+            Operator::Mod => Instr::Rem(op1, op2),
+            Operator::BitOr | Operator::LOr => Instr::Or(op1, op2),
+            Operator::Eq => {
                 debug_assert_eq!(
                     ty1, ty2,
                     "TODO: Implement comparison instructions for different types"
                 );
                 Instr::Cmp(ty1, Cmp::Eq, op1, op2)
             }
-            BinOp::Lt => {
+            Operator::Lt => {
                 debug_assert_eq!(
                     ty1, ty2,
                     "TODO: Implement comparison instructions for different types"
                 );
                 Instr::Cmp(ty1, Cmp::Slt, op1, op2)
             }
-            BinOp::Le => todo!(),
-            BinOp::Ne => Instr::Cmp(ty1, Cmp::Ne, op1, op2),
-            BinOp::Ge => todo!(),
-            BinOp::Gt => {
+            Operator::Le => todo!(),
+            Operator::NEq => Instr::Cmp(ty1, Cmp::Ne, op1, op2),
+            Operator::Ge => todo!(),
+            Operator::Gt => {
                 debug_assert_eq!(
                     ty1, ty2,
                     "TODO: Implement comparison instructions for different types"
                 );
                 Instr::Cmp(ty1, Cmp::Sgt, op1, op2)
             }
+            _ => todo!("TODO: Implemente binop {binop}"),
         }
     }
 
-    fn convert_unop(&mut self, unop: UnOp, op1: Operand, locals: &[Local]) -> Instr<'src> {
+    fn convert_unop(&mut self, unop: Operator, op1: Operand, locals: &[Local]) -> Instr<'src> {
         let (_, op1) = self.convert_operand(op1, locals);
 
         match unop {
-            UnOp::Neg => Instr::Cmp(Type::Word, Cmp::Eq, op1, Value::Const(0)),
-            UnOp::Not => Instr::Cmp(Type::Word, Cmp::Eq, op1, Value::Const(0)),
+            Operator::Negate | Operator::LNot => {
+                Instr::Cmp(Type::Word, Cmp::Eq, op1, Value::Const(0))
+            }
+            _ => todo!("TODO: Implemente unop {unop}"),
         }
     }
 }

@@ -140,9 +140,9 @@ pub enum Rvalue {
     /// Use of a local variable or constant
     Use(Operand),
     /// Binary operation
-    BinaryOp(BinOp, Operand, Operand),
+    BinaryOp(Operator, Operand, Operand),
     /// Unary operation
-    UnaryOp(UnOp, Operand),
+    UnaryOp(Operator, Operand),
     /// Function call
     Call { func: Operand, args: Vec<Operand> },
     /// Type cast
@@ -154,7 +154,7 @@ pub enum Rvalue {
     /// Pointer arithmetic
     PointerArithmetic {
         /// The operation to perform (add or subtract)
-        op: BinOp,
+        op: Operator,
         /// The pointer operand
         pointer: Operand,
         /// The integer offset
@@ -192,32 +192,6 @@ pub enum Constant {
     Str(Span<String>),
     Char(Span<char>),
     Void,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum BinOp {
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Rem,
-    BitXor,
-    BitAnd,
-    BitOr,
-    Shl,
-    Shr,
-    Eq,
-    Lt,
-    Le,
-    Ne,
-    Ge,
-    Gt,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum UnOp {
-    Not,
-    Neg,
 }
 
 #[derive(Debug)]
@@ -352,7 +326,7 @@ impl<'src, 'env> StmtBuilder<'src, 'env> {
                 let rhs = self.build_expr(*rhs);
                 let temp = self.add_local(None, ty);
 
-                let lower_binop = self.lower_binop(op.op);
+                let lower_binop = op.op;
                 let block = &mut self.blocks[self.current_block_id.0];
 
                 // Special handling for pointer arithmetic
@@ -362,7 +336,7 @@ impl<'src, 'env> StmtBuilder<'src, 'env> {
                         block.statements.push(Statement::Assign {
                             target: temp,
                             value: Rvalue::PointerArithmetic {
-                                op: BinOp::Add,
+                                op: Operator::Plus,
                                 pointer: lhs,
                                 offset: rhs,
                                 pointee_ty: *inner.clone(),
@@ -374,7 +348,7 @@ impl<'src, 'env> StmtBuilder<'src, 'env> {
                         block.statements.push(Statement::Assign {
                             target: temp,
                             value: Rvalue::PointerArithmetic {
-                                op: BinOp::Add,
+                                op: Operator::Plus,
                                 pointer: rhs,
                                 offset: lhs,
                                 pointee_ty: *inner.clone(),
@@ -386,7 +360,7 @@ impl<'src, 'env> StmtBuilder<'src, 'env> {
                         block.statements.push(Statement::Assign {
                             target: temp,
                             value: Rvalue::PointerArithmetic {
-                                op: BinOp::Sub,
+                                op: Operator::Minus,
                                 pointer: lhs,
                                 offset: rhs,
                                 pointee_ty: *inner.clone(),
@@ -399,7 +373,7 @@ impl<'src, 'env> StmtBuilder<'src, 'env> {
                             // Calculate the offset between two pointers
                             block.statements.push(Statement::Assign {
                                 target: temp,
-                                value: Rvalue::BinaryOp(BinOp::Sub, lhs, rhs),
+                                value: Rvalue::BinaryOp(Operator::Minus, lhs, rhs),
                             });
                         } else {
                             panic!("Cannot subtract pointers of different types");
@@ -424,11 +398,7 @@ impl<'src, 'env> StmtBuilder<'src, 'env> {
                 let operand = self.build_expr(*operand);
                 let temp = self.add_local(None, ty);
 
-                let lower_unop = match op.op {
-                    Operator::Negate => UnOp::Neg,
-                    Operator::LNot => UnOp::Not,
-                    _ => panic!("Unsupported unary operator"),
-                };
+                let lower_unop = op.op;
 
                 let block = &mut self.blocks[self.current_block_id.0];
                 block.statements.push(Statement::Assign {
@@ -548,30 +518,6 @@ impl<'src, 'env> StmtBuilder<'src, 'env> {
             hir::HIRLiteral::Str(span) => Operand::Constant(Constant::Str(span)),
             hir::HIRLiteral::Char(span) => Operand::Constant(Constant::Char(span)),
             hir::HIRLiteral::Void => Operand::Constant(Constant::Void),
-        }
-    }
-
-    fn lower_binop(&self, op: Operator) -> BinOp {
-        match op {
-            Operator::Plus => BinOp::Add,
-            Operator::Minus => BinOp::Sub,
-            Operator::Mult => BinOp::Mul,
-            Operator::Div => BinOp::Div,
-            Operator::Mod => BinOp::Rem,
-            Operator::BitAnd => BinOp::BitAnd,
-            Operator::BitOr => BinOp::BitOr,
-            Operator::Eq => BinOp::Eq,
-            Operator::Lt => BinOp::Lt,
-            Operator::NEq => BinOp::Ne,
-            Operator::Gt => BinOp::Gt,
-            Operator::LOr => BinOp::BitOr,
-            Operator::LAnd => BinOp::BitAnd,
-            Operator::Le => BinOp::Le,
-            Operator::Ge => BinOp::Ge,
-            Operator::Shl => BinOp::Shl,
-            Operator::Shr => BinOp::Shr,
-            Operator::BitXor => BinOp::BitXor,
-            _ => panic!("Unsupported binary operator"),
         }
     }
 
