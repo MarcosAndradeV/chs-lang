@@ -109,3 +109,9 @@ impl fmt::Display for CHSType {
         }
     }
 }
+
+impl CHSType {
+    pub fn is_never(&self) -> bool {
+        matches!(self, CHSType::Never)
+    }
+}

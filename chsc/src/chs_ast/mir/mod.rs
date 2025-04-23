@@ -144,7 +144,7 @@ pub enum Rvalue {
     /// Unary operation
     UnaryOp(Operator, Operand),
     /// Function call
-    Call { func: Operand, args: Vec<Operand> },
+    FunCall { func: Operand, args: Vec<Operand> },
     /// Type cast
     Cast { value: Operand, target_ty: CHSType },
     /// System call
@@ -327,7 +327,7 @@ impl<'src, 'env> StmtBuilder<'src, 'env> {
                 let temp = self.add_local(None, ty);
 
                 let lower_binop = op.op;
-                let block = &mut self.blocks[self.current_block_id.0];
+                let block = self.current_block_mut();
 
                 // Special handling for pointer arithmetic
                 match (&lty, &rty, op.op) {
@@ -400,8 +400,7 @@ impl<'src, 'env> StmtBuilder<'src, 'env> {
 
                 let lower_unop = op.op;
 
-                let block = &mut self.blocks[self.current_block_id.0];
-                block.statements.push(Statement::Assign {
+                self.current_block_mut().statements.push(Statement::Assign {
                     target: temp,
                     value: Rvalue::UnaryOp(lower_unop, operand),
                 });
@@ -421,10 +420,9 @@ impl<'src, 'env> StmtBuilder<'src, 'env> {
                 let not_void = ty != CHSType::Void;
                 let temp = self.add_local(None, ty);
                 if not_void {
-                    let block = &mut self.blocks[self.current_block_id.0];
-                    block.statements.push(Statement::Assign {
+                    self.current_block_mut().statements.push(Statement::Assign {
                         target: temp,
-                        value: Rvalue::Call { func: callee, args },
+                        value: Rvalue::FunCall { func: callee, args },
                     });
                     Operand::Copy(Place {
                         local: temp,
@@ -442,8 +440,7 @@ impl<'src, 'env> StmtBuilder<'src, 'env> {
                 let value = self.build_expr(*expr);
                 let temp = self.add_local(None, to_type.clone());
 
-                let block = &mut self.blocks[self.current_block_id.0];
-                block.statements.push(Statement::Assign {
+                self.current_block_mut().statements.push(Statement::Assign {
                     target: temp,
                     value: Rvalue::Cast {
                         value,
@@ -464,8 +461,7 @@ impl<'src, 'env> StmtBuilder<'src, 'env> {
                 let index = self.build_expr(*index);
                 let temp = self.add_local(None, ty);
 
-                let block = &mut self.blocks[self.current_block_id.0];
-                block.statements.push(Statement::Assign {
+                self.current_block_mut().statements.push(Statement::Assign {
                     target: temp,
                     value: Rvalue::Index {
                         base,
@@ -489,8 +485,7 @@ impl<'src, 'env> StmtBuilder<'src, 'env> {
                 let ty = CHSType::Int;
                 let temp = self.add_local(None, ty);
 
-                let block = &mut self.blocks[self.current_block_id.0];
-                block.statements.push(Statement::Assign {
+                self.current_block_mut().statements.push(Statement::Assign {
                     target: temp,
                     value: Rvalue::Syscall {
                         number: arity as u32,
@@ -536,12 +531,21 @@ impl<'src, 'env> StmtBuilder<'src, 'env> {
                                 value: Rvalue::Use(value),
                             });
                     }
-                    _ => panic!("Assignment target must be a place"),
+                    _ => {
+                        debug_assert!(false, "Assignment target must be a place but is {target:?}")
+                    }
                 }
             }
-
             hir::HIRStmt::VarDecl { name, ty, value } => {
-                let ty = ty.unwrap_or_else(|| value.infer());
+                let ty = ty.unwrap_or_else(|| {
+                    let inferred = value.infer();
+                    assert!(
+                        !inferred.is_never(),
+                        "Could not infer type for variable {}",
+                        self.get_span_str(&name)
+                    );
+                    inferred
+                });
                 let local = self.add_local(Some(name), ty);
                 let value = self.build_expr(*value);
                 let place = Place {
@@ -558,7 +562,7 @@ impl<'src, 'env> StmtBuilder<'src, 'env> {
             hir::HIRStmt::If {
                 condition,
                 then_branch,
-                else_branch: Some(else_branch),
+                else_branch,
                 ..
             } => {
                 let cond_block = self.create_empty_block();
@@ -567,7 +571,12 @@ impl<'src, 'env> StmtBuilder<'src, 'env> {
                 let condition = self.build_expr(*condition);
                 let true_block = self.create_empty_block();
                 let false_block = self.create_empty_block();
-                let end_block = self.create_empty_block();
+                let end_block = if else_branch.is_some() {
+                    self.create_empty_block()
+                } else {
+                    false_block
+                };
+
                 self.blocks[cond_block.0].terminator = Terminator::Switch {
                     condition,
                     true_block,
@@ -581,36 +590,13 @@ impl<'src, 'env> StmtBuilder<'src, 'env> {
                 self.blocks[self.current_block_id.0].terminator = Terminator::Goto(end_block);
 
                 self.current_block_id = false_block;
-                for stmt in else_branch.statements {
-                    self.build_stmt(stmt);
+                if let Some(else_branch) = else_branch {
+                    for stmt in else_branch.statements {
+                        self.build_stmt(stmt);
+                    }
+                    self.blocks[self.current_block_id.0].terminator = Terminator::Goto(end_block);
+                    self.current_block_id = end_block;
                 }
-                self.blocks[self.current_block_id.0].terminator = Terminator::Goto(end_block);
-
-                self.current_block_id = end_block;
-            }
-            hir::HIRStmt::If {
-                condition,
-                then_branch,
-                else_branch: None,
-                ..
-            } => {
-                let cond_block = self.create_empty_block();
-                self.blocks[self.current_block_id.0].terminator = Terminator::Goto(cond_block);
-                self.current_block_id = cond_block;
-                let condition = self.build_expr(*condition);
-                let true_block = self.create_empty_block();
-                let false_block = self.create_empty_block();
-                self.blocks[cond_block.0].terminator = Terminator::Switch {
-                    condition,
-                    true_block,
-                    false_block,
-                };
-                self.current_block_id = true_block;
-                for stmt in then_branch.statements {
-                    self.build_stmt(stmt);
-                }
-                self.blocks[self.current_block_id.0].terminator = Terminator::Goto(false_block);
-                self.current_block_id = false_block;
             }
             hir::HIRStmt::While {
                 condition, body, ..
@@ -635,21 +621,23 @@ impl<'src, 'env> StmtBuilder<'src, 'env> {
             }
             hir::HIRStmt::Return { expr, .. } => {
                 let value = expr.map(|e| self.build_expr(*e));
-                let block = &mut self.blocks[self.current_block_id.0];
-                block.terminator = Terminator::Return(value);
+                self.current_block_mut().terminator = Terminator::Return(value);
             }
             hir::HIRStmt::ExprStmt {
                 value: HIRExpr::Call { callee, args, .. },
             } => {
                 let callee = self.build_expr(*callee);
                 let args = args.into_iter().map(|arg| self.build_expr(arg)).collect();
-                let block = &mut self.blocks[self.current_block_id.0];
-                block
+                self.current_block_mut()
                     .statements
                     .push(Statement::Call { func: callee, args });
             }
             hir::HIRStmt::ExprStmt { .. } => {}
         }
+    }
+
+    fn current_block_mut(&mut self) -> &mut BasicBlock {
+        &mut self.blocks[self.current_block_id.0]
     }
 
     fn create_empty_block(&mut self) -> BlockId {

@@ -236,7 +236,7 @@ impl<'src> QBEBackend<'src> {
             }
             Rvalue::BinaryOp(binop, op1, op2) => self.convert_binop(binop, op1, op2, locals),
             Rvalue::UnaryOp(unop, op1) => self.convert_unop(unop, op1, locals),
-            Rvalue::Call {
+            Rvalue::FunCall {
                 func: Operand::Global(Global::Function(func, _)),
                 args,
             } => {
@@ -247,7 +247,7 @@ impl<'src> QBEBackend<'src> {
                     .collect();
                 Instr::Call(func, args, None)
             }
-            Rvalue::Call { .. } => todo!(),
+            Rvalue::FunCall { .. } => todo!(),
             Rvalue::Cast { value, target_ty } => {
                 let (ty, value) = self.convert_operand(value, locals);
                 match (&ty, &target_ty) {
