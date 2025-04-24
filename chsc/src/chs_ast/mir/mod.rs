@@ -140,9 +140,9 @@ pub enum Rvalue {
     /// Use of a local variable or constant
     Use(Operand),
     /// Binary operation
-    BinaryOp(Operator, Operand, Operand),
+    BinaryOp(CHSType, Operator, CHSType, Operand, CHSType, Operand),
     /// Unary operation
-    UnaryOp(Operator, Operand),
+    UnaryOp(CHSType, Operator, CHSType, Operand),
     /// Function call
     FunCall { func: Operand, args: Vec<Operand> },
     /// Type cast
@@ -324,7 +324,7 @@ impl<'src, 'env> StmtBuilder<'src, 'env> {
 
                 let lhs = self.build_expr(*lhs);
                 let rhs = self.build_expr(*rhs);
-                let temp = self.add_local(None, ty);
+                let temp = self.add_local(None, ty.clone());
 
                 let lower_binop = op.op;
                 let block = self.current_block_mut();
@@ -373,7 +373,7 @@ impl<'src, 'env> StmtBuilder<'src, 'env> {
                             // Calculate the offset between two pointers
                             block.statements.push(Statement::Assign {
                                 target: temp,
-                                value: Rvalue::BinaryOp(Operator::Minus, lhs, rhs),
+                                value: Rvalue::BinaryOp(ty, Operator::Minus, lty, lhs, rty, rhs),
                             });
                         } else {
                             panic!("Cannot subtract pointers of different types");
@@ -383,7 +383,7 @@ impl<'src, 'env> StmtBuilder<'src, 'env> {
                         // Regular binary operation
                         block.statements.push(Statement::Assign {
                             target: temp,
-                            value: Rvalue::BinaryOp(lower_binop, lhs, rhs),
+                            value: Rvalue::BinaryOp(ty, lower_binop, lty, lhs, rty, rhs),
                         });
                     }
                 }
@@ -393,16 +393,17 @@ impl<'src, 'env> StmtBuilder<'src, 'env> {
                     projection: vec![],
                 })
             }
-            hir::HIRExpr::Unary { ty: _, op, operand } => {
-                let ty = operand.infer();
+            hir::HIRExpr::Unary { ty, op, operand } => {
+                let ty = ty.unwrap();
+                let oparand_ty = operand.infer();
                 let operand = self.build_expr(*operand);
-                let temp = self.add_local(None, ty);
+                let temp = self.add_local(None, ty.clone());
 
                 let lower_unop = op.op;
 
                 self.current_block_mut().statements.push(Statement::Assign {
                     target: temp,
-                    value: Rvalue::UnaryOp(lower_unop, operand),
+                    value: Rvalue::UnaryOp(ty, lower_unop, oparand_ty, operand),
                 });
                 Operand::Copy(Place {
                     local: temp,
@@ -548,14 +549,10 @@ impl<'src, 'env> StmtBuilder<'src, 'env> {
                 });
                 let local = self.add_local(Some(name), ty);
                 let value = self.build_expr(*value);
-                let place = Place {
-                    local,
-                    projection: vec![],
-                };
                 self.blocks[self.current_block_id.0]
                     .statements
-                    .push(Statement::Store {
-                        place,
+                    .push(Statement::Assign {
+                        target: local,
                         value: Rvalue::Use(value),
                     });
             }

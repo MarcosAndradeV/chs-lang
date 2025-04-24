@@ -79,7 +79,6 @@ impl<'src> TypeChecker<'src> {
     }
 
     fn check_function(&mut self, func: &mut HIRFunction) -> CHSResult<()> {
-
         self.env.locals_new();
 
         // Add parameters to local scope
@@ -187,10 +186,9 @@ impl<'src> TypeChecker<'src> {
                                 )
                             })?;
                         match lhs_type {
-                            CHSType::I32 => CHSType::Boolean,
-                            CHSType::U32 => CHSType::Boolean,
-                            CHSType::I64 => CHSType::Boolean,
-                            CHSType::U64 => CHSType::Boolean,
+                            CHSType::I32 | CHSType::U32 | CHSType::I64 | CHSType::U64 => {
+                                CHSType::Boolean
+                            }
                             _ => return_chs_error!(
                                 "{} Expected numeric type for comparison",
                                 op.span.loc
