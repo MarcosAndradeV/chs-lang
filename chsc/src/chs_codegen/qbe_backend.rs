@@ -70,6 +70,22 @@ impl<'src> QBEBackend<'src> {
             locals,
         } = f;
 
+        let mut b = qbe::Block {
+            label: format!("start"),
+            items: vec![],
+        };
+
+        for (i, local) in locals.iter().enumerate() {
+            let ty = convert_type(&local.ty);
+            let size = ty.size();
+            b.assign_instr(temp!("s{}", i), qbe::Type::Long, qbe::Instr::Alloc8(size));
+            if let Some(p) = params.get(i) {
+                b.add_instr(qbe::Instr::Store(ty, temp!("s{}", p.0), temp!("t{}", p.0)));
+            }
+        }
+
+        b.add_instr(qbe::Instr::Jmp(format!("b0")));
+
         let name = self.get_span_str(&name);
         let linkage = qbe::Linkage::public();
         let arguments = self.generate_arguments(params, &locals);
@@ -79,6 +95,7 @@ impl<'src> QBEBackend<'src> {
             Some(convert_type(&return_type))
         };
         let mut qf = qbe::Function::new(linkage, name, arguments, return_ty);
+        qf.blocks.push(b);
         for block in blocks {
             let mut b = qbe::Block {
                 label: format!("b{}", block.id.0),
@@ -99,7 +116,7 @@ impl<'src> QBEBackend<'src> {
                             let args = args_ty
                                 .into_iter()
                                 .zip(args)
-                                .map(|(ty, arg)| (ty, self.generate_opreand(&mut b, arg)))
+                                .map(|(ty, arg)| (ty, self.generate_opreand(&mut b, arg, &locals)))
                                 .collect();
                             let func = self.get_span_str(&func);
                             // TODO Fix varidic calls
@@ -112,14 +129,15 @@ impl<'src> QBEBackend<'src> {
                         let Local { name, ty } = &locals[target.0];
                         let ty = convert_type(&ty);
                         let value = self.generate_rvalue(&mut b, value, &locals);
-                        let instr = qbe::Instr::Copy(value);
-                        b.assign_instr(temp!("t{}", target.0), ty, instr);
+                        let instr = qbe::Instr::Store(ty, temp!("s{}", target.0), value);
+                        b.add_instr(instr);
                     }
                     Statement::Store { place, value } if place.projection.is_empty() => {
                         let Local { name, ty } = &locals[place.local.0];
+                        let ty = convert_type(&ty);
                         let value = self.generate_rvalue(&mut b, value, &locals);
-                        let instr = qbe::Instr::Copy(value);
-                        b.assign_instr(temp!("t{}", place.local.0), convert_type(&ty), instr);
+                        let instr = qbe::Instr::Store(ty, temp!("s{}", place.local.0), value);
+                        b.add_instr(instr);
                     }
                     Statement::Store { place, value } => todo!(),
                 }
@@ -133,7 +151,7 @@ impl<'src> QBEBackend<'src> {
                     true_block,
                     false_block,
                 } => {
-                    let value = self.generate_opreand(&mut b, condition);
+                    let value = self.generate_opreand(&mut b, condition, &locals);
                     b.add_instr(qbe::Instr::Jnz(
                         value,
                         format!("b{}", true_block.0),
@@ -141,7 +159,7 @@ impl<'src> QBEBackend<'src> {
                     ))
                 }
                 Terminator::Return(Some(operand)) => {
-                    let value = self.generate_opreand(&mut b, operand);
+                    let value = self.generate_opreand(&mut b, operand, &locals);
                     b.add_instr(qbe::Instr::Ret(Some(value)))
                 }
                 Terminator::Return(None) => b.add_instr(qbe::Instr::Ret(None)),
@@ -161,12 +179,12 @@ impl<'src> QBEBackend<'src> {
         locals: &[Local],
     ) -> qbe::Value {
         match rvalue {
-            Rvalue::Use(operand) => self.generate_opreand(b, operand),
+            Rvalue::Use(operand) => self.generate_opreand(b, operand, locals),
             Rvalue::BinaryOp(ty, operator, ty1, operand1, ty2, operand2) => {
-                self.generate_binop(b, ty, operator, ty1, operand1, ty2, operand2)
+                self.generate_binop(b, ty, operator, ty1, operand1, ty2, operand2, locals)
             }
             Rvalue::UnaryOp(ty, operator, oparand_ty, operand) => {
-                self.generate_unop(b, ty, operator, oparand_ty, operand)
+                self.generate_unop(b, ty, operator, oparand_ty, operand, locals)
             }
             Rvalue::FunCall { func, args } => {
                 if let Operand::Global(Global::Function(
@@ -182,7 +200,7 @@ impl<'src> QBEBackend<'src> {
                     let args = args_ty
                         .into_iter()
                         .zip(args)
-                        .map(|(ty, arg)| (ty, self.generate_opreand(b, arg)))
+                        .map(|(ty, arg)| (ty, self.generate_opreand(b, arg, locals)))
                         .collect();
                     let func = self.get_span_str(&func);
                     // TODO Fix varidic calls
@@ -199,7 +217,9 @@ impl<'src> QBEBackend<'src> {
             Rvalue::Cast { value, target_ty } => {
                 let ty = convert_type(&target_ty);
                 let instr = match (self.get_opreand_ty(locals, &value), &ty) {
-                    (qbe::Type::Long, qbe::Type::Long) => return self.generate_opreand(b, value),
+                    (qbe::Type::Long, qbe::Type::Long) => {
+                        return self.generate_opreand(b, value, locals);
+                    }
                     _ => todo!("Other casts"),
                 };
                 b.assign_instr(temp!("a1",), ty, instr);
@@ -243,7 +263,12 @@ impl<'src> QBEBackend<'src> {
         }
     }
 
-    fn generate_opreand(&mut self, b: &mut qbe::Block<'_>, operand: Operand) -> qbe::Value {
+    fn generate_opreand(
+        &mut self,
+        b: &mut qbe::Block<'_>,
+        operand: Operand,
+        locals: &[Local],
+    ) -> qbe::Value {
         match operand {
             Operand::Constant(constant) => match constant {
                 Constant::I32(span) => {
@@ -289,6 +314,9 @@ impl<'src> QBEBackend<'src> {
                 Constant::Void => todo!(),
             },
             Operand::Copy(Place { local, projection }) if projection.is_empty() => {
+                let ty = convert_type(&locals[local.0].ty);
+                let instr = qbe::Instr::Load(ty.clone(), temp!("s{}", local.0));
+                b.assign_instr(temp!("t{}", local.0), ty, instr);
                 temp!("t{}", local.0)
             }
             Operand::Copy(place) => todo!(),
@@ -324,21 +352,26 @@ impl<'src> QBEBackend<'src> {
         operator: Operator,
         oparand_ty: CHSType,
         operand: Operand,
+        locals: &[Local],
     ) -> qbe::Value {
+        let ty = convert_type(&oparand_ty);
+        let size = ty.size();
         match operator {
             Operator::Negate => todo!(),
             Operator::LNot => todo!(),
-            Operator::Refer => {
-                let operand = self.generate_opreand(b, operand);
-                let ty = convert_type(&oparand_ty);
-                let size = ty.size();
-                b.assign_instr(temp!("p1",), qbe::Type::Long, qbe::Instr::Alloc8(size));
-                b.add_instr(qbe::Instr::Store(ty, temp!("p1",), operand));
-                temp!("p1",)
-            }
+            Operator::Refer => match &operand {
+                Operand::Copy(place) => temp!("s{}", place.local.0),
+                Operand::Constant(constant) => {
+                    b.assign_instr(temp!("p1",), qbe::Type::Long, qbe::Instr::Alloc8(size));
+                    let operand = self.generate_opreand(b, operand, locals);
+                    b.add_instr(qbe::Instr::Store(ty, temp!("p1",), operand));
+                    temp!("p1",)
+                }
+                Operand::Move(place) => todo!(),
+                Operand::Global(global) => todo!(),
+            },
             Operator::Deref => {
-                let operand = self.generate_opreand(b, operand);
-                let ty = convert_type(&oparand_ty);
+                let operand = self.generate_opreand(b, operand, locals);
                 b.assign_instr(temp!("p1",), ty.clone(), qbe::Instr::Load(ty, operand));
                 temp!("p1",)
             }
@@ -355,10 +388,11 @@ impl<'src> QBEBackend<'src> {
         operand1: Operand,
         ty2: CHSType,
         operand2: Operand,
+        locals: &[Local],
     ) -> qbe::Value {
         let s = get_type_sign(&ty1);
-        let operand1 = self.generate_opreand(b, operand1);
-        let operand2 = self.generate_opreand(b, operand2);
+        let operand1 = self.generate_opreand(b, operand1, locals);
+        let operand2 = self.generate_opreand(b, operand2, locals);
         match operator {
             Operator::Plus => {
                 b.assign_instr(
