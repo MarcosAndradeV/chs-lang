@@ -398,7 +398,14 @@ impl<'src, 'env> StmtBuilder<'src, 'env> {
                 let oparand_ty = operand.infer();
                 let operand = self.build_expr(*operand);
                 let temp = self.add_local(None, ty.clone());
-
+                let projection = vec![];
+                // let lower_unop = match op.op {
+                //     op @ Operator::Deref => {
+                //         projection.push(ProjectionElem::Deref);
+                //         op
+                //     }
+                //     op => op,
+                // };
                 let lower_unop = op.op;
 
                 self.current_block_mut().statements.push(Statement::Assign {
@@ -407,7 +414,7 @@ impl<'src, 'env> StmtBuilder<'src, 'env> {
                 });
                 Operand::Copy(Place {
                     local: temp,
-                    projection: vec![],
+                    projection,
                 })
             }
             hir::HIRExpr::Call {
@@ -519,7 +526,11 @@ impl<'src, 'env> StmtBuilder<'src, 'env> {
 
     fn build_stmt(&mut self, stmt: hir::HIRStmt) {
         match stmt {
-            hir::HIRStmt::Assign { target, value, .. } => {
+            hir::HIRStmt::Assign {
+                target,
+                value,
+                ..
+            } => {
                 let value = self.build_expr(*value);
                 let target = self.build_expr(*target);
 

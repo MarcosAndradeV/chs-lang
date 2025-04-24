@@ -6,7 +6,9 @@ use crate::{
 };
 
 use super::{
-    nodes::{self, Operator}, typechecker::CHSInfer, ModuleImpl, RawModule
+    ModuleImpl, RawModule,
+    nodes::{self, Operator},
+    typechecker::CHSInfer,
 };
 
 #[derive(Debug)]

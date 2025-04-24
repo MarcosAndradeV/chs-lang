@@ -8,7 +8,7 @@ use crate::{
         ModuleImpl, RawModule,
         mir::{
             Constant, Global, Local, LocalId, MIRExternFunction, MIRFunction, MIRModule,
-            MIRModuleItem, Operand, Place, Rvalue, Statement, Terminator,
+            MIRModuleItem, Operand, Place, ProjectionElem, Rvalue, Statement, Terminator,
         },
         nodes::Operator,
     },
@@ -115,12 +115,13 @@ impl<'src> QBEBackend<'src> {
                         let instr = qbe::Instr::Copy(value);
                         b.assign_instr(temp!("t{}", target.0), ty, instr);
                     }
-                    Statement::Store { place, value } => {
+                    Statement::Store { place, value } if place.projection.is_empty() => {
                         let Local { name, ty } = &locals[place.local.0];
                         let value = self.generate_rvalue(&mut b, value, &locals);
                         let instr = qbe::Instr::Copy(value);
                         b.assign_instr(temp!("t{}", place.local.0), convert_type(&ty), instr);
                     }
+                    Statement::Store { place, value } => todo!(),
                 }
             }
             match block.terminator {
@@ -153,7 +154,12 @@ impl<'src> QBEBackend<'src> {
         self.module.add_function(qf);
     }
 
-    fn generate_rvalue(&mut self, b: &mut qbe::Block<'_>, rvalue: Rvalue, locals: &[Local]) -> qbe::Value {
+    fn generate_rvalue(
+        &mut self,
+        b: &mut qbe::Block<'_>,
+        rvalue: Rvalue,
+        locals: &[Local],
+    ) -> qbe::Value {
         match rvalue {
             Rvalue::Use(operand) => self.generate_opreand(b, operand),
             Rvalue::BinaryOp(ty, operator, ty1, operand1, ty2, operand2) => {
@@ -180,13 +186,25 @@ impl<'src> QBEBackend<'src> {
                         .collect();
                     let func = self.get_span_str(&func);
                     // TODO Fix varidic calls
-                    b.assign_instr(temp!("a1",), ret_ty, qbe::Instr::Call(func.to_string(), args, None));
+                    b.assign_instr(
+                        temp!("a1",),
+                        ret_ty,
+                        qbe::Instr::Call(func.to_string(), args, None),
+                    );
                     temp!("a1",)
                 } else {
                     todo!()
                 }
             }
-            Rvalue::Cast { value, target_ty } => todo!(),
+            Rvalue::Cast { value, target_ty } => {
+                let ty = convert_type(&target_ty);
+                let instr = match (self.get_opreand_ty(locals, &value), &ty) {
+                    (qbe::Type::Long, qbe::Type::Long) => return self.generate_opreand(b, value),
+                    _ => todo!("Other casts"),
+                };
+                b.assign_instr(temp!("a1",), ty, instr);
+                temp!("a1",)
+            }
             Rvalue::Syscall { number, args } => todo!(),
             Rvalue::Index { base, index } => todo!(),
             Rvalue::PointerArithmetic {
@@ -209,7 +227,17 @@ impl<'src> QBEBackend<'src> {
             Operand::Copy(Place { local, projection }) if projection.is_empty() => {
                 convert_type(&locals[local.0].ty)
             }
-            Operand::Copy(place) => todo!(),
+            // Operand::Copy(Place { local, projection }) if projection.len() == 1 => {
+            //     let proj = &projection[0];
+            //     match proj {
+            //         ProjectionElem::Deref => {
+            //             convert_type(&locals[local.0].ty)
+            //         }
+            //         ProjectionElem::Field(_) => todo!(),
+            //         ProjectionElem::Index(operand) => todo!(),
+            //     }
+            // },
+            Operand::Copy(..) => todo!(),
             Operand::Move(..) => todo!(),
             Operand::Global(..) => qbe::Type::Long,
         }

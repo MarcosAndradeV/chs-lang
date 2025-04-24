@@ -325,6 +325,12 @@ impl<'src> TypeChecker<'src> {
                     (CHSType::I32, CHSType::U32) | (CHSType::U32, CHSType::I32) => {
                         Ok(to_type.clone())
                     }
+                    (CHSType::Pointer(_), CHSType::Pointer(any))
+                    | (CHSType::Pointer(any), CHSType::Pointer(_))
+                        if **any == CHSType::Any =>
+                    {
+                        Ok(to_type.clone())
+                    }
                     _ => return_chs_error!(
                         "{} Invalid cast between {:?} and {:?}",
                         span.loc,
@@ -418,6 +424,7 @@ impl<'src> TypeChecker<'src> {
                 span,
                 target,
                 value,
+                ..
             } => {
                 let target_type = self.check_expr(target)?;
                 let value_type = self.check_expr(value)?;
@@ -440,12 +447,13 @@ impl<'src> TypeChecker<'src> {
                     self.env
                         .unify(&value_type, explicit_type)
                         .or_else(|_| value.cast(explicit_type.clone()))
-                        .map_err(|_| {
+                        .map_err(|err| {
                             chs_error!(
-                                "{} Cannot assign value of type {} to variable of type {}",
+                                "{} Cannot assign value of type {} to variable of type {}\n\t{}",
                                 name.loc,
                                 value_type,
-                                explicit_type
+                                explicit_type,
+                                err
                             )
                         })?;
                     explicit_type.clone()
@@ -590,7 +598,7 @@ impl TypeEnv {
 pub trait CHSInfer {
     // Infers the type
     fn infer(&self) -> CHSType;
-    // Casts the type to the given type. Errors if the type cannot be cast
+    // Automatic casts the type to the given type. Errors if the type cannot be cast
     fn cast(&mut self, ty: CHSType) -> CHSResult<()>;
 }
 
