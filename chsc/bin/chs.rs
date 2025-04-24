@@ -2,12 +2,11 @@ use std::{fs, path::PathBuf, process::Command};
 
 use chsc::{
     chs_ast::{
-        self, RawModule, flow_checker::FlowChecker, hir::HIRModule, mir::MIRModule, parser::Parser,
-        typechecker::TypeChecker,
+        self, flow_checker::FlowChecker, hir::HIRModule, mir::MIRModule, parser::Parser, typechecker::TypeChecker, RawModule
     },
-    chs_codegen::qbe_backend::QBEBackend,
+    chs_codegen::Backend,
     chs_error,
-    chs_util::{CHSError, CHSResult, binary_exists, file_changed},
+    chs_util::{binary_exists, file_changed, CHSError, CHSResult},
     cli,
     config::Config,
     return_chs_error,
@@ -130,12 +129,11 @@ fn compile(
         )
     })?;
 
-    log!(silent, "[INFO] Generating code using QBE backend...");
-    let mut backend = QBEBackend::new(&raw_module);
-    backend.generate_module(module);
-    let module = backend.finish();
+    let backend = Backend::Qbe;
+    log!(silent, "[INFO] Generating code using {backend} backend...");
+    let gen_code = backend.generate_module(module)?;
 
-    fs::write(&ssa_path, module.to_string())
+    fs::write(&ssa_path, gen_code.to_string())
         .map_err(|e| chs_error!("Failed to write SSA file: {}", e))?;
 
     log!(

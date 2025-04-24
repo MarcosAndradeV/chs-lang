@@ -662,6 +662,8 @@ impl<'src> Parser<'src> {
             Identifier if self.get_token_str(&ttoken) == "uint" => CHSType::U32,
             Identifier if self.get_token_str(&ttoken) == "i32" => CHSType::I32,
             Identifier if self.get_token_str(&ttoken) == "u32" => CHSType::U32,
+            Identifier if self.get_token_str(&ttoken) == "i64" => CHSType::I64,
+            Identifier if self.get_token_str(&ttoken) == "u64" => CHSType::U64,
             Identifier if self.get_token_str(&ttoken) == "void" => CHSType::Void,
             Identifier if self.get_token_str(&ttoken) == "bool" => CHSType::Boolean,
             Identifier if self.get_token_str(&ttoken) == "char" => CHSType::Char,
