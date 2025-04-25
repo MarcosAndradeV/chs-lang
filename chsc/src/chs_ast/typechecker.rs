@@ -9,15 +9,28 @@ use crate::{
 };
 
 use super::{
-    RawModule,
-    hir::{HIRBlock, HIRExpr, HIRFunction, HIRModule, HIRModuleItem, HIRStmt},
-    nodes::Operator,
+    hir::{HIRBlock, HIRExpr, HIRFunction, HIRModule, HIRModuleItem, HIRStmt}, nodes::Operator, ModuleImpl, RawModule
 };
 
 pub struct TypeChecker<'src> {
     env: TypeEnv,
     raw_module: &'src RawModule,
     curr_ret_type: CHSType,
+}
+
+impl<'src> ModuleImpl<'src> for TypeChecker<'src> {
+    fn get_span_str<T>(&self, span: &Span<T>) -> &'src str {
+        &self.raw_module[span]
+    }
+
+    fn get_token_str(&self, token: &crate::chs_lexer::Token) -> &'src str {
+        &self.raw_module[token]
+
+    }
+
+    fn get_file_path(&self) -> &'src str {
+        &self.raw_module.file_path
+    }
 }
 
 impl<'src> TypeChecker<'src> {
@@ -27,10 +40,6 @@ impl<'src> TypeChecker<'src> {
             raw_module,
             curr_ret_type: CHSType::Never,
         }
-    }
-
-    fn get_span_str(&self, span: &Span<String>) -> &'src str {
-        &self.raw_module[span]
     }
 
     pub fn check_module(&mut self, module: &mut HIRModule) -> CHSResult<()> {
@@ -267,7 +276,7 @@ impl<'src> TypeChecker<'src> {
                     Operator::Deref => match operand_type {
                         CHSType::Pointer(inner) => *inner,
                         _ => {
-                            return_chs_error!("{} Can only dereference pointer types", op.span.loc)
+                            return_chs_error!("{}:{} Can only dereference pointer types", self.get_file_path(), op.span.loc)
                         }
                     },
                     Operator::Refer => CHSType::Pointer(Box::new(operand_type)),
