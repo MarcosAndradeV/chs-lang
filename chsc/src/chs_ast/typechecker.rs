@@ -426,6 +426,18 @@ impl<'src> TypeChecker<'src> {
                                 ty
                             )
                         })?
+                } else {
+                    self.env
+                        .unify(&self.curr_ret_type, &CHSType::Void)
+                        .map_err(|_| {
+                            chs_error!(
+                                "{}:{} Expected return type {} found {}",
+                                self.raw_module.file_path,
+                                span.loc,
+                                self.curr_ret_type,
+                                CHSType::Void
+                            )
+                        })?
                 }
                 Ok(ReturnFlow::Always)
             }
