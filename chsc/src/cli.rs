@@ -27,14 +27,6 @@ pub enum Commands {
         #[arg(short, long)]
         silent: bool,
 
-        /// Force compilation even if the source file has not changed
-        #[arg(short, long)]
-        force: bool,
-
-        /// Keep the intermediate files
-        #[arg(long)]
-        keep: bool,
-
         /// Pass flags to the CC compiler (can be specified multiple times)
         #[arg(short = 'C', long = "compiler-flag", num_args = 1)]
         compiler_flags: Vec<String>,
@@ -49,9 +41,9 @@ pub enum Commands {
         #[arg(short, long)]
         output: Option<String>,
 
-        /// Force compilation even if the source file has not changed
-        #[arg(short, long)]
-        force: bool,
+        /// Silences compiler output
+        #[arg(short, long, default_value = "true")]
+        silent: bool,
 
         /// Pass flags to the CC compiler (can be specified multiple times)
         #[arg(short = 'C', long = "compiler-flag", num_args = 1)]

@@ -76,10 +76,6 @@ impl Loc {
     }
 }
 
-pub fn binary_exists(bin: &str) -> bool {
-    which::which(bin).is_ok()
-}
-
 pub fn file_changed(src: &Path, artifact: &Path) -> bool {
     use std::fs;
 

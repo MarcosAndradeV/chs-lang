@@ -2,9 +2,7 @@ use std::{fs, ops, path::Path, process::exit};
 
 use crate::chs_lexer::{Span, Token};
 
-pub mod flow_checker;
 pub mod hir;
-pub mod mir;
 pub mod nodes;
 pub mod parser;
 pub mod typechecker;
