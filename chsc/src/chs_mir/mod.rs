@@ -4,6 +4,8 @@ use crate::{
     chs_types::CHSType,
 };
 
+pub mod printer;
+
 #[derive(Debug)]
 pub struct MIRModule<'src> {
     pub raw_module: &'src RawModule,
@@ -35,7 +37,7 @@ pub enum MIRModuleItem {
 pub struct MIRFunction {
     pub name: Span<String>,
     pub fn_type: CHSType,
-    pub body: MIRBlock,
+    pub body: Vec<MIRBlock>,
 }
 
 /// Representation of a extern function in the MIR
@@ -118,8 +120,7 @@ pub enum Operand {
 
 #[derive(Debug)]
 pub enum MIRLiteral {
-    IntSigned(Span<i64>),
-    IntUnsigned(Span<u64>),
+    Int(Span<u64>),
     Bool(Span<bool>),
     Str(Span<String>),
     Char(Span<char>),
