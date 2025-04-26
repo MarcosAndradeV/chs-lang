@@ -265,7 +265,7 @@ impl<'src> Parser<'src> {
                         let (op, token) = op_stack.pop().unwrap();
                         let right = expr_stack.pop().unwrap();
                         let left = expr_stack.pop().unwrap();
-                        if op == Operator::Assign {
+                        if op.kind == OperatorKind::Assign {
                             expr_stack.push(Expression::Assign(Box::new(Assign {
                                 token,
                                 target: left,
@@ -658,8 +658,8 @@ impl<'src> Parser<'src> {
         use TokenKind::*;
         let ttoken = self.next();
         let ttype = match ttoken.kind {
-            Identifier if self.get_token_str(&ttoken) == "int" => CHSType::I32,
-            Identifier if self.get_token_str(&ttoken) == "uint" => CHSType::U32,
+            // Identifier if self.get_token_str(&ttoken) == "int" => CHSType::I32,
+            // Identifier if self.get_token_str(&ttoken) == "uint" => CHSType::U32,
             Identifier if self.get_token_str(&ttoken) == "i32" => CHSType::I32,
             Identifier if self.get_token_str(&ttoken) == "u32" => CHSType::U32,
             Identifier if self.get_token_str(&ttoken) == "i64" => CHSType::I64,

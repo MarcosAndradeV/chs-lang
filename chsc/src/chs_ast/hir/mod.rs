@@ -24,10 +24,6 @@ impl HIROperator {
             op,
         }
     }
-
-    pub fn get_type_of_op(&self, lty: &CHSType, rty: &CHSType) -> CHSResult<CHSType> {
-        self.op.get_type_of_op(lty, rty)
-    }
 }
 
 #[derive(Debug)]
@@ -174,7 +170,7 @@ pub enum HIRStmt {
         expr: Option<Box<HIRExpr>>,
     },
     ExprStmt {
-        // span: Span<()>, TODO: Implement span for ExprStmt
+        span: Span<()>, // TODO: Implement span for ExprStmt
         value: HIRExpr,
     },
 }
@@ -222,6 +218,7 @@ impl HIRStmt {
                 expr: r.expr.map(|e| HIRExpr::from_ast_expr(e).into()),
             },
             e => HIRStmt::ExprStmt {
+                span: e.span(),
                 value: HIRExpr::from_ast_expr(e).into(),
             },
         }
@@ -331,19 +328,15 @@ impl HIRExpr {
                     HIRExpr::Literal(HIRLiteral::Int(s), None)
                 }
                 nodes::ConstExpression::IntegerLiteral(s) => {
-                    // HIRExpr::Literal(HIRLiteral::I32(s), None)
                     HIRExpr::Literal(HIRLiteral::Int(s), Some(CHSType::I32))
                 }
                 nodes::ConstExpression::UnsignedIntegerLiteral(s) => {
-                    // HIRExpr::Literal(HIRLiteral::U32(s), None)
                     HIRExpr::Literal(HIRLiteral::Int(s), Some(CHSType::U32))
                 }
                 nodes::ConstExpression::LongIntegerLiteral(s) => {
-                    // HIRExpr::Literal(HIRLiteral::I64(s), None)
                     HIRExpr::Literal(HIRLiteral::Int(s), Some(CHSType::I64))
                 }
                 nodes::ConstExpression::LongUnsignedIntegerLiteral(s) => {
-                    // HIRExpr::Literal(HIRLiteral::U64(s), None)
                     HIRExpr::Literal(HIRLiteral::Int(s), Some(CHSType::U64))
                 }
                 nodes::ConstExpression::BooleanLiteral(s) => {

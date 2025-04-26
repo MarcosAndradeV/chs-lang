@@ -11,7 +11,6 @@ use crate::{
 
 use super::{ModuleImpl, RawModule};
 
-
 #[derive(Debug)]
 pub struct ASTModule<'src> {
     pub raw_module: &'src RawModule,
@@ -80,6 +79,20 @@ impl ConstExpression {
             ConstExpression::CharLiteral(span) => &span.loc,
         }
     }
+
+    fn span<T>(&self) -> Span<T> {
+        match self {
+            ConstExpression::Identifier(s) => s.to_span(),
+            ConstExpression::IntegerDefault(s) => s.to_span(),
+            ConstExpression::IntegerLiteral(s) => s.to_span(),
+            ConstExpression::UnsignedIntegerLiteral(s) => s.to_span(),
+            ConstExpression::LongIntegerLiteral(s) => s.to_span(),
+            ConstExpression::LongUnsignedIntegerLiteral(s) => s.to_span(),
+            ConstExpression::BooleanLiteral(s) => s.to_span(),
+            ConstExpression::StringLiteral(s) => s.to_span(),
+            ConstExpression::CharLiteral(s) => s.to_span(),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -105,7 +118,7 @@ impl Expression {
     pub fn loc(&self) -> &Loc {
         match self {
             Expression::MacroCall(MacroCall::Use(token, ..)) => &token.loc,
-            Expression::MacroCall(MacroCall::TypeOf(token, .. )) => &token.loc,
+            Expression::MacroCall(MacroCall::TypeOf(token, ..)) => &token.loc,
             Expression::ConstExpression(e) => e.loc(),
             Expression::Binop(e) => &e.token.loc,
             Expression::Unop(e) => &e.token.loc,
@@ -122,13 +135,33 @@ impl Expression {
             Expression::ReturnExpression(e) => &e.token.loc,
         }
     }
+
+    pub fn span<T>(&self) -> Span<T> {
+        match self {
+            Expression::MacroCall(e) => e.span(),
+            Expression::ConstExpression(e) => e.span(),
+            Expression::Binop(e) => e.token.source.to_span(),
+            Expression::Unop(e) => e.token.source.to_span(),
+            Expression::Call(e) => e.token.source.to_span(),
+            Expression::Cast(e) => e.token.source.to_span(),
+            Expression::Index(e) => e.token.source.to_span(),
+            Expression::Syscall(e) => e.token.source.to_span(),
+            Expression::VarDecl(e) => e.token.source.to_span(),
+            Expression::Assign(e) => e.token.source.to_span(),
+            Expression::Group(e) => e.span(),
+            Expression::IfExpression(e) => e.token.source.to_span(),
+            Expression::IfElseExpression(e) => e.token.source.to_span(),
+            Expression::WhileExpression(e) => e.token.source.to_span(),
+            Expression::ReturnExpression(e) => e.token.source.to_span(),
+        }
+    }
 }
 
 impl Expression {
     pub fn from_literal_token(token: Token) -> Result<Self, CHSError> {
         use TokenKind::*;
         match token.kind {
-            Integer => Ok(Self::ConstExpression(ConstExpression::IntegerDefault(
+            Integer => Ok(Self::ConstExpression(ConstExpression::IntegerLiteral(
                 Span::from(token),
             ))),
             IntegerNumber => Ok(Self::ConstExpression(ConstExpression::IntegerLiteral(
@@ -163,6 +196,13 @@ impl MacroCall {
     }
     pub fn macro_type_of(token: Token, arg: String) -> Self {
         Self::TypeOf(token, arg)
+    }
+
+    fn span<T>(&self) -> Span<T> {
+        match self {
+            MacroCall::Use(token, ..) => token.source.to_span(),
+            MacroCall::TypeOf(token, ..) => token.source.to_span(),
+        }
     }
 }
 
@@ -319,8 +359,32 @@ pub struct Unop {
     pub operand: Expression,
 }
 
+#[derive(Debug)]
+pub struct Operator {
+    pub span: Span<String>,
+    pub kind: OperatorKind,
+}
+impl Operator {
+    pub fn from_token(token: &Token, unary: bool) -> CHSResult<Self> {
+        Ok(Self {
+            kind: OperatorKind::from_token(token, unary)?,
+            span: token.source.to_span(),
+        })
+    }
+
+    pub fn precedence(&self) -> Precedence {
+        self.kind.precedence()
+    }
+}
+
+impl fmt::Display for Operator {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.kind)
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum Operator {
+pub enum OperatorKind {
     // Binary
     Plus,
     Minus,
@@ -348,34 +412,34 @@ pub enum Operator {
     Deref,
 }
 
-impl fmt::Display for Operator {
+impl fmt::Display for OperatorKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Operator::Plus => write!(f, "+"),
-            Operator::Negate | Operator::Minus => write!(f, "-"),
-            Operator::Div => write!(f, "/"),
-            Operator::Deref | Operator::Mult => write!(f, "*"),
-            Operator::Mod => write!(f, "%"),
-            Operator::LOr => write!(f, "||"),
-            Operator::LAnd => write!(f, "&&"),
-            Operator::BitOr => write!(f, "|"),
-            Operator::Refer | Operator::BitAnd => write!(f, "&"),
-            Operator::Eq => write!(f, "=="),
-            Operator::NEq => write!(f, "!="),
-            Operator::Gt => write!(f, ">"),
-            Operator::Lt => write!(f, "<"),
-            Operator::LNot => write!(f, "!"),
-            Operator::Assign => write!(f, "="),
-            Operator::Le => write!(f, "<="),
-            Operator::Ge => write!(f, ">="),
-            Operator::Shl => write!(f, "<<"),
-            Operator::Shr => write!(f, ">>"),
-            Operator::BitXor => write!(f, "^"),
+            Self::Plus => write!(f, "+"),
+            Self::Negate | Self::Minus => write!(f, "-"),
+            Self::Div => write!(f, "/"),
+            Self::Deref | Self::Mult => write!(f, "*"),
+            Self::Mod => write!(f, "%"),
+            Self::LOr => write!(f, "||"),
+            Self::LAnd => write!(f, "&&"),
+            Self::BitOr => write!(f, "|"),
+            Self::Refer | Self::BitAnd => write!(f, "&"),
+            Self::Eq => write!(f, "=="),
+            Self::NEq => write!(f, "!="),
+            Self::Gt => write!(f, ">"),
+            Self::Lt => write!(f, "<"),
+            Self::LNot => write!(f, "!"),
+            Self::Assign => write!(f, "="),
+            Self::Le => write!(f, "<="),
+            Self::Ge => write!(f, ">="),
+            Self::Shl => write!(f, "<<"),
+            Self::Shr => write!(f, ">>"),
+            Self::BitXor => write!(f, "^"),
         }
     }
 }
 
-impl Operator {
+impl OperatorKind {
     pub fn from_token(token: &Token, unary: bool) -> Result<Self, CHSError> {
         use TokenKind::*;
         match token.kind {
@@ -403,96 +467,20 @@ impl Operator {
 
     pub fn precedence(&self) -> Precedence {
         match self {
-            Operator::Plus | Operator::Minus => Precedence::Sum,
-            Operator::Mult | Operator::Div | Operator::Mod => Precedence::Product,
-            Operator::Lt | Operator::Le | Operator::Ge | Operator::Gt => {
-                Precedence::RelatonalGteLte
-            }
-            Operator::Eq | Operator::NEq => Precedence::Equals,
-            Operator::LOr => Precedence::LOr,
-            Operator::LAnd => Precedence::LAnd,
-            Operator::BitOr => Precedence::BitOr,
-            Operator::BitAnd => Precedence::BitAnd,
-            Operator::Negate | Operator::LNot => Precedence::Prefix,
-            Operator::Refer | Operator::Deref => Precedence::Prefix,
-            Operator::Assign => Precedence::Assign,
-            Operator::Shl | Operator::Shr => Precedence::ShlShr,
-            Operator::BitXor => Precedence::BitXor,
+            Self::Plus | Self::Minus => Precedence::Sum,
+            Self::Mult | Self::Div | Self::Mod => Precedence::Product,
+            Self::Lt | Self::Le | Self::Ge | Self::Gt => Precedence::RelatonalGteLte,
+            Self::Eq | Self::NEq => Precedence::Equals,
+            Self::LOr => Precedence::LOr,
+            Self::LAnd => Precedence::LAnd,
+            Self::BitOr => Precedence::BitOr,
+            Self::BitAnd => Precedence::BitAnd,
+            Self::Negate | Self::LNot => Precedence::Prefix,
+            Self::Refer | Self::Deref => Precedence::Prefix,
+            Self::Assign => Precedence::Assign,
+            Self::Shl | Self::Shr => Precedence::ShlShr,
+            Self::BitXor => Precedence::BitXor,
             // _ => Precedence::Lowest,
-        }
-    }
-
-    pub fn get_type_of_op(&self, lty: &CHSType, rty: &CHSType) -> CHSResult<CHSType> {
-        match self {
-            // Arithmetic operators
-            Operator::Plus | Operator::Minus | Operator::Mult | Operator::Div | Operator::Mod => {
-                // Handle pointer arithmetic
-                match (lty, rty) {
-                    (CHSType::Pointer(inner), CHSType::Int)
-                    | (CHSType::Int, CHSType::Pointer(inner)) => {
-                        // Pointer + int or int + pointer results in a pointer
-                        Ok(CHSType::Pointer(inner.clone()))
-                    }
-                    (CHSType::Pointer(inner1), CHSType::Pointer(inner2)) => {
-                        // Pointer - pointer results in an integer (offset)
-                        if inner1 == inner2 {
-                            Ok(CHSType::Int)
-                        } else {
-                            return_chs_error!("Cannot subtract pointers of different types")
-                        }
-                    }
-                    // Regular numeric arithmetic
-                    (CHSType::I32, CHSType::I32) => Ok(CHSType::I32),
-                    (CHSType::U32, CHSType::U32) => Ok(CHSType::U32),
-                    (CHSType::I64, CHSType::I64) => Ok(CHSType::I64),
-                    (CHSType::U64, CHSType::U64) => Ok(CHSType::U64),
-                    _ => return_chs_error!(
-                        "Arithmetic operators require numeric types of the same kind"
-                    ),
-                }
-            }
-            // Comparison operators
-            Operator::Lt
-            | Operator::Le
-            | Operator::Gt
-            | Operator::Ge
-            | Operator::Eq
-            | Operator::NEq => {
-                if lty == rty {
-                    Ok(CHSType::Boolean)
-                } else {
-                    return_chs_error!("Comparison operators require operands of the same type")
-                }
-            }
-            // Logical operators
-            Operator::LAnd | Operator::LOr => {
-                if *lty == CHSType::Boolean && *rty == CHSType::Boolean {
-                    Ok(CHSType::Boolean)
-                } else {
-                    return_chs_error!("Logical operators require boolean operands")
-                }
-            }
-            // Bitwise operators
-            Operator::BitAnd
-            | Operator::BitOr
-            | Operator::BitXor
-            | Operator::Shl
-            | Operator::Shr => match (lty, rty) {
-                (CHSType::I32, CHSType::I32) => Ok(CHSType::I32),
-                (CHSType::U32, CHSType::U32) => Ok(CHSType::U32),
-                (CHSType::I64, CHSType::I64) => Ok(CHSType::I64),
-                (CHSType::U64, CHSType::U64) => Ok(CHSType::U64),
-                _ => {
-                    return_chs_error!("Bitwise operators require numeric types of the same kind")
-                }
-            },
-            // Unary operators (should not be used in binary expressions)
-            Operator::Negate | Operator::LNot | Operator::Refer | Operator::Deref => {
-                return_chs_error!("Unary operator used in binary expression")
-            }
-            Operator::Assign => {
-                unreachable!("Assignment should be handled by Assign Expression")
-            }
         }
     }
 }

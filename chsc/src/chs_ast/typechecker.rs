@@ -3,13 +3,13 @@ use std::{collections::HashMap, rc::Rc};
 use crate::{
     chs_error,
     chs_lexer::Span,
-    chs_types::{CHSType, TypeConstraint, TypeVar},
+    chs_types::CHSType,
     chs_util::*,
     return_chs_error,
 };
 
 use super::{
-    hir::{HIRBlock, HIRExpr, HIRFunction, HIRModule, HIRModuleItem, HIRStmt}, nodes::Operator, ModuleImpl, RawModule
+    hir::{HIRBlock, HIRExpr, HIRFunction, HIRModule, HIRModuleItem, HIRStmt}, nodes::OperatorKind, ModuleImpl, RawModule
 };
 
 pub struct TypeChecker<'src> {
@@ -150,13 +150,13 @@ impl<'src> TypeChecker<'src> {
                 let lhs_type = self.check_expr(lhs)?;
                 let rhs_type = self.check_expr(rhs)?;
 
-                let expr_ty = match op.op {
+                let expr_ty = match op.op.kind {
                     // Arithmetic operators
-                    Operator::Plus
-                    | Operator::Minus
-                    | Operator::Mult
-                    | Operator::Div
-                    | Operator::Mod => {
+                    OperatorKind::Plus
+                    | OperatorKind::Minus
+                    | OperatorKind::Mult
+                    | OperatorKind::Div
+                    | OperatorKind::Mod => {
                         self.env
                             .unify(&lhs_type, &rhs_type)
                             .or_else(|_| lhs.cast(rhs_type.clone()))
@@ -181,7 +181,7 @@ impl<'src> TypeChecker<'src> {
                         }
                     }
                     // Comparison operators
-                    Operator::Le | Operator::Ge | Operator::Lt | Operator::Gt => {
+                    OperatorKind::Le | OperatorKind::Ge | OperatorKind::Lt | OperatorKind::Gt => {
                         self.env
                             .unify(&lhs_type, &rhs_type)
                             .or_else(|_| lhs.cast(rhs_type.clone()))
@@ -205,7 +205,7 @@ impl<'src> TypeChecker<'src> {
                         }
                     }
                     // Equality operators
-                    Operator::Eq | Operator::NEq => {
+                    OperatorKind::Eq | OperatorKind::NEq => {
                         self.env
                             .unify(&lhs_type, &rhs_type)
                             .or_else(|_| lhs.cast(rhs_type.clone()))
@@ -221,17 +221,17 @@ impl<'src> TypeChecker<'src> {
                         CHSType::Boolean
                     }
                     // Logical operators
-                    Operator::LAnd | Operator::LOr => {
+                    OperatorKind::LAnd | OperatorKind::LOr => {
                         self.env.unify(&lhs_type, &CHSType::Boolean)?;
                         self.env.unify(&rhs_type, &CHSType::Boolean)?;
                         CHSType::Boolean
                     }
                     // Bitwise operators
-                    Operator::BitAnd
-                    | Operator::BitXor
-                    | Operator::Shl
-                    | Operator::Shr
-                    | Operator::BitOr => {
+                    OperatorKind::BitAnd
+                    | OperatorKind::BitXor
+                    | OperatorKind::Shl
+                    | OperatorKind::Shr
+                    | OperatorKind::BitOr => {
                         self.env.unify(&lhs_type, &rhs_type)?;
                         match lhs_type {
                             CHSType::I32 => CHSType::I32,
@@ -244,7 +244,7 @@ impl<'src> TypeChecker<'src> {
                             ),
                         }
                     }
-                    Operator::Assign => {
+                    OperatorKind::Assign => {
                         self.env.unify(&lhs_type, &rhs_type)?;
                         lhs_type
                     }
@@ -259,8 +259,8 @@ impl<'src> TypeChecker<'src> {
             }
             HIRExpr::Unary { ty, op, operand } => {
                 let operand_type = self.check_expr(operand)?;
-                let expr_ty = match op.op {
-                    Operator::Negate => match operand_type {
+                let expr_ty = match op.op.kind {
+                    OperatorKind::Negate => match operand_type {
                         CHSType::I32 => CHSType::I32,
                         CHSType::U32 => CHSType::I32,
                         CHSType::I64 => CHSType::I64,
@@ -269,17 +269,17 @@ impl<'src> TypeChecker<'src> {
                             return_chs_error!("{} Expected numeric type for negation", op.span.loc)
                         }
                     },
-                    Operator::LNot => {
+                    OperatorKind::LNot => {
                         self.env.unify(&operand_type, &CHSType::Boolean)?;
                         CHSType::Boolean
                     }
-                    Operator::Deref => match operand_type {
+                    OperatorKind::Deref => match operand_type {
                         CHSType::Pointer(inner) => *inner,
                         _ => {
                             return_chs_error!("{}:{} Can only dereference pointer types", self.get_file_path(), op.span.loc)
                         }
                     },
-                    Operator::Refer => CHSType::Pointer(Box::new(operand_type)),
+                    OperatorKind::Refer => CHSType::Pointer(Box::new(operand_type)),
                     _ => unreachable!("Invalid unary operator"),
                 };
                 *ty = Some(expr_ty.clone());
@@ -485,7 +485,7 @@ impl<'src> TypeChecker<'src> {
                 self.env.locals_insert(name_str, Rc::new(var_type.clone()));
                 Ok(ReturnFlow::Never)
             }
-            HIRStmt::ExprStmt { value } => {
+            HIRStmt::ExprStmt { span: _, value } => {
                 self.check_expr(value)?;
                 Ok(ReturnFlow::Never)
             }
@@ -517,8 +517,6 @@ pub struct TypeEnv {
     /// Global types declarations
     pub globals: HashMap<String, Rc<CHSType>>,
     pub locals: Vec<HashMap<String, Rc<CHSType>>>,
-    pub type_vars: HashMap<TypeVar, Rc<CHSType>>,
-    pub constraints: Vec<TypeConstraint>,
 }
 
 impl Default for TypeEnv {
@@ -532,33 +530,12 @@ impl TypeEnv {
         Self {
             globals: HashMap::new(),
             locals: vec![HashMap::new()],
-            type_vars: HashMap::new(),
-            constraints: Vec::new(),
         }
-    }
-
-    /// Creates a new type variable
-    pub fn fresh_type_var(&mut self) -> TypeVar {
-        TypeVar::new(self.type_vars.len())
-    }
-
-    /// Adds a type constraint
-    pub fn add_constraint(&mut self, constraint: TypeConstraint) {
-        self.constraints.push(constraint);
     }
 
     /// Attempts to unify two types
     pub fn unify(&mut self, t1: &CHSType, t2: &CHSType) -> CHSResult<()> {
         match (t1, t2) {
-            (CHSType::Var(v1), CHSType::Var(v2)) if v1 == v2 => Ok(()),
-            (CHSType::Var(v), t) | (t, CHSType::Var(v)) => {
-                if let Some(bound) = self.type_vars.get(v).cloned() {
-                    self.unify(&bound, t)
-                } else {
-                    self.type_vars.insert(v.clone(), Rc::new(t.clone()));
-                    Ok(())
-                }
-            }
             (CHSType::Function(args1, ret1), CHSType::Function(args2, ret2)) => {
                 if args1.len() != args2.len() {
                     return_chs_error!("Function argument count mismatch");
