@@ -1,3 +1,4 @@
+pub mod chs_mir;
 pub mod chs_ast;
 pub mod chs_lexer;
 pub mod chs_types;
