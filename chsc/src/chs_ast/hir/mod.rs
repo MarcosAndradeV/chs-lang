@@ -260,6 +260,21 @@ pub enum HIRExpr {
     },
 }
 
+impl HIRExpr {
+    pub fn span(&self) -> Span<String> {
+        match self {
+            HIRExpr::Literal(lit, _) => lit.span(),
+            HIRExpr::Identifier(span, ..) => span.to_span(),
+            HIRExpr::Binary { op, .. } => op.span.to_span(),
+            HIRExpr::Unary { op, .. } => op.span.to_span(),
+            HIRExpr::Call { span, .. } => span.to_span(),
+            HIRExpr::Cast { span, .. } => span.to_span(),
+            HIRExpr::Index { span, .. } => span.to_span(),
+            HIRExpr::Syscall { span, .. } => span.to_span(),
+        }
+    }
+}
+
 impl CHSInfer for HIRExpr {
     fn cast(&mut self, ty: CHSType) -> CHSResult<()> {
         let actual_ty = self.infer();
@@ -303,7 +318,6 @@ impl CHSInfer for HIRExpr {
                 HIRLiteral::Bool(_) => CHSType::Boolean,
                 HIRLiteral::Str(_) => CHSType::String,
                 HIRLiteral::Char(_) => CHSType::Char,
-                HIRLiteral::Void => CHSType::Void,
             },
             HIRExpr::Literal(_, Some(ty)) => ty.clone(),
             HIRExpr::Identifier(_, ty) => ty.clone().unwrap_or(CHSType::Never),
@@ -395,5 +409,15 @@ pub enum HIRLiteral {
     Bool(Span<bool>),
     Str(Span<String>),
     Char(Span<char>),
-    Void,
+}
+
+impl HIRLiteral {
+    pub fn span(&self) -> Span<String> {
+        match self {
+            HIRLiteral::Int(span) => span.to_span(),
+            HIRLiteral::Bool(span) => span.to_span(),
+            HIRLiteral::Str(span) => span.to_span(),
+            HIRLiteral::Char(span) => span.to_span(),
+        }
+    }
 }

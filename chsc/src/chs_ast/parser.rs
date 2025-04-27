@@ -658,13 +658,13 @@ impl<'src> Parser<'src> {
         use TokenKind::*;
         let ttoken = self.next();
         let ttype = match ttoken.kind {
-            // Identifier if self.get_token_str(&ttoken) == "int" => CHSType::I32,
+            Identifier if self.get_token_str(&ttoken) == "int" => CHSType::I32,
             // Identifier if self.get_token_str(&ttoken) == "uint" => CHSType::U32,
             Identifier if self.get_token_str(&ttoken) == "i32" => CHSType::I32,
             Identifier if self.get_token_str(&ttoken) == "u32" => CHSType::U32,
             Identifier if self.get_token_str(&ttoken) == "i64" => CHSType::I64,
             Identifier if self.get_token_str(&ttoken) == "u64" => CHSType::U64,
-            Identifier if self.get_token_str(&ttoken) == "any" => CHSType::Any,
+            Identifier if self.get_token_str(&ttoken) == "anyopaque" => CHSType::AnyOpaque,
             Identifier if self.get_token_str(&ttoken) == "bool" => CHSType::Boolean,
             Identifier if self.get_token_str(&ttoken) == "char" => CHSType::Char,
             Identifier if self.get_token_str(&ttoken) == "string" => CHSType::String,

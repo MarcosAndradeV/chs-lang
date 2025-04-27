@@ -24,7 +24,10 @@ pub enum CHSType {
     Slice(Box<CHSType>),
 
     // Generic types
-    Any,
+    /// Any is a struct of pointer + tag.
+    // Any(Tag),
+    /// AnyOpaque is equal to `void*` in c.
+    AnyOpaque,
 
     // Impossible types
     Never,
@@ -42,7 +45,7 @@ impl fmt::Display for CHSType {
             CHSType::Char => write!(f, "char"),
             CHSType::Boolean => write!(f, "bool"),
             CHSType::String => write!(f, "string"),
-            CHSType::Any => write!(f, "any"),
+            CHSType::AnyOpaque => write!(f, "anyopaque"),
             CHSType::Pointer(t) => write!(f, "*{}", t),
             CHSType::Function(args, ret) => write!(
                 f,
@@ -78,5 +81,12 @@ impl CHSType {
             CHSType::Pointer(inner) => Some(inner),
             _ => None,
         }
+    }
+
+    pub fn is_numeric(&self) -> bool {
+        matches!(
+            self,
+            CHSType::I32 | CHSType::U32 | CHSType::I64 | CHSType::U64
+        )
     }
 }

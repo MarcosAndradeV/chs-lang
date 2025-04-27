@@ -74,7 +74,6 @@ impl<'src> TypeChecker<'src> {
         }
         if let Some(CHSType::Function(args, ret)) = self.env.global_get("main") {
             if args.is_empty() && **ret == CHSType::I32 {
-                // Main function is valid
             } else {
                 return_chs_error!("`main` function must have no arguments and return an i32")
             }
@@ -85,14 +84,12 @@ impl<'src> TypeChecker<'src> {
     fn check_function(&mut self, func: &mut HIRFunction) -> CHSResult<()> {
         self.env.locals_new();
 
-        // Add parameters to local scope
         for param in &func.params {
             let param_name = self.get_span_str(&param.name);
             self.env
                 .locals_insert(param_name, Rc::new(param.param_type.clone()));
         }
 
-        // Type check body
         self.curr_ret_type = func.return_type.clone();
         let return_flow = self.check_block(&mut func.body)?;
         self.curr_ret_type = CHSType::Never;
@@ -106,18 +103,6 @@ impl<'src> TypeChecker<'src> {
             )
         }
 
-        // Verify return type matches
-        // self.env.unify(&last_type, &func.return_type).map_err(|_| {
-        //     chs_error!(
-        //         "{} Type mismatch in function `{}`: expected `{}`, found `{}`",
-        //         &func.name.loc,
-        //         name,
-        //         func.return_type,
-        //         last_type
-        //     )
-        // })?;
-
-        // Pop function scope
         self.env.locals.pop();
 
         Ok(())
@@ -146,106 +131,120 @@ impl<'src> TypeChecker<'src> {
                 let rhs_type = self.check_expr(rhs)?;
 
                 let expr_ty = match op.kind {
-                    // Arithmetic operators
-                    OperatorKind::Plus
-                    | OperatorKind::Minus
-                    | OperatorKind::Mult
-                    | OperatorKind::Div
-                    | OperatorKind::Mod => {
-                        self.env
-                            .unify(&lhs_type, &rhs_type)
-                            .or_else(|_| lhs.cast(rhs_type.clone()))
-                            .or_else(|_| rhs.cast(lhs_type.clone()))
-                            .map_err(|_| {
-                                chs_error!(
-                                    "{} Cannot compare values of type {} and {}",
-                                    op.span.loc,
-                                    lhs_type,
-                                    rhs_type
-                                )
-                            })?;
-                        match lhs.infer() {
-                            CHSType::I32 => CHSType::I32,
-                            CHSType::U32 => CHSType::U32,
-                            CHSType::I64 => CHSType::I64,
-                            CHSType::U64 => CHSType::U64,
-                            _ => return_chs_error!(
-                                "{} Expected numeric type for arithmetic operation",
-                                op.span.loc
-                            ),
+                    OperatorKind::Plus | OperatorKind::Minus => match (&lhs_type, &rhs_type) {
+                        (CHSType::Pointer(_), rhs_type) if rhs_type.is_numeric() => {
+                            lhs_type.clone()
                         }
-                    }
-                    // Comparison operators
-                    OperatorKind::Le | OperatorKind::Ge | OperatorKind::Lt | OperatorKind::Gt => {
-                        self.env
-                            .unify(&lhs_type, &rhs_type)
-                            .or_else(|_| lhs.cast(rhs_type.clone()))
-                            .or_else(|_| rhs.cast(lhs_type.clone()))
-                            .map_err(|_| {
-                                chs_error!(
-                                    "{} Cannot compare values of type {} and {}",
+
+                        (lhs_type, CHSType::Pointer(_))
+                            if op.kind == OperatorKind::Plus && lhs_type.is_numeric() =>
+                        {
+                            rhs_type.clone()
+                        }
+
+                        (CHSType::Pointer(ptr_type1), CHSType::Pointer(ptr_type2))
+                            if op.kind == OperatorKind::Minus =>
+                        {
+                            if ptr_type1 == ptr_type2 {
+                                CHSType::I64
+                            } else {
+                                return_chs_error!(
+                                    "{} Cannot subtract pointers of different types: {} and {}",
                                     op.span.loc,
                                     lhs_type,
                                     rhs_type
-                                )
-                            })?;
-                        match lhs_type {
-                            CHSType::I32 | CHSType::U32 | CHSType::I64 | CHSType::U64 => {
-                                CHSType::Boolean
+                                );
                             }
-                            _ => return_chs_error!(
-                                "{} Expected numeric type for comparison",
-                                op.span.loc
-                            ),
                         }
+
+                        _ => {
+                            self.ensure_numeric_type(&lhs_type, lhs.span())?;
+                            self.ensure_numeric_type(&rhs_type, rhs.span())?;
+                            self.unify_numeric_types(
+                                &lhs_type,
+                                &rhs_type,
+                                lhs,
+                                rhs,
+                                op.span.to_span(),
+                            )?
+                        }
+                    },
+                    OperatorKind::Mult | OperatorKind::Div | OperatorKind::Mod => {
+                        self.ensure_numeric_type(&lhs_type, lhs.span())?;
+                        self.ensure_numeric_type(&rhs_type, rhs.span())?;
+
+                        let result_type = self.unify_numeric_types(
+                            &lhs_type,
+                            &rhs_type,
+                            lhs,
+                            rhs,
+                            op.span.to_span(),
+                        )?;
+
+                        result_type
                     }
-                    // Equality operators
+
+                    OperatorKind::Le | OperatorKind::Ge | OperatorKind::Lt | OperatorKind::Gt => {
+                        self.ensure_comparable_type(&lhs_type, lhs.span())?;
+                        self.ensure_comparable_type(&rhs_type, rhs.span())?;
+
+                        self.unify_numeric_types(
+                            &lhs_type,
+                            &rhs_type,
+                            lhs,
+                            rhs,
+                            op.span.to_span(),
+                        )?;
+
+                        CHSType::Boolean
+                    }
+
                     OperatorKind::Eq | OperatorKind::NEq => {
-                        self.env
-                            .unify(&lhs_type, &rhs_type)
-                            .or_else(|_| lhs.cast(rhs_type.clone()))
-                            .or_else(|_| rhs.cast(lhs_type.clone()))
-                            .map_err(|_| {
-                                chs_error!(
-                                    "{} Cannot compare values of type {} and {}",
-                                    op.span.loc,
-                                    lhs_type,
-                                    rhs_type
-                                )
-                            })?;
+                        self.unify_equality_types(
+                            &lhs_type,
+                            &rhs_type,
+                            lhs,
+                            rhs,
+                            op.span.to_span(),
+                        )?;
+
                         CHSType::Boolean
                     }
-                    // Logical operators
+
                     OperatorKind::LAnd | OperatorKind::LOr => {
-                        self.env.unify(&lhs_type, &CHSType::Boolean)?;
-                        self.env.unify(&rhs_type, &CHSType::Boolean)?;
+                        self.ensure_boolean_type(&lhs_type, op.span.to_span())?;
+                        self.ensure_boolean_type(&rhs_type, op.span.to_span())?;
+
                         CHSType::Boolean
                     }
-                    // Bitwise operators
+
                     OperatorKind::BitAnd
                     | OperatorKind::BitXor
                     | OperatorKind::Shl
                     | OperatorKind::Shr
                     | OperatorKind::BitOr => {
-                        self.env.unify(&lhs_type, &rhs_type)?;
-                        match lhs_type {
-                            CHSType::I32 => CHSType::I32,
-                            CHSType::U32 => CHSType::U32,
-                            CHSType::I64 => CHSType::I64,
-                            CHSType::U64 => CHSType::U64,
-                            _ => return_chs_error!(
-                                "{} Expected numeric type for bitwise operation",
-                                op.span.loc
-                            ),
+                        self.ensure_integer_type(&lhs_type, lhs.span())?;
+                        self.ensure_integer_type(&rhs_type, rhs.span())?;
+
+                        if matches!(op.kind, OperatorKind::Shl | OperatorKind::Shr) {
+                            lhs_type.clone()
+                        } else {
+                            self.unify_integer_types(
+                                &lhs_type,
+                                &rhs_type,
+                                lhs,
+                                rhs,
+                                op.span.to_span(),
+                            )?
                         }
                     }
-                    OperatorKind::Assign => {
-                        self.env.unify(&lhs_type, &rhs_type)?;
-                        lhs_type
-                    }
-                    // These operators should not appear in binary expressions
+
                     _ => {
-                        unreachable!("Unary operator used in binary expression")
+                        return_chs_error!(
+                            "{} Operador '{}' não é suportado em expressões binárias",
+                            op.span.loc,
+                            op
+                        );
                     }
                 };
 
@@ -313,7 +312,7 @@ impl<'src> TypeChecker<'src> {
                         }
                         for arg in args.iter_mut() {
                             let arg_type = self.check_expr(arg)?;
-                            self.env.unify(&arg_type, &CHSType::Any)?;
+                            self.env.unify(&arg_type, &CHSType::AnyOpaque)?;
                         }
                         *ty = Some((*return_type).clone());
                         Ok(ty.clone().unwrap())
@@ -327,7 +326,7 @@ impl<'src> TypeChecker<'src> {
                 to_type,
             } => {
                 let expr_type = self.check_expr(expr)?;
-                // For now, only allow numeric casts
+
                 match (&expr_type, &to_type) {
                     (a, b) if a == *b => Ok(to_type.clone()),
                     (CHSType::I32, CHSType::U32) | (CHSType::U32, CHSType::I32) => {
@@ -335,7 +334,7 @@ impl<'src> TypeChecker<'src> {
                     }
                     (CHSType::Pointer(_), CHSType::Pointer(any))
                     | (CHSType::Pointer(any), CHSType::Pointer(_))
-                        if **any == CHSType::Any =>
+                        if **any == CHSType::AnyOpaque =>
                     {
                         Ok(to_type.clone())
                     }
@@ -351,13 +350,11 @@ impl<'src> TypeChecker<'src> {
                 let base_type = self.check_expr(base)?;
                 let index_type = self.check_expr(index)?;
 
-                // Check that index is numeric
                 match index_type {
                     CHSType::U64 => {}
                     _ => return_chs_error!("{} Array index must be u64", span.loc),
                 }
 
-                // Get element type from array type
                 match base_type {
                     CHSType::Slice(elem_type) => Ok(*elem_type.clone()),
                     CHSType::Pointer(elem_type) => Ok(*elem_type.clone()),
@@ -443,39 +440,24 @@ impl<'src> TypeChecker<'src> {
             HIRStmt::Assign {
                 span,
                 target,
-                value,
+                value: lhs,
                 ..
             } => {
                 let target_type = self.check_expr(target)?;
-                let value_type = self.check_expr(value)?;
-                self.env
-                    .unify(&target_type, &value_type)
-                    .or_else(|_| value.cast(target_type.clone()))
-                    .map_err(|_| {
-                        chs_error!(
-                            "{} Cannot assign value of type {} to variable of type {}",
-                            span.loc,
-                            value_type,
-                            target_type
-                        )
-                    })?;
+                let lhs_type = self.check_expr(lhs)?;
+                self.ensure_assignable(target)?;
+
+                self.check_assignment_compatibility(&lhs_type, &target_type, span.to_span())?;
                 Ok(ReturnFlow::Never)
             }
             HIRStmt::VarDecl { name, ty, value } => {
                 let value_type = self.check_expr(value)?;
                 let var_type = if let Some(explicit_type) = ty {
-                    self.env
-                        .unify(&value_type, explicit_type)
-                        .or_else(|_| value.cast(explicit_type.clone()))
-                        .map_err(|err| {
-                            chs_error!(
-                                "{} Cannot assign value of type {} to variable of type {}\n\t{}",
-                                name.loc,
-                                value_type,
-                                explicit_type,
-                                err
-                            )
-                        })?;
+                    self.check_assignment_compatibility(
+                        &value_type,
+                        &explicit_type,
+                        name.to_span(),
+                    )?;
                     explicit_type.clone()
                 } else {
                     value_type.clone()
@@ -514,7 +496,7 @@ impl<'src> TypeChecker<'src> {
                         }
                         for arg in args.iter_mut() {
                             let arg_type = self.check_expr(arg)?;
-                            self.env.unify(&arg_type, &CHSType::Any)?;
+                            self.env.unify(&arg_type, &CHSType::AnyOpaque)?;
                         }
                         *ty = Some((*return_type).clone());
                         Ok(ReturnFlow::Never)
@@ -546,12 +528,192 @@ impl<'src> TypeChecker<'src> {
     pub fn env(&self) -> &TypeEnv {
         &self.env
     }
+
+    fn ensure_numeric_type(&self, ty: &CHSType, span: Span<String>) -> Result<(), CHSError> {
+        if !ty.is_numeric() {
+            return_chs_error!("{} Expected {{numeric}} type but found {}", span.loc, ty)
+        }
+        Ok(())
+    }
+
+    fn ensure_integer_type(&self, ty: &CHSType, span: Span<String>) -> Result<(), CHSError> {
+        match ty {
+            CHSType::I32 | CHSType::U32 | CHSType::I64 | CHSType::U64 => Ok(()),
+            _ => return_chs_error!("{} Expected {{interger}} type but found {}", span.loc, ty),
+        }
+    }
+
+    fn ensure_comparable_type(&self, ty: &CHSType, span: Span<String>) -> Result<(), CHSError> {
+        match ty {
+            CHSType::I32 | CHSType::U32 | CHSType::I64 | CHSType::U64 => Ok(()),
+            _ => return_chs_error!("{} Type {} cannot be compared", span.loc, ty),
+        }
+    }
+
+    fn ensure_boolean_type(&self, ty: &CHSType, span: Span<String>) -> Result<(), CHSError> {
+        match ty {
+            CHSType::Boolean => Ok(()),
+            _ => return_chs_error!("{} Expected boolean found {}", span.loc, ty),
+        }
+    }
+
+    fn ensure_assignable(&self, expr: &HIRExpr) -> Result<(), CHSError> {
+        match expr {
+            HIRExpr::Identifier { .. } | HIRExpr::Index { .. } => Ok(()),
+            _ => return_chs_error!(
+                "{} Left hand side of assignment must be variable, index or field",
+                expr.span().loc
+            ),
+        }
+    }
+
+    fn unify_numeric_types(
+        &self,
+        lhs_type: &CHSType,
+        rhs_type: &CHSType,
+        lhs: &mut HIRExpr,
+        rhs: &mut HIRExpr,
+        span: Span<String>,
+    ) -> Result<CHSType, CHSError> {
+        if lhs_type == rhs_type {
+            return Ok(lhs_type.clone());
+        }
+
+        match (lhs_type, rhs_type) {
+            (CHSType::I32, CHSType::U32) => Ok(CHSType::I32),
+            (CHSType::I32, CHSType::I64) | (CHSType::U32, CHSType::I64) => Ok(CHSType::I64),
+            (CHSType::I32, CHSType::U64) | (CHSType::U32, CHSType::U64) => Ok(CHSType::I64),
+            (CHSType::U32, CHSType::I32) => Ok(CHSType::I32),
+            (CHSType::I64, CHSType::I32) | (CHSType::I64, CHSType::U32) => Ok(CHSType::I64),
+            (CHSType::U64, CHSType::I32) | (CHSType::U64, CHSType::U32) => Ok(CHSType::I64),
+
+            _ => {
+                if let Ok(_) = lhs.cast(rhs_type.clone()) {
+                    Ok(rhs_type.clone())
+                } else if let Ok(_) = rhs.cast(lhs_type.clone()) {
+                    Ok(lhs_type.clone())
+                } else {
+                    return_chs_error!("{} Cannot unify {} and {}", span.loc, lhs_type, rhs_type)
+                }
+            }
+        }
+    }
+
+    fn unify_integer_types(
+        &self,
+        lhs_type: &CHSType,
+        rhs_type: &CHSType,
+        lhs: &mut HIRExpr,
+        rhs: &mut HIRExpr,
+        span: Span<String>,
+    ) -> Result<CHSType, CHSError> {
+        if lhs_type == rhs_type {
+            return Ok(lhs_type.clone());
+        }
+
+        match (lhs_type, rhs_type) {
+            (CHSType::I32, CHSType::I64) => Ok(CHSType::I64),
+            (CHSType::U32, CHSType::U64) => Ok(CHSType::U64),
+
+            (CHSType::I32, CHSType::U32) => Ok(CHSType::I32),
+            (CHSType::I32, CHSType::U64) => Ok(CHSType::I64),
+            (CHSType::I64, CHSType::U32) => Ok(CHSType::I64),
+            (CHSType::I64, CHSType::U64) => Ok(CHSType::I64),
+
+            (CHSType::I64, CHSType::I32) => Ok(CHSType::I64),
+            (CHSType::U64, CHSType::U32) => Ok(CHSType::U64),
+            (CHSType::U32, CHSType::I32) => Ok(CHSType::I32),
+            (CHSType::U64, CHSType::I32) => Ok(CHSType::I64),
+            (CHSType::U32, CHSType::I64) => Ok(CHSType::I64),
+            (CHSType::U64, CHSType::I64) => Ok(CHSType::I64),
+
+            _ => {
+                if let Ok(_) = lhs.cast(rhs_type.clone()) {
+                    Ok(rhs_type.clone())
+                } else if let Ok(_) = rhs.cast(lhs_type.clone()) {
+                    Ok(lhs_type.clone())
+                } else {
+                    return_chs_error!(
+                        "{} bit operations bettewen {} and {} are not suported.",
+                        span.loc,
+                        lhs_type,
+                        rhs_type
+                    )
+                }
+            }
+        }
+    }
+
+    fn unify_equality_types(
+        &self,
+        lhs_type: &CHSType,
+        rhs_type: &CHSType,
+        lhs: &mut HIRExpr,
+        rhs: &mut HIRExpr,
+        span: Span<String>,
+    ) -> Result<(), CHSError> {
+        if lhs_type == rhs_type {
+            return Ok(());
+        }
+
+        if lhs_type.is_numeric() && rhs_type.is_numeric() {
+            return Ok(());
+        }
+
+        match (lhs_type, rhs_type) {
+            (CHSType::Pointer(_), CHSType::Pointer(any))
+            | (CHSType::Pointer(any), CHSType::Pointer(_))
+                if **any == CHSType::AnyOpaque =>
+            {
+                Ok(())
+            }
+
+            _ => {
+                if let Ok(_) = self.env.unify(lhs_type, rhs_type) {
+                    Ok(())
+                } else if let Ok(_) = lhs.cast(rhs_type.clone()) {
+                    Ok(())
+                } else if let Ok(_) = rhs.cast(lhs_type.clone()) {
+                    Ok(())
+                } else {
+                    return_chs_error!("{} Cannot compare {} and {}", span.loc, lhs_type, rhs_type)
+                }
+            }
+        }
+    }
+
+    fn check_assignment_compatibility(
+        &self,
+        target_type: &CHSType,
+        value_type: &CHSType,
+        span: Span<String>,
+    ) -> Result<(), CHSError> {
+        if target_type == value_type {
+            return Ok(());
+        }
+
+        match (target_type, value_type) {
+            (CHSType::I64, CHSType::I32) | (CHSType::I64, CHSType::U32) => Ok(()),
+            (CHSType::U64, CHSType::U32) => Ok(()),
+
+            _ => {
+                if let Ok(_) = self.env.unify(target_type, value_type) {
+                    Ok(())
+                } else {
+                    return_chs_error!(
+                        "{} Cannot assign variable {} to type {}",
+                        span.loc,
+                        value_type,
+                        target_type
+                    )
+                }
+            }
+        }
+    }
 }
 
-/// Type environment for managing type declarations and scoping
 #[derive(Debug)]
 pub struct TypeEnv {
-    /// Global types declarations
     pub globals: HashMap<String, Rc<CHSType>>,
     pub locals: Vec<HashMap<String, Rc<CHSType>>>,
 }
@@ -570,8 +732,7 @@ impl TypeEnv {
         }
     }
 
-    /// Attempts to unify two types
-    pub fn unify(&mut self, t1: &CHSType, t2: &CHSType) -> CHSResult<()> {
+    pub fn unify(&self, t1: &CHSType, t2: &CHSType) -> CHSResult<()> {
         match (t1, t2) {
             (CHSType::Function(args1, ret1), CHSType::Function(args2, ret2)) => {
                 if args1.len() != args2.len() {
@@ -582,23 +743,20 @@ impl TypeEnv {
                 }
                 self.unify(ret1, ret2)
             }
-            (CHSType::Any, _) | (_, CHSType::Any) => Ok(()),
+            (CHSType::AnyOpaque, _) | (_, CHSType::AnyOpaque) => Ok(()),
             (a, b) if a == b => Ok(()),
             (a, b) => return_chs_error!("Types cannot be unified {} {}", a, b),
         }
     }
 
-    /// Adds a type declaration
     pub fn global_insert(&mut self, k: impl ToString, v: Rc<CHSType>) -> Option<Rc<CHSType>> {
         self.globals.insert(k.to_string(), v)
     }
 
-    // Get a global type declaration
     pub fn global_get(&self, k: &str) -> Option<&CHSType> {
         self.globals.get(k).map(|v| v.as_ref())
     }
 
-    /// Gets a type declaration
     pub fn get(&self, k: &str) -> Option<&Rc<CHSType>> {
         for scope in self.locals.iter().rev() {
             if let Some(t) = scope.get(k) {
@@ -608,7 +766,6 @@ impl TypeEnv {
         self.globals.get(k)
     }
 
-    /// Inserts a type into the local scope
     pub fn locals_insert(&mut self, k: impl ToString, v: Rc<CHSType>) -> Option<Rc<CHSType>> {
         self.locals
             .last_mut()
@@ -616,7 +773,6 @@ impl TypeEnv {
             .insert(k.to_string(), v)
     }
 
-    /// Extends the local scope with new types
     pub fn locals_extend(&mut self, iter: impl Iterator<Item = (impl ToString, Rc<CHSType>)>) {
         self.locals
             .last_mut()
@@ -624,16 +780,14 @@ impl TypeEnv {
             .extend(iter.map(|(k, v)| (k.to_string(), v)));
     }
 
-    /// Creates a new local scope
     pub fn locals_new(&mut self) {
         self.locals.push(HashMap::new());
     }
 }
 
 pub trait CHSInfer {
-    // Infers the type
     fn infer(&self) -> CHSType;
-    // Automatic casts the type to the given type. Errors if the type cannot be cast
+
     fn cast(&mut self, ty: CHSType) -> CHSResult<()>;
 }
 
