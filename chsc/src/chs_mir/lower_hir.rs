@@ -90,7 +90,7 @@ impl<'src> MIRModule<'src> {
         for stmt in f.body.statements {
             self.lower_stmt(&mut builder, &mut sym_table, stmt)?;
         }
-
+        builder.finalize_blocks();
         self.items.push(MIRModuleItem::Function(builder.function));
         Ok(())
     }
@@ -168,12 +168,20 @@ impl<'src> MIRModule<'src> {
 
                 let then_block = builder.create_block();
                 let else_block = builder.create_block();
-                let merge_block = builder.create_block();
+                let end_block = if else_branch.is_some() {
+                    builder.create_block()
+                } else {
+                    else_block
+                };
 
                 builder.set_terminator(Terminator::Branch {
                     cond,
                     true_block: then_block,
-                    false_block: else_block,
+                    false_block: if else_branch.is_some() {
+                        else_block
+                    } else {
+                        end_block
+                    },
                 });
 
                 builder.switch_to_block(then_block);
@@ -183,22 +191,26 @@ impl<'src> MIRModule<'src> {
                 }
                 sym_table.exit_scope();
                 if !builder.function.body[then_block.0].is_terminated() {
-                    builder.set_terminator(Terminator::Goto(merge_block));
+                    builder.set_terminator(Terminator::Goto(end_block));
+                } else {
+                    return Ok(());
                 }
 
-                builder.switch_to_block(else_block);
                 if let Some(else_branch) = else_branch {
+                    builder.switch_to_block(else_block);
                     sym_table.enter_scope();
                     for stmt in else_branch.statements {
                         self.lower_stmt(builder, sym_table, stmt)?;
                     }
                     sym_table.exit_scope();
-                }
-                if !builder.function.body[else_block.0].is_terminated() {
-                    builder.set_terminator(Terminator::Goto(merge_block));
+                    if !builder.function.body[else_block.0].is_terminated() {
+                        builder.set_terminator(Terminator::Goto(end_block));
+                    } else {
+                        return Ok(());
+                    }
                 }
 
-                builder.switch_to_block(merge_block);
+                builder.switch_to_block(end_block);
             }
             HIRStmt::While {
                 span: _,
@@ -227,6 +239,8 @@ impl<'src> MIRModule<'src> {
                 sym_table.exit_scope();
                 if !builder.function.body[body_block.0].is_terminated() {
                     builder.set_terminator(Terminator::Goto(cond_block));
+                } else {
+                    return Ok(());
                 }
 
                 builder.switch_to_block(exit_block);
@@ -320,7 +334,28 @@ impl<'src> MIRModule<'src> {
 
                 Ok(Operand::Value(LocalValue(target)))
             }
-            Operand::Value(_) | Operand::Literal(_, _) => {
+            Operand::Value(addr) => {
+                let var_type = &builder.function.locals[addr.0.index];
+                let ty = match var_type.get_pointee_type() {
+                    Some(inner) => inner.clone(),
+                    None => {
+                        return_chs_error!(
+                            "{}: Cannot dereference non-pointer local type: {:?}",
+                            self.get_file_path(),
+                            var_type
+                        );
+                    }
+                };
+                let target = builder.alloc_local(ty);
+
+                builder.emit(MIROperation::Load {
+                    target: LocalValue(target),
+                    addr: Operand::Value(*addr),
+                });
+
+                Ok(Operand::Value(LocalValue(target)))
+            }
+            Operand::Literal(_, _) => {
                 return_chs_error!(
                     "{}: Trying to dereference a non-address operand: {:?}",
                     self.get_file_path(),
@@ -350,6 +385,9 @@ impl<'src> MIRModule<'src> {
             }
             HIRExpr::Literal(HIRLiteral::Str(span), chsty) => {
                 Ok(Operand::Literal(MIRLiteral::Str(span), chsty.unwrap()))
+            }
+            HIRExpr::Literal(HIRLiteral::Bool(span), chsty) => {
+                Ok(Operand::Literal(MIRLiteral::Bool(span), chsty.unwrap()))
             }
             HIRExpr::Identifier(span, _) => {
                 let name = self.get_span_str(&span);
@@ -394,7 +432,12 @@ impl<'src> MIRModule<'src> {
                 });
                 Ok(Operand::Value(LocalValue(target)))
             }
-            HIRExpr::Call { ty, span: _, callee, args } => {
+            HIRExpr::Call {
+                ty,
+                span: _,
+                callee,
+                args,
+            } => {
                 let ty = ty.unwrap();
                 let name = {
                     match *callee {
@@ -456,15 +499,61 @@ impl MIRBuilder {
     pub fn create_block(&mut self) -> BlockId {
         let new_block_id = BlockId(self.function.body.len());
         self.function.body.push(MIRBlock::default());
+        eprintln!("[DEBUG] Creating a new block with id: {:?}", new_block_id);
         new_block_id
     }
 
     /// Switch to an existing block
     pub fn switch_to_block(&mut self, block: BlockId) {
+        eprintln!("[DEBUG] Switching to block with id: {:?}", block);
         self.current_block = block;
     }
 
     fn add_arg(&mut self, addr: Addr) {
         self.function.args.push(addr);
+    }
+
+    pub fn finalize_blocks(&mut self) {
+        let mut reachable = vec![false; self.function.body.len()];
+        self.mark_reachable_blocks(BlockId(0), &mut reachable);
+
+        let len = self.function.body.len();
+        for (i, block) in self.function.body.iter_mut().enumerate() {
+            if !reachable[i] {
+                block.terminator = Some(Terminator::Unreachable);
+            } else if block.terminator.is_none() {
+                // Default fallthrough (if none set), jump to next block if it exists
+                if i + 1 < len {
+                    block.terminator = Some(Terminator::Goto(BlockId(i + 1)));
+                } else {
+                    block.terminator = Some(Terminator::Unreachable);
+                }
+            }
+        }
+    }
+
+    fn mark_reachable_blocks(&self, start: BlockId, reachable: &mut Vec<bool>) {
+        let mut worklist = vec![start];
+
+        while let Some(block_id) = worklist.pop() {
+            let idx = block_id.0;
+            if idx >= self.function.body.len() || reachable[idx] {
+                continue;
+            }
+            reachable[idx] = true;
+
+            match &self.function.body[idx].terminator {
+                Some(Terminator::Goto(target)) => worklist.push(*target),
+                Some(Terminator::Branch {
+                    true_block,
+                    false_block,
+                    ..
+                }) => {
+                    worklist.push(*true_block);
+                    worklist.push(*false_block);
+                }
+                _ => {}
+            }
+        }
     }
 }

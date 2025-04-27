@@ -69,8 +69,11 @@ pub struct MIRBlock {
 }
 
 impl MIRBlock {
-    pub const fn is_terminated(&self) -> bool {
-        self.terminator.is_some()
+    pub fn is_terminated(&self) -> bool {
+        match self.terminator {
+            None | Some(Terminator::Unreachable) => false,
+            _ => true
+        }
     }
 }
 
@@ -86,6 +89,13 @@ pub enum Terminator {
         false_block: BlockId,
     },
     Goto(BlockId),
+    Unreachable,
+}
+
+impl Terminator {
+    pub fn is_unreachable(&self) -> bool {
+        matches!(self, Self::Unreachable)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -111,11 +121,6 @@ pub enum MIROperation {
         op: Operator,
         operand: Operand,
     },
-    Refer {
-        // &x
-        target: Addr,
-        addr: Addr,
-    },
     Load {
         // *x
         target: LocalValue,
@@ -123,7 +128,7 @@ pub enum MIROperation {
     },
     FuncCall {
         target: Option<LocalValue>, // NOTE: f() and a = f()
-        name: String,   // NOTE: only named functions calls for now
+        name: String,               // NOTE: only named functions calls for now
         args: Vec<Operand>,
     },
 }
@@ -140,7 +145,6 @@ pub enum Operand {
     Address(LocalAddress),
     Literal(MIRLiteral, CHSType),
 }
-
 
 #[derive(Debug, Clone)]
 pub enum MIRLiteral {

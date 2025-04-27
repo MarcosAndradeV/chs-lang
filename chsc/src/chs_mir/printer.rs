@@ -110,9 +110,9 @@ impl<'src> MIRPrinter<'src> {
                     self.format_operand(op1)
                 )
             }
-            MIROperation::Refer { target, addr } => {
-                format!("{} : {} = addr_of {}", self.format_addr(target), locals[target.index], self.format_addr(addr))
-            }
+            // MIROperation::Refer { target, addr } => {
+            //     format!("{} : {} = addr_of {}", self.format_addr(target), locals[target.index], self.format_addr(addr))
+            // }
             MIROperation::Load { target, addr } => {
                 format!("{} : {} = load {}", self.format_addr(&target.0), locals[target.0.index], self.format_operand(addr))
             }
@@ -152,6 +152,7 @@ impl<'src> MIRPrinter<'src> {
                 )
             }
             Terminator::Goto(block) => format!("goto b{}", block.0),
+            Terminator::Unreachable => "unreachable".to_owned(),
         }
     }
 
