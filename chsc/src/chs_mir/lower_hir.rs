@@ -78,8 +78,14 @@ impl<'src> MIRModule<'src> {
     fn add_function(&mut self, f: HIRFunction) -> CHSResult<()> {
         let mut builder = MIRBuilder::new(f.name, f.fn_type);
 
-        // NOTE: Should be enough for now
         let mut sym_table = SymbolTable::new();
+
+        for param in f.params {
+            let name = self.get_span_str(&param.name);
+            let addr = builder.alloc_local(param.param_type);
+            builder.add_arg(addr);
+            sym_table.insert(name, addr);
+        }
 
         for stmt in f.body.statements {
             self.lower_stmt(&mut builder, &mut sym_table, stmt)?;
@@ -456,5 +462,9 @@ impl MIRBuilder {
     /// Switch to an existing block
     pub fn switch_to_block(&mut self, block: BlockId) {
         self.current_block = block;
+    }
+
+    fn add_arg(&mut self, addr: Addr) {
+        self.function.args.push(addr);
     }
 }

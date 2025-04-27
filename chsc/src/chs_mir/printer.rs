@@ -46,10 +46,16 @@ impl<'src> MIRPrinter<'src> {
     }
 
     fn print_function(&self, output: &mut String, func: &MIRFunction) {
+        let args_str = func.args
+            .iter()
+            .map(|addr| format!("{} : {}", self.format_addr(addr), func.locals[addr.index]))
+            .collect::<Vec<_>>()
+            .join(", ");
         writeln!(
             output,
-            "fn {} : {} {{",
+            "fn {}({}) : {} {{",
             self.get_span_str(&func.name),
+            args_str,
             func.fn_type
         )
         .unwrap();

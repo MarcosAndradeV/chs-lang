@@ -38,6 +38,7 @@ pub enum MIRModuleItem {
 pub struct MIRFunction {
     pub name: Span<String>,
     pub fn_type: CHSType,
+    pub args: Vec<Addr>,
     pub locals: Vec<CHSType>,
     pub body: Vec<MIRBlock>,
 }
@@ -47,6 +48,7 @@ impl MIRFunction {
         Self {
             name,
             fn_type,
+            args: vec![],
             locals: vec![],
             body: vec![],
         }
