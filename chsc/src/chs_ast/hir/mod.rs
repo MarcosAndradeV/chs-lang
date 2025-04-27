@@ -12,21 +12,6 @@ use super::{
 };
 
 #[derive(Debug)]
-pub struct HIROperator {
-    pub span: Span<String>,
-    pub op: Operator,
-}
-
-impl HIROperator {
-    fn from_ast_op(token: Token, op: Operator) -> HIROperator {
-        Self {
-            span: Span::from(token),
-            op,
-        }
-    }
-}
-
-#[derive(Debug)]
 pub struct HIRModule<'src> {
     pub raw_module: &'src RawModule,
     pub items: Vec<HIRModuleItem>,
@@ -169,6 +154,12 @@ pub enum HIRStmt {
         span: Span<()>,
         expr: Option<Box<HIRExpr>>,
     },
+    Funcall {
+        ty: Option<CHSType>,
+        span: Span<()>,
+        callee: Box<HIRExpr>,
+        args: Vec<HIRExpr>,
+    },
     ExprStmt {
         span: Span<()>, // TODO: Implement span for ExprStmt
         value: HIRExpr,
@@ -217,6 +208,12 @@ impl HIRStmt {
                 span: Span::from(r.token),
                 expr: r.expr.map(|e| HIRExpr::from_ast_expr(e).into()),
             },
+            nodes::Expression::Call(f) => Self::Funcall {
+                ty: None,
+                span: Span::from(f.token),
+                callee: HIRExpr::from_ast_expr(f.callee).into(),
+                args: f.args.into_iter().map(HIRExpr::from_ast_expr).collect(),
+            },
             e => HIRStmt::ExprStmt {
                 span: e.span(),
                 value: HIRExpr::from_ast_expr(e).into(),
@@ -231,13 +228,13 @@ pub enum HIRExpr {
     Identifier(Span<String>, Option<CHSType>),
     Binary {
         ty: Option<CHSType>,
-        op: HIROperator,
+        op: Operator,
         lhs: Box<HIRExpr>,
         rhs: Box<HIRExpr>,
     },
     Unary {
         ty: Option<CHSType>,
-        op: HIROperator,
+        op: Operator,
         operand: Box<HIRExpr>,
     },
     Call {
@@ -340,25 +337,25 @@ impl HIRExpr {
                     HIRExpr::Literal(HIRLiteral::Int(s), Some(CHSType::U64))
                 }
                 nodes::ConstExpression::BooleanLiteral(s) => {
-                    HIRExpr::Literal(HIRLiteral::Bool(s), None)
+                    HIRExpr::Literal(HIRLiteral::Bool(s), Some(CHSType::Boolean))
                 }
                 nodes::ConstExpression::Identifier(s) => HIRExpr::Identifier(s, None),
                 nodes::ConstExpression::StringLiteral(s) => {
-                    HIRExpr::Literal(HIRLiteral::Str(s), None)
+                    HIRExpr::Literal(HIRLiteral::Str(s), Some(CHSType::String))
                 }
                 nodes::ConstExpression::CharLiteral(s) => {
-                    HIRExpr::Literal(HIRLiteral::Char(s), None)
+                    HIRExpr::Literal(HIRLiteral::Char(s), Some(CHSType::Char))
                 }
             },
             nodes::Expression::Binop(b) => HIRExpr::Binary {
                 ty: None,
-                op: HIROperator::from_ast_op(b.token, b.op),
+                op: b.op,
                 lhs: HIRExpr::from_ast_expr(b.left).into(),
                 rhs: HIRExpr::from_ast_expr(b.right).into(),
             },
             nodes::Expression::Unop(u) => HIRExpr::Unary {
                 ty: None,
-                op: HIROperator::from_ast_op(u.token, u.op),
+                op: u.op,
                 operand: HIRExpr::from_ast_expr(u.operand).into(),
             },
             nodes::Expression::Call(c) => HIRExpr::Call {

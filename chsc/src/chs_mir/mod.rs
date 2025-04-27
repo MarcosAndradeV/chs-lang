@@ -4,6 +4,7 @@ use crate::{
     chs_types::CHSType,
 };
 
+pub mod lower_hir;
 pub mod printer;
 
 #[derive(Debug)]
@@ -37,7 +38,19 @@ pub enum MIRModuleItem {
 pub struct MIRFunction {
     pub name: Span<String>,
     pub fn_type: CHSType,
+    pub locals: Vec<CHSType>,
     pub body: Vec<MIRBlock>,
+}
+
+impl MIRFunction {
+    pub fn new(name: Span<String>, fn_type: CHSType) -> Self {
+        Self {
+            name,
+            fn_type,
+            locals: vec![],
+            body: vec![],
+        }
+    }
 }
 
 /// Representation of a extern function in the MIR
@@ -70,12 +83,11 @@ pub enum Terminator {
         true_block: BlockId,
         false_block: BlockId,
     },
-    Goto(BlockId)
+    Goto(BlockId),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Addr {
-    ty: CHSType,
     index: usize,
 }
 
@@ -83,45 +95,66 @@ pub struct Addr {
 #[derive(Debug)]
 pub enum MIROperation {
     Assignment {
-        target: Addr,
+        target: LocalAddress,
         value: Operand,
     },
     Binop {
-        target: Addr,
+        target: LocalValue,
         op: Operator,
-        op1: Addr,
-        op2: Addr,
+        lhs: Operand,
+        rhs: Operand,
     },
     Unop {
-        target: Addr,
+        target: LocalValue,
         op: Operator,
-        op1: Addr,
+        operand: Operand,
     },
-    Refer { // &x
+    Refer {
+        // &x
         target: Addr,
-        op1: Addr,
+        addr: Addr,
     },
-    Defer { // *x
-        target: Addr,
-        op1: Addr,
+    Load {
+        // *x
+        target: LocalValue,
+        addr: Operand,
     },
     FuncCall {
-        target: Option<Addr>, // NOTE: f() and a = f()
-        name: Span<String>, // NOTE: only named functions calls for now
-        args: Vec<Addr>
+        target: Option<LocalValue>, // NOTE: f() and a = f()
+        name: String,   // NOTE: only named functions calls for now
+        args: Vec<Operand>,
     },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
+pub struct LocalValue(pub Addr);
+
+#[derive(Debug, Clone, Copy)]
+pub struct LocalAddress(pub Addr);
+
+#[derive(Debug, Clone)]
 pub enum Operand {
+    Value(LocalValue),
+    Address(LocalAddress),
     Literal(MIRLiteral, CHSType),
-    Local(Addr),
 }
 
-#[derive(Debug)]
+
+#[derive(Debug, Clone)]
 pub enum MIRLiteral {
     Int(Span<u64>),
     Bool(Span<bool>),
     Str(Span<String>),
     Char(Span<char>),
+}
+
+impl MIRLiteral {
+    pub fn span(&self) -> Span<String> {
+        match self {
+            MIRLiteral::Int(span) => span.to_span(),
+            MIRLiteral::Bool(span) => span.to_span(),
+            MIRLiteral::Str(span) => span.to_span(),
+            MIRLiteral::Char(span) => span.to_span(),
+        }
+    }
 }

@@ -7,8 +7,10 @@ pub enum CHSType {
     /// Generic Int type
     Int,
     /// Specific Int types
-    I32, I64,
-    U32, U64,
+    I32,
+    I64,
+    U32,
+    U64,
 
     Void,
     Char,
@@ -69,5 +71,12 @@ impl fmt::Display for CHSType {
 impl CHSType {
     pub fn is_never(&self) -> bool {
         matches!(self, CHSType::Never)
+    }
+
+    pub fn get_pointee_type(&self) -> Option<&Self> {
+        match self {
+            CHSType::Pointer(inner) => Some(inner),
+            _ => None,
+        }
     }
 }

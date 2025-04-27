@@ -1,15 +1,11 @@
 use std::{collections::HashMap, rc::Rc};
 
-use crate::{
-    chs_error,
-    chs_lexer::Span,
-    chs_types::CHSType,
-    chs_util::*,
-    return_chs_error,
-};
+use crate::{chs_error, chs_lexer::Span, chs_types::CHSType, chs_util::*, return_chs_error};
 
 use super::{
-    hir::{HIRBlock, HIRExpr, HIRFunction, HIRModule, HIRModuleItem, HIRStmt}, nodes::OperatorKind, ModuleImpl, RawModule
+    ModuleImpl, RawModule,
+    hir::{HIRBlock, HIRExpr, HIRFunction, HIRModule, HIRModuleItem, HIRStmt},
+    nodes::OperatorKind,
 };
 
 pub struct TypeChecker<'src> {
@@ -25,7 +21,6 @@ impl<'src> ModuleImpl<'src> for TypeChecker<'src> {
 
     fn get_token_str(&self, token: &crate::chs_lexer::Token) -> &'src str {
         &self.raw_module[token]
-
     }
 
     fn get_file_path(&self) -> &'src str {
@@ -150,7 +145,7 @@ impl<'src> TypeChecker<'src> {
                 let lhs_type = self.check_expr(lhs)?;
                 let rhs_type = self.check_expr(rhs)?;
 
-                let expr_ty = match op.op.kind {
+                let expr_ty = match op.kind {
                     // Arithmetic operators
                     OperatorKind::Plus
                     | OperatorKind::Minus
@@ -259,7 +254,7 @@ impl<'src> TypeChecker<'src> {
             }
             HIRExpr::Unary { ty, op, operand } => {
                 let operand_type = self.check_expr(operand)?;
-                let expr_ty = match op.op.kind {
+                let expr_ty = match op.kind {
                     OperatorKind::Negate => match operand_type {
                         CHSType::I32 => CHSType::I32,
                         CHSType::U32 => CHSType::I32,
@@ -276,7 +271,11 @@ impl<'src> TypeChecker<'src> {
                     OperatorKind::Deref => match operand_type {
                         CHSType::Pointer(inner) => *inner,
                         _ => {
-                            return_chs_error!("{}:{} Can only dereference pointer types", self.get_file_path(), op.span.loc)
+                            return_chs_error!(
+                                "{}:{} Can only dereference pointer types",
+                                self.get_file_path(),
+                                op.span.loc
+                            )
                         }
                     },
                     OperatorKind::Refer => CHSType::Pointer(Box::new(operand_type)),
@@ -482,8 +481,46 @@ impl<'src> TypeChecker<'src> {
                     value_type.clone()
                 };
                 let name_str = self.get_span_str(name);
+                *ty = Some(var_type.clone());
                 self.env.locals_insert(name_str, Rc::new(var_type.clone()));
                 Ok(ReturnFlow::Never)
+            }
+            HIRStmt::Funcall {
+                ty,
+                span,
+                callee,
+                args,
+            } => {
+                let callee_type = self.check_expr(callee)?;
+                match callee_type {
+                    CHSType::Function(param_types, return_type) => {
+                        if args.len() < param_types.len() {
+                            return_chs_error!("{} Wrong number of arguments", span.loc);
+                        }
+                        for (arg, expected_type) in args.iter_mut().zip(param_types.iter()) {
+                            let arg_type = self.check_expr(arg)?;
+                            self.env.unify(&arg_type, expected_type)?;
+                        }
+                        *ty = Some((*return_type).clone());
+                        Ok(ReturnFlow::Never)
+                    }
+                    CHSType::VariadicFunction(param_types, return_type) => {
+                        if args.len() < param_types.len() {
+                            return_chs_error!("{} Wrong number of arguments", span.loc);
+                        }
+                        for (arg, expected_type) in args.iter_mut().zip(param_types.iter()) {
+                            let arg_type = self.check_expr(arg)?;
+                            self.env.unify(&arg_type, expected_type)?;
+                        }
+                        for arg in args.iter_mut() {
+                            let arg_type = self.check_expr(arg)?;
+                            self.env.unify(&arg_type, &CHSType::Any)?;
+                        }
+                        *ty = Some((*return_type).clone());
+                        Ok(ReturnFlow::Never)
+                    }
+                    _ => return_chs_error!("{} Called expression is not a function", span.loc),
+                }
             }
             HIRStmt::ExprStmt { span: _, value } => {
                 self.check_expr(value)?;

@@ -375,6 +375,14 @@ impl Operator {
     pub fn precedence(&self) -> Precedence {
         self.kind.precedence()
     }
+
+    pub fn is_refer(&self) -> bool {
+        matches!(self.kind, OperatorKind::Refer)
+    }
+
+    pub fn is_deref(&self) -> bool {
+        matches!(self.kind, OperatorKind::Deref)
+    }
 }
 
 impl fmt::Display for Operator {
@@ -482,6 +490,36 @@ impl OperatorKind {
             Self::BitXor => Precedence::BitXor,
             // _ => Precedence::Lowest,
         }
+    }
+}
+
+impl Operator {
+    pub fn is_binary(&self) -> bool {
+        matches!(
+            self.kind,
+            OperatorKind::Plus
+                | OperatorKind::Minus
+                | OperatorKind::Mult
+                | OperatorKind::Div
+                | OperatorKind::Mod
+                | OperatorKind::LAnd
+                | OperatorKind::LOr
+                | OperatorKind::BitAnd
+                | OperatorKind::BitOr
+                | OperatorKind::BitXor
+                | OperatorKind::Shl
+                | OperatorKind::Shr
+                | OperatorKind::Eq
+                | OperatorKind::NEq
+                | OperatorKind::Lt
+                | OperatorKind::Gt
+                | OperatorKind::Le
+                | OperatorKind::Ge
+        )
+    }
+
+    pub fn is_unary(&self) -> bool {
+        matches!(self.kind, OperatorKind::Negate | OperatorKind::LNot)
     }
 }
 

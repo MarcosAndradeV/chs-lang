@@ -4,12 +4,7 @@
 use std::{fs, path::PathBuf, process::Command};
 
 use chsc::{
-    chs_ast::{self, RawModule, hir::HIRModule, parser::Parser, typechecker::TypeChecker},
-    chs_error,
-    chs_util::{CHSError, CHSResult, file_changed},
-    cli,
-    config::Config,
-    return_chs_error,
+    chs_ast::{self, hir::HIRModule, parser::Parser, typechecker::TypeChecker, RawModule}, chs_error, chs_mir::{printer::MIRPrinter, MIRModule}, chs_util::{file_changed, CHSError, CHSResult}, cli, config::Config, return_chs_error
 };
 use clap::Parser as _;
 
@@ -88,12 +83,17 @@ fn compile(
     let module = Parser::new(&raw_module).parse()?;
 
     log!(silent, "[INFO] Converting to HIR...");
-    let mut module = HIRModule::from_ast(module);
+    let mut module = HIRModule::from_ast(module); // TODO: Add CHSError for report here
 
     log!(silent, "[INFO] Running type checker...");
     let mut checker = TypeChecker::new(module.raw_module);
     checker.check_module(&mut module)?;
 
+    let module = MIRModule::from_hir(module)?;
+
+    let printer= MIRPrinter::new(&raw_module);
+    let m = printer.print_module(&module);
+    println!("MIR:\n{m}");
     return_chs_error!("Unimplemented");
 }
 
