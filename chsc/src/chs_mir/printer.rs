@@ -34,7 +34,7 @@ impl<'src> MIRPrinter<'src> {
                 MIRModuleItem::ExternFunction(f) => {
                     writeln!(
                         output,
-                        "extern fn {} : {} {{",
+                        "extern fn {} : {}\n",
                         self.get_span_str(&f.name),
                         f.fn_type
                     )
