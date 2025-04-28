@@ -273,6 +273,18 @@ impl HIRExpr {
             HIRExpr::Syscall { span, .. } => span.to_span(),
         }
     }
+
+    pub fn is_identifier(&self) -> bool {
+        matches!(self, Self::Identifier(..))
+    }
+
+    pub fn identifier(&self) -> Span<String> {
+        if let HIRExpr::Identifier(span, _) = self {
+            span.to_span()
+        } else {
+            panic!("identifier")
+        }
+    }
 }
 
 impl CHSInfer for HIRExpr {
