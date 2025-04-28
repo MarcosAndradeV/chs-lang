@@ -560,6 +560,9 @@ impl<'src> TypeChecker<'src> {
     fn ensure_assignable(&self, expr: &HIRExpr) -> Result<(), CHSError> {
         match expr {
             HIRExpr::Identifier { .. } | HIRExpr::Index { .. } => Ok(()),
+            HIRExpr::Unary { op, operand, .. } if op.is_deref() && operand.is_identifier() => {
+                Ok(())
+            }
             _ => return_chs_error!(
                 "{} Left hand side of assignment must be variable, index or field",
                 expr.span().loc
