@@ -115,7 +115,25 @@ impl<'src> MIRModule<'src> {
                     )
                 }
             }
-            _ => return_chs_error!("TODO: AAAAAAAAAA"),
+            HIRExpr::Unary { op, operand, .. } if op.is_deref() => {
+                if operand.is_identifier() {
+                    let span = operand.identifier();
+                    let name = self.get_span_str(&span);
+                    if let Some(addr) = sym_table.lookup(name) {
+                        Ok(addr)
+                    } else {
+                        return_chs_error!(
+                            "{}:{}: Undefined identfier {} found in HIR lowering.",
+                            self.get_file_path(),
+                            span.loc,
+                            name
+                        )
+                    }
+                } else {
+                    self.resolve_variable(operand, _builder, sym_table)
+                }
+            }
+            _ => return_chs_error!("TODO: resolve_variable"),
         }
     }
 
