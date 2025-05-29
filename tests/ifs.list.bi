@@ -1,6 +1,6 @@
 :i count 2
-:b shell 59
-cargo run -q --bin chs -- compile-run tests/ifs.chs --force
+:b shell 51
+cargo run -q --bin chs -- compile-run tests/ifs.chs
 :i returncode 0
 :b stdout 57
 [INFO] Running executable...

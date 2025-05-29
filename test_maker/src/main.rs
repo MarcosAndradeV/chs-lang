@@ -276,7 +276,7 @@ fn create_test_file(file_path: &Path) -> Result<File, ()> {
 
 fn write_tests_to_file(f: &mut File, test_file_path: &Path) -> Result<(), ()> {
     let run_cmd = format!(
-        "cargo run -q --bin chs -- compile-run {} --force\n",
+        "cargo run -q --bin chs -- compile-run {}\n",
         test_file_path.display()
     );
     // NOTE Support OS-specific file deletion commands

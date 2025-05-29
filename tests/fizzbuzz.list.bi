@@ -1,6 +1,6 @@
 :i count 2
-:b shell 64
-cargo run -q --bin chs -- compile-run tests/fizzbuzz.chs --force
+:b shell 56
+cargo run -q --bin chs -- compile-run tests/fizzbuzz.chs
 :i returncode 0
 :b stdout 77
 [INFO] Running executable...

@@ -1,2 +1,2 @@
-cargo run -q --bin chs -- compile-run tests/ifs.chs --force
+cargo run -q --bin chs -- compile-run tests/ifs.chs
 rm tests/ifs

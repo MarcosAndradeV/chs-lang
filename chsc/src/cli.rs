@@ -27,10 +27,6 @@ pub enum Commands {
         #[arg(short, long)]
         silent: bool,
 
-        /// Force compilation even if the source file has not changed
-        #[arg(short, long)]
-        force: bool,
-
         /// Keep the intermediate files
         #[arg(long)]
         keep: bool,
@@ -48,10 +44,6 @@ pub enum Commands {
         /// Output file name
         #[arg(short, long)]
         output: Option<String>,
-
-        /// Force compilation even if the source file has not changed
-        #[arg(short, long)]
-        force: bool,
 
         /// Pass flags to the CC compiler (can be specified multiple times)
         #[arg(short = 'C', long = "compiler-flag", num_args = 1)]

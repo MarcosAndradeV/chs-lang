@@ -1,2 +1,2 @@
-cargo run -q --bin chs -- compile-run tests/fizzbuzz.chs --force
+cargo run -q --bin chs -- compile-run tests/fizzbuzz.chs
 rm tests/fizzbuzz

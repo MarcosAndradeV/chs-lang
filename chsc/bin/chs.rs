@@ -6,7 +6,7 @@ use chsc::{
     },
     chs_codegen::Backend,
     chs_error,
-    chs_util::{binary_exists, file_changed, CHSError, CHSResult},
+    chs_util::{binary_exists, CHSError, CHSResult},
     cli,
     config::Config,
     return_chs_error,
@@ -34,7 +34,6 @@ fn main() {
             output,
             compiler_flags,
             silent,
-            force,
             keep,
         } => {
             if !silent {
@@ -43,7 +42,7 @@ fn main() {
                     println!("[INFO] Output: {}", out);
                 }
             }
-            let result = compile(input, output, compiler_flags, false, silent, force, keep);
+            let result = compile(input, output, compiler_flags, false, silent, keep);
             if let Err(err) = result {
                 eprintln!("[ERROR] {}", err);
                 std::process::exit(1);
@@ -53,10 +52,9 @@ fn main() {
         cli::Commands::CompileRun {
             input,
             output,
-            force,
             compiler_flags,
         } => {
-            let result = compile(input, output, compiler_flags, true, true, force, false);
+            let result = compile(input, output, compiler_flags, true, true, false);
             if let Err(err) = result {
                 eprintln!("[ERROR] {}", err);
                 std::process::exit(1);
@@ -79,7 +77,6 @@ fn compile(
     compiler_flags: Vec<String>,
     run: bool,
     silent: bool,
-    force: bool,
     keep: bool,
 ) -> CHSResult<()> {
     let file_path = PathBuf::from(&input_path);
@@ -88,17 +85,6 @@ fn compile(
     let out_path = outpath
         .map(PathBuf::from)
         .unwrap_or_else(|| file_path.with_extension(""));
-
-    if !file_changed(&file_path, &out_path) && !force {
-        log!(
-            silent && !run,
-            "[INFO] Skipping rebuild, using cached output."
-        );
-        if run {
-            run_exe(out_path)?;
-        }
-        return Ok(());
-    }
 
     log!(silent, "[INFO] Reading module from file: {}", input_path);
     let raw_module = RawModule::new(chs_ast::read_file(&input_path), input_path);

@@ -1,6 +1,6 @@
 :i count 2
-:b shell 61
-cargo run -q --bin chs -- compile-run tests/hello.chs --force
+:b shell 53
+cargo run -q --bin chs -- compile-run tests/hello.chs
 :i returncode 0
 :b stdout 60
 [INFO] Running executable...
