@@ -1,3 +1,5 @@
+use crate::chs_mir::MIRModule;
+
 
 pub mod fasm;
 pub mod qbe;
@@ -8,10 +10,10 @@ pub enum CodeGenerator {
 }
 
 impl CodeGenerator {
-    pub fn generate(&self) {
+    pub fn generate(self, m: MIRModule) {
         match self {
-            CodeGenerator::QBE => qbe::generate(),
-            CodeGenerator::Fasm => fasm::generate(),
+            CodeGenerator::QBE => qbe::generate(m),
+            CodeGenerator::Fasm => fasm::generate(m),
         }
     }
 }

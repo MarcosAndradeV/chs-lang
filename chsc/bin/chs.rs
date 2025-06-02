@@ -1,7 +1,7 @@
-use std::{fs, path::PathBuf, process::Command};
+use std::path::PathBuf;
 
 use chsc::{
-    chs_ast::{self, hir::HIRModule, parser::Parser, typechecker::TypeChecker, RawModule}, chs_codegen::CodeGenerator, chs_error, chs_util::{binary_exists, CHSError, CHSResult}, cli, config::Config, return_chs_error
+    chs_ast::{self, hir::HIRModule, parser::Parser, typechecker::TypeChecker, RawModule}, chs_codegen::CodeGenerator, chs_error, chs_mir::MIRModule, chs_util::{binary_exists, CHSError, CHSResult}, cli, config::Config
 };
 use clap::Parser as _;
 
@@ -97,97 +97,9 @@ fn compile(
     log!(silent, "[INFO] Running type checker...");
     let mut checker = TypeChecker::new(&raw_module);
     checker.check_module(&mut module)?;
+    let m = MIRModule::new();
 
-    CodeGenerator::QBE.generate();
+    CodeGenerator::Fasm.generate(m);
 
     Ok(())
-}
-
-#[allow(dead_code)]
-fn generate_code_with_qbe(
-    compiler_flags: Vec<String>,
-    run: bool,
-    silent: bool,
-    keep: bool,
-    ssa_path: PathBuf,
-    asm_path: PathBuf,
-    out_path: PathBuf,
-) -> Result<(), CHSError> {
-    fs::write(&ssa_path, "").map_err(|e| chs_error!("Failed to write SSA file: {}", e))?;
-    log!(
-        silent,
-        "[INFO] CMD: qbe -o {} {}",
-        asm_path.display(),
-        ssa_path.display()
-    );
-    let output = Command::new("qbe")
-        .arg("-o")
-        .arg(&asm_path)
-        .arg(&ssa_path)
-        .output()
-        .map_err(|e| chs_error!("Failed to run qbe: {}", e))?;
-    if !output.status.success() {
-        return_chs_error!(
-            "qbe failed to generate assembly\nstdout:\n{}\nstderr:\n{}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        );
-    }
-    log!(
-        silent,
-        "[INFO] CMD: cc -o {} {} {}",
-        out_path.display(),
-        asm_path.display(),
-        compiler_flags.join(" ")
-    );
-    let mut cc_command = Command::new("cc");
-    cc_command.arg("-o").arg(&out_path).arg(&asm_path);
-    if !compiler_flags.is_empty() {
-        cc_command.args(&compiler_flags);
-    }
-    let output = cc_command
-        .output()
-        .map_err(|e| chs_error!("Failed to run cc: {}", e))?;
-    if !output.status.success() {
-        return_chs_error!(
-            "cc failed to generate final executable\nstdout:\n{}\nstderr:\n{}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        );
-    }
-    log!(silent, "[INFO] Compilation completed successfully!");
-    if run {
-        run_exe(out_path)?;
-    }
-    Ok(if !keep {
-        log!(silent, "[INFO] Cleaning up temporary files...");
-        let paths = &[&ssa_path, &asm_path];
-        cleanup_files(silent, paths);
-    })
-}
-
-fn cleanup_files(silent: bool, paths: &[&PathBuf]) {
-    for temp_file in paths {
-        if let Err(e) = fs::remove_file(temp_file) {
-            log!(
-                silent,
-                "[WARN] Failed to remove temp file {}: {}",
-                temp_file.display(),
-                e
-            );
-        }
-    }
-}
-
-fn run_exe(path: PathBuf) -> CHSResult<()> {
-    println!("[INFO] Running executable...");
-    let output = Command::new(&path)
-        .status()
-        .map_err(|e| chs_error!("Failed to execute binary: {}", e))?;
-
-    if output.success() {
-        Ok(())
-    } else {
-        Err(chs_error!("Execution failed"))
-    }
 }

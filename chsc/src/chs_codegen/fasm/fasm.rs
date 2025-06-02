@@ -528,6 +528,7 @@ impl fmt::Display for Block {
 
 #[derive(Debug, Default, Clone)]
 pub struct Function {
+    public: bool,
     name: String,
     stack_allocated: usize,
     blocks: Vec<Block>,
@@ -536,8 +537,9 @@ pub struct Function {
 }
 
 impl Function {
-    pub fn new(name: impl Into<String>) -> Self {
+    pub fn new(public: bool, name: impl Into<String>) -> Self {
         Function {
+            public,
             name: name.into(),
             stack_allocated: 0,
             blocks: Vec::new(),
@@ -600,7 +602,10 @@ impl fmt::Display for Function {
         if self.name.is_empty() {
             return Ok(());
         }
-        writeln!(f, ";; function",)?;
+        writeln!(f, ";; function")?;
+        if self.public {
+            writeln!(f, "public {}", self.name)?;
+        }
         writeln!(f, "{}:", self.name)?;
 
         if self.prologe {
@@ -673,20 +678,26 @@ impl fmt::Display for Module {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if self.link_with_c {
             writeln!(f, "format ELF64")?;
-            writeln!(f, "section \".text\" executable")?;
-            writeln!(f, "public main")?;
-            for e in &self.extrn {
-                let _ = writeln!(f, "extrn {e}");
-            }
         } else {
             writeln!(f, "format ELF64 executable")?;
             writeln!(f, "entry _start")?;
-            writeln!(f, "segment executable")?;
-            writeln!(f, "_start:")?;
-            writeln!(f, "\tcall _main")?;
-            writeln!(f, "\tmov rax, 60")?;
-            writeln!(f, "\tmov rdi, 0")?;
-            writeln!(f, "\tsyscall")?;
+        }
+
+        for e in &self.extrn {
+            let _ = writeln!(f, "extrn {e}");
+        }
+
+        if !self.functions.is_empty() {
+            if self.link_with_c {
+                writeln!(f, "section \".text\" executable")?;
+            } else {
+                writeln!(f, "segment executable")?;
+                writeln!(f, "_start:")?;
+                writeln!(f, "\tcall _main")?;
+                writeln!(f, "\tmov rax, 60")?;
+                writeln!(f, "\tmov rdi, 0")?;
+                writeln!(f, "\tsyscall")?;
+            }
         }
 
         for func in self.functions.iter() {
@@ -700,9 +711,11 @@ impl fmt::Display for Module {
                 writeln!(f, "segment readable writable")?;
             }
         }
+
         for data in self.data.iter() {
             writeln!(f, "{}", data)?;
         }
+
         Ok(())
     }
 }

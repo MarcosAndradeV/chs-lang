@@ -1,5 +1,5 @@
 use core::fmt;
-use std::{path::Path, time::SystemTime};
+use std::{ffi::OsStr, fmt::Debug, fs, path::Path, process::Command, time::SystemTime};
 pub struct CHSError(pub String);
 pub type CHSResult<T> = Result<T, CHSError>;
 
@@ -88,6 +88,65 @@ pub fn file_changed(src: &Path, artifact: &Path) -> bool {
             src_meta.modified().unwrap_or(SystemTime::now())
                 > art_meta.modified().unwrap_or(SystemTime::now())
         }
-        _ => true, // Force rebuild if files are missing or error
+        _ => true,
     }
+}
+
+pub fn cleanup_files<P: AsRef<Path> + Debug>(paths: &[P]) {
+    for temp_file in paths {
+        if let Err(e) = fs::remove_file(temp_file) {
+            eprintln!("[WARN] Failed to remove temp file {:?}: {}", temp_file, e);
+        }
+    }
+}
+
+pub fn run_exe<P: AsRef<OsStr> + Debug>(exe: P) -> CHSResult<()> {
+    println!("[INFO] Running executable...");
+    let output = Command::new(exe)
+        .status()
+        .map_err(|e| chs_error!("Failed to execute binary: {}", e))?;
+
+    if output.success() {
+        Ok(())
+    } else {
+        Err(chs_error!("Execution failed"))
+    }
+}
+
+pub fn run_cc<P: AsRef<OsStr> + Debug>(
+    compiler_flags: Vec<String>,
+    asm_path: P,
+    out_path: P,
+) -> Result<(), CHSError> {
+    let mut cc_command = Command::new("cc");
+    cc_command.arg("-o").arg(out_path).arg(asm_path);
+    if !compiler_flags.is_empty() {
+        cc_command.args(&compiler_flags);
+    }
+    let output = cc_command
+        .output()
+        .map_err(|e| chs_error!("Failed to run cc: {}", e))?;
+    Ok(if !output.status.success() {
+        return_chs_error!(
+            "cc failed to generate final executable\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    })
+}
+
+pub fn run_qbe<P: AsRef<OsStr> + Debug>(ssa_path: P, asm_path: P) -> Result<(), CHSError> {
+    let output = Command::new("qbe")
+        .arg("-o")
+        .arg(asm_path)
+        .arg(ssa_path)
+        .output()
+        .map_err(|e| chs_error!("Failed to run qbe: {}", e))?;
+    Ok(if !output.status.success() {
+        return_chs_error!(
+            "qbe failed to generate assembly\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    })
 }

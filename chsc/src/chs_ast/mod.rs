@@ -2,7 +2,6 @@ use std::{fs, path::Path, process::exit};
 
 
 pub mod hir;
-pub mod mir;
 pub mod nodes;
 pub mod typechecker;
 pub mod ast;
