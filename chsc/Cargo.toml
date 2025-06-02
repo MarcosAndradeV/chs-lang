@@ -9,6 +9,8 @@ default-run = "chs"
 qbe = "2.5.0"
 clap = { workspace = true }
 which = "4"
+thiserror = { workspace = true }
+chslexer = { path = "../chslexer"}
 
 [[bin]]
 name = "chs"

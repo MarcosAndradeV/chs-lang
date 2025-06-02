@@ -9,28 +9,13 @@ use crate::{
 };
 
 use super::{
-    hir::{HIRBlock, HIRExpr, HIRFunction, HIRModule, HIRModuleItem, HIRStmt}, nodes::Operator, ModuleImpl, RawModule
+    hir::{HIRBlock, HIRExpr, HIRFunction, HIRModule, HIRModuleItem, HIRStmt}, nodes::Operator, RawModule
 };
 
 pub struct TypeChecker<'src> {
     env: TypeEnv,
     raw_module: &'src RawModule,
     curr_ret_type: CHSType,
-}
-
-impl<'src> ModuleImpl<'src> for TypeChecker<'src> {
-    fn get_span_str<T>(&self, span: &Span<T>) -> &'src str {
-        &self.raw_module[span]
-    }
-
-    fn get_token_str(&self, token: &crate::chs_lexer::Token) -> &'src str {
-        &self.raw_module[token]
-
-    }
-
-    fn get_file_path(&self) -> &'src str {
-        &self.raw_module.file_path
-    }
 }
 
 impl<'src> TypeChecker<'src> {

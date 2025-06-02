@@ -3,33 +3,20 @@ use std::str::FromStr;
 
 use crate::{
     chs_error,
-    chs_lexer::{Loc, Span, Token, TokenKind},
+    // chs_lexer::{Loc, Span, Token, TokenKind},
     chs_types::CHSType,
     chs_util::{CHSError, CHSResult},
     return_chs_error,
 };
 
-use super::{ModuleImpl, RawModule};
+use chslexer::*;
 
+use super::RawModule;
 
 #[derive(Debug)]
 pub struct ASTModule<'src> {
     pub raw_module: &'src RawModule,
     pub items: Vec<ModuleItem>,
-}
-
-impl<'src> ModuleImpl<'src> for ASTModule<'src> {
-    fn get_span_str<T>(&self, span: &Span<T>) -> &'src str {
-        &self.raw_module[span]
-    }
-
-    fn get_token_str(&self, token: &Token) -> &'src str {
-        &self.raw_module[token]
-    }
-
-    fn get_file_path(&self) -> &'src str {
-        &self.raw_module.file_path
-    }
 }
 
 impl<'src> ASTModule<'src> {
@@ -55,15 +42,15 @@ pub enum ModuleItem {
 
 #[derive(Debug)]
 pub enum ConstExpression {
-    Identifier(Span<String>),
-    IntegerDefault(Span<u64>),
-    IntegerLiteral(Span<u64>),
-    UnsignedIntegerLiteral(Span<u64>),
-    LongIntegerLiteral(Span<u64>),
-    LongUnsignedIntegerLiteral(Span<u64>),
-    BooleanLiteral(Span<bool>),
-    StringLiteral(Span<String>),
-    CharLiteral(Span<char>),
+    Identifier(Token),
+    IntegerDefault(Token),
+    IntegerLiteral(Token),
+    UnsignedIntegerLiteral(Token),
+    LongIntegerLiteral(Token),
+    LongUnsignedIntegerLiteral(Token),
+    BooleanLiteral(Token),
+    StringLiteral(Token),
+    CharLiteral(Token),
 }
 
 impl ConstExpression {
@@ -128,23 +115,23 @@ impl Expression {
     pub fn from_literal_token(token: Token) -> Result<Self, CHSError> {
         use TokenKind::*;
         match token.kind {
-            Integer => Ok(Self::ConstExpression(ConstExpression::IntegerDefault(
-                Span::from(token),
+            UnknowIntergerLiteral => Ok(Self::ConstExpression(ConstExpression::IntegerDefault(
+                token,
             ))),
             IntegerNumber => Ok(Self::ConstExpression(ConstExpression::IntegerLiteral(
-                Span::from(token),
+                token,
             ))),
-            UnsignedIntegerNumber => Ok(Self::ConstExpression(
-                ConstExpression::UnsignedIntegerLiteral(Span::from(token)),
+            U32Number => Ok(Self::ConstExpression(
+                ConstExpression::UnsignedIntegerLiteral(token),
             )),
-            LongIntegerNumber => Ok(Self::ConstExpression(ConstExpression::LongIntegerLiteral(
-                Span::from(token),
+            I32Number => Ok(Self::ConstExpression(ConstExpression::LongIntegerLiteral(
+                token,
             ))),
-            LongUnsignedIntegerNumber => Ok(Self::ConstExpression(
-                ConstExpression::LongUnsignedIntegerLiteral(Span::from(token)),
+            U64Number => Ok(Self::ConstExpression(
+                ConstExpression::LongUnsignedIntegerLiteral(token),
             )),
             CharacterLiteral => Ok(Self::ConstExpression(ConstExpression::CharLiteral(
-                Span::from(token),
+                token,
             ))),
             _ => return_chs_error!("{} Unsupported literal", token.loc),
         }

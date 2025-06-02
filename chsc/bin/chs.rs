@@ -2,7 +2,7 @@ use std::{fs, path::PathBuf, process::Command};
 
 use chsc::{
     chs_ast::{
-        self, flow_checker::FlowChecker, hir::HIRModule, mir::MIRModule, parser::Parser, typechecker::TypeChecker, RawModule
+        self, flow_checker::FlowChecker, hir::HIRModule, mir::MIRModule, new_parser, parser::Parser, typechecker::TypeChecker, RawModule
     },
     chs_codegen::Backend,
     chs_error,
@@ -86,10 +86,17 @@ fn compile(
         .map(PathBuf::from)
         .unwrap_or_else(|| file_path.with_extension(""));
 
+
     log!(silent, "[INFO] Reading module from file: {}", input_path);
     let raw_module = RawModule::new(chs_ast::read_file(&input_path), input_path);
+    let mut lexer = chslexer::PeekableLexer::new(&raw_module.source);
 
     log!(silent, "[INFO] Parsing module...");
+
+    let mut p = new_parser::Parser::new(&mut lexer);
+    let ast = p.parse().map_err(|err| chs_error!("{}",err))?;
+    println!("{ast:?}");
+
     let module = Parser::new(&raw_module).parse()?;
 
     log!(silent, "[INFO] Converting to HIR...");

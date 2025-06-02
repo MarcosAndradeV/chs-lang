@@ -5,7 +5,7 @@ use qbe;
 
 use crate::{
     chs_ast::{
-        ModuleImpl, RawModule,
+        RawModule,
         mir::{
             Constant, Global, Local, LocalId, MIRExternFunction, MIRFunction, MIRModule,
             MIRModuleItem, Operand, Place, ProjectionElem, Rvalue, Statement, Terminator,
@@ -26,20 +26,6 @@ macro_rules! temp {
     ($message:literal, $($field: expr),*) => {
        qbe::Value::Temporary(format!($message, $($field),*))
     };
-}
-
-impl<'src> ModuleImpl<'src> for QBEBackend<'src> {
-    fn get_span_str<T>(&self, span: &Span<T>) -> &'src str {
-        &self.raw_module[span]
-    }
-
-    fn get_token_str(&self, token: &Token) -> &'src str {
-        &self.raw_module[token]
-    }
-
-    fn get_file_path(&self) -> &'src str {
-        &self.raw_module.file_path
-    }
 }
 
 impl<'src> QBEBackend<'src> {

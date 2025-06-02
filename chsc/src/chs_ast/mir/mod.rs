@@ -4,7 +4,7 @@ use crate::{
 };
 
 use super::{
-    ModuleImpl, RawModule,
+     RawModule,
     hir::{self, HIRExpr},
     nodes::Operator,
     typechecker::{CHSInfer as _, TypeEnv},
@@ -15,20 +15,6 @@ use super::{
 pub struct MIRModule<'src> {
     pub raw_module: &'src RawModule,
     pub items: Vec<MIRModuleItem>,
-}
-
-impl<'src> ModuleImpl<'src> for MIRModule<'src> {
-    fn get_span_str<T>(&self, span: &Span<T>) -> &'src str {
-        &self.raw_module[span]
-    }
-
-    fn get_token_str(&self, token: &Token) -> &'src str {
-        &self.raw_module[token]
-    }
-
-    fn get_file_path(&self) -> &'src str {
-        &self.raw_module.file_path
-    }
 }
 
 impl<'src> MIRModule<'src> {
@@ -208,20 +194,6 @@ struct StmtBuilder<'src, 'env> {
     current_block_id: BlockId,
     locals: &'src mut Vec<Local>,
     next_local_id: &'src mut usize,
-}
-
-impl<'src> ModuleImpl<'src> for StmtBuilder<'src, '_> {
-    fn get_span_str<T>(&self, span: &Span<T>) -> &'src str {
-        &self.raw_module[span]
-    }
-
-    fn get_token_str(&self, token: &Token) -> &'src str {
-        &self.raw_module[token]
-    }
-
-    fn get_file_path(&self) -> &'src str {
-        &self.raw_module.file_path
-    }
 }
 
 impl<'src, 'env> StmtBuilder<'src, 'env> {
