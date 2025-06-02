@@ -2,14 +2,14 @@ use std::fmt;
 #[cfg(test)]
 mod tests;
 
-fn is_keyword_default(ident: &str) -> bool {
+pub fn is_keyword_default(ident: &str) -> bool {
     matches!(
         ident,
         "let" | "fn" | "if" | "else" | "return" | "while" | "for"
     )
 }
 
-fn is_binop_default(op: &TokenKind) -> bool {
+pub fn is_binop_default(op: &TokenKind) -> bool {
     use TokenKind::*;
     matches!(
         op,

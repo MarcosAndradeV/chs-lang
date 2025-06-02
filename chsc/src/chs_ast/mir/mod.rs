@@ -1,5 +1,4 @@
 use crate::{
-    chs_lexer::{Span, Token},
     chs_types::CHSType,
 };
 
@@ -9,6 +8,8 @@ use super::{
     nodes::Operator,
     typechecker::{CHSInfer as _, TypeEnv},
 };
+
+use chslexer::*;
 
 /// MIR Module
 #[derive(Debug)]
@@ -165,24 +166,24 @@ pub enum Operand {
 #[derive(Debug)]
 pub enum Global {
     /// A global extern
-    Function(Span<String>, CHSType),
+    Function(Token, CHSType),
 }
 
 #[derive(Debug)]
 pub enum Constant {
-    I32(Span<i32>),
-    U32(Span<u32>),
-    I64(Span<i64>),
-    U64(Span<u64>),
-    Bool(Span<bool>),
-    Str(Span<String>),
-    Char(Span<char>),
+    I32(Token),
+    U32(Token),
+    I64(Token),
+    U64(Token),
+    Bool(Token),
+    Str(Token),
+    Char(Token),
     Void,
 }
 
 #[derive(Debug)]
 pub struct Local {
-    pub name: Option<Span<String>>,
+    pub name: Option<Token>,
     pub ty: CHSType,
 }
 
@@ -259,7 +260,7 @@ impl<'src, 'env> StmtBuilder<'src, 'env> {
         }
     }
 
-    fn add_local(&mut self, name: Option<Span<String>>, ty: CHSType) -> LocalId {
+    fn add_local(&mut self, name: Option<Token>, ty: CHSType) -> LocalId {
         let id = LocalId(*self.next_local_id);
         *self.next_local_id += 1;
         self.locals.push(Local { name, ty });
@@ -633,13 +634,13 @@ impl<'src, 'env> StmtBuilder<'src, 'env> {
 
 #[derive(Debug)]
 pub struct MIRExternFunction {
-    pub name: Span<String>,
+    pub name: Token,
     pub fn_type: CHSType,
 }
 
 #[derive(Debug)]
 pub struct MIRFunction {
-    pub name: Span<String>,
+    pub name: Token,
     pub fn_type: CHSType,
     pub params: Vec<LocalId>,
     pub return_type: CHSType,

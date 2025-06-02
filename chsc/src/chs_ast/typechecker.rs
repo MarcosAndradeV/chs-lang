@@ -2,7 +2,6 @@ use std::{collections::HashMap, rc::Rc};
 
 use crate::{
     chs_error,
-    chs_lexer::Span,
     chs_types::{CHSType, TypeConstraint, TypeVar},
     chs_util::*,
     return_chs_error,
@@ -31,7 +30,7 @@ impl<'src> TypeChecker<'src> {
         for item in &mut module.items {
             match item {
                 HIRModuleItem::Function(func) => {
-                    let name = self.get_span_str(&func.name);
+                    let name = &func.name.source;
                     if let Some(_) = self.env.global_get(name) {
                         return_chs_error!(
                             "{}:{}: Duplicate function declaration: {}",
@@ -43,7 +42,7 @@ impl<'src> TypeChecker<'src> {
                     self.env.global_insert(name, Rc::new(func.fn_type.clone()));
                 }
                 HIRModuleItem::ExternFunction(func) => {
-                    let name = self.get_span_str(&func.name);
+                    let name = &func.name.source;
                     if let Some(_) = self.env.global_get(name) {
                         return_chs_error!(
                             "{}:{}: Duplicate function declaration: {}",
@@ -77,7 +76,7 @@ impl<'src> TypeChecker<'src> {
 
         // Add parameters to local scope
         for param in &func.params {
-            let param_name = self.get_span_str(&param.name);
+            let param_name = &param.name.source;
             self.env
                 .locals_insert(param_name, Rc::new(param.param_type.clone()));
         }
@@ -92,7 +91,7 @@ impl<'src> TypeChecker<'src> {
                 "{}:{} Function `{}` does not return on all paths",
                 self.raw_module.file_path,
                 func.name.loc,
-                self.get_span_str(&func.name)
+                func.name
             )
         }
 
@@ -117,7 +116,7 @@ impl<'src> TypeChecker<'src> {
         match expr {
             HIRExpr::Literal(..) => Ok(expr.infer()),
             HIRExpr::Identifier(name, ty) => {
-                let name_str = self.get_span_str(name);
+                let name_str = &name.source;
                 let t: CHSType = if let Some(ty) = self.env.get(name_str) {
                     (**ty).clone()
                 } else {
@@ -261,7 +260,7 @@ impl<'src> TypeChecker<'src> {
                     Operator::Deref => match operand_type {
                         CHSType::Pointer(inner) => *inner,
                         _ => {
-                            return_chs_error!("{}:{} Can only dereference pointer types", self.get_file_path(), op.span.loc)
+                            return_chs_error!("{}:{} Can only dereference pointer types", &self.raw_module.file_path, op.span.loc)
                         }
                     },
                     Operator::Refer => CHSType::Pointer(Box::new(operand_type)),
@@ -466,7 +465,7 @@ impl<'src> TypeChecker<'src> {
                 } else {
                     value_type.clone()
                 };
-                let name_str = self.get_span_str(name);
+                let name_str = &name.source;
                 self.env.locals_insert(name_str, Rc::new(var_type.clone()));
                 Ok(ReturnFlow::Never)
             }

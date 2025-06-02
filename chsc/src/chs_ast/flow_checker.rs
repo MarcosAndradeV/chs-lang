@@ -117,7 +117,7 @@ impl<'src> FlowChecker<'src> {
                     if target.0 >= max_block_id {
                         errors.push(FlowError::InvalidBlockReference {
                             block_id: *target,
-                            function: self.module.raw_module[&func.name].to_string(),
+                            function: func.name,
                             location: loc_str.clone(),
                         });
                     }

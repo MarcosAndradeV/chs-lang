@@ -142,7 +142,7 @@ impl<'src> Parser<'src> {
         items: &mut Vec<ModuleItem>,
         token: Token,
     ) -> Result<(), CHSError> {
-        let src = (&token);
+        let src = &token.source;
         let (macro_, args) = src
             .split_once("(")
             .expect("macro with args always have `(`");
@@ -152,7 +152,7 @@ impl<'src> Parser<'src> {
                     .split_once(")")
                     .expect("macro with args always have `)`");
                 items.push(ModuleItem::MacroCall(MacroCall::macro_use(
-                    token,
+                    token.clone(),
                     ImportSyntax::from_str(args)?,
                 )));
             }
@@ -229,7 +229,7 @@ impl<'src> Parser<'src> {
             }
 
             // Check for a binary operator
-            if ptoken.kind.is_binop() {
+            if self.lexer.is_binop(&ptoken.kind) {
                 let operator = Operator::from_token(&ptoken, false)?;
                 if operator.precedence() > lowest_precedence {
                     op_stack.push((operator, ptoken));
@@ -304,7 +304,7 @@ impl<'src> Parser<'src> {
     // Helper: if the next token is an operator, return it without consuming.
     fn peek_if_op(&mut self) -> Option<&Token> {
         let token = self.peek();
-        if token.kind.is_binop() {
+        if is_binop_default(&token.kind) {
             Some(token)
         } else {
             None
@@ -354,7 +354,9 @@ impl<'src> Parser<'src> {
                 self.expect_kind(OpenParen)?;
                 let cond = self.parse_expression_iterative(Precedence::Lowest)?;
                 self.expect_kind(CloseParen)?;
-                let body = self.parse_expr_list_iterative(|t| t.kind == TokenKind::KeywordEnd)?;
+                let body = self.parse_expr_list_iterative(|t| {
+                    t.kind == TokenKind::Keyword && &t.source == "end"
+                })?;
                 Ok(Expression::WhileExpression(Box::new(WhileExpression {
                     token,
                     cond,
@@ -368,15 +370,15 @@ impl<'src> Parser<'src> {
             | I64Number
             | CharacterLiteral => Expression::from_literal_token(token),
             Keyword if &token.source == "true" || &token.source == "false" => Ok(
-                Expression::ConstExpression(ConstExpression::BooleanLiteral(Span::from(token))),
+                Expression::ConstExpression(ConstExpression::BooleanLiteral(token)),
             ),
             Identifier => Ok(Expression::ConstExpression(ConstExpression::Identifier(
-                Span::from(token),
+                token,
             ))),
             StringLiteral => Ok(Expression::ConstExpression(ConstExpression::StringLiteral(
-                Span::from(token),
+                token,
             ))),
-            Keyword if &token.source == "cast"  => {
+            Keyword if &token.source == "cast" => {
                 self.expect_kind(OpenParen)?;
                 let ttype = self.parse_type_iterative()?;
                 self.expect_kind(CloseParen)?;
@@ -472,7 +474,9 @@ impl<'src> Parser<'src> {
             match ptoken.kind {
                 Keyword if &token.source == "else" => {
                     self.next();
-                    let else_body = self.parse_expr_list_iterative(|t| t.kind == Keyword && &token.source == "end")?;
+                    let else_body = self.parse_expr_list_iterative(|t| {
+                        t.kind == Keyword && &token.source == "end"
+                    })?;
                     return Ok(Expression::IfElseExpression(Box::new(IfElseExpression {
                         token,
                         cond,

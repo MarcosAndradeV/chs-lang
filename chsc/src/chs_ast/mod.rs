@@ -1,6 +1,5 @@
-use std::{fs, ops, path::Path, process::exit};
+use std::{fs, path::Path, process::exit};
 
-use crate::chs_lexer::{Span, Token};
 
 pub mod flow_checker;
 pub mod hir;
