@@ -79,6 +79,14 @@ impl<'src> PeekableLexer<'src> {
     pub fn set_is_binop_fn(&mut self, f: IsBinopFn) {
         self.lexer.set_is_binop_fn(f);
     }
+
+    pub fn get_is_keyword_fn(&self) -> IsKeywordFn {
+        self.lexer.is_keyword_fn
+    }
+
+    pub fn get_is_binop_fn(&self) -> IsBinopFn {
+        self.lexer.is_binop_fn
+    }
 }
 
 impl<'src> Lexer<'src> {

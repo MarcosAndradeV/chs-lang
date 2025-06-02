@@ -1,14 +1,9 @@
 use std::{collections::HashMap, rc::Rc};
 
-use crate::{
-    chs_error,
-    chs_types::{CHSType, TypeConstraint, TypeVar},
-    chs_util::*,
-    return_chs_error,
-};
+use crate::{chs_error, chs_types::CHSType, chs_util::*, return_chs_error};
 
 use super::{
-    hir::{HIRBlock, HIRExpr, HIRFunction, HIRModule, HIRModuleItem, HIRStmt}, nodes::Operator, RawModule
+    ast::{Statement, Expression}, hir::{HIRFunction, HIRModule, HIRModuleItem}, nodes::Operator, RawModule
 };
 
 pub struct TypeChecker<'src> {
@@ -39,7 +34,13 @@ impl<'src> TypeChecker<'src> {
                             name
                         );
                     }
-                    self.env.global_insert(name, Rc::new(func.fn_type.clone()));
+                    self.env.global_insert(
+                        name,
+                        Rc::new(CHSType::Function(
+                            func.params.iter().map(|p| p.param_type.clone()).collect(),
+                            func.return_type.clone().unwrap_or(CHSType::Void).into(),
+                        )),
+                    );
                 }
                 HIRModuleItem::ExternFunction(func) => {
                     let name = &func.name.source;
@@ -82,8 +83,8 @@ impl<'src> TypeChecker<'src> {
         }
 
         // Type check body
-        self.curr_ret_type = func.return_type.clone();
-        let return_flow = self.check_block(&mut func.body)?;
+        self.curr_ret_type = func.return_type.clone().unwrap_or(CHSType::Void);
+        let return_flow = self.check_block(& func.body)?;
         self.curr_ret_type = CHSType::Never;
 
         if return_flow != ReturnFlow::Always {
@@ -112,374 +113,46 @@ impl<'src> TypeChecker<'src> {
         Ok(())
     }
 
-    fn check_expr(&mut self, expr: &mut HIRExpr) -> CHSResult<CHSType> {
+    fn check_expr(&mut self, expr: &mut Expression) -> CHSResult<CHSType> {
         match expr {
-            HIRExpr::Literal(..) => Ok(expr.infer()),
-            HIRExpr::Identifier(name, ty) => {
-                let name_str = &name.source;
-                let t: CHSType = if let Some(ty) = self.env.get(name_str) {
-                    (**ty).clone()
-                } else {
-                    return_chs_error!(
-                        "{}:{} Undefined variable: {}",
-                        self.raw_module.file_path,
-                        name.loc,
-                        name_str
-                    )
-                };
-                *ty = Some(t.clone());
-                Ok(t)
-            }
-            HIRExpr::Binary { ty, op, lhs, rhs } => {
-                let lhs_type = self.check_expr(lhs)?;
-                let rhs_type = self.check_expr(rhs)?;
-
-                let expr_ty = match op.op {
-                    // Arithmetic operators
-                    Operator::Plus
-                    | Operator::Minus
-                    | Operator::Mult
-                    | Operator::Div
-                    | Operator::Mod => {
-                        self.env
-                            .unify(&lhs_type, &rhs_type)
-                            .or_else(|_| lhs.cast(rhs_type.clone()))
-                            .or_else(|_| rhs.cast(lhs_type.clone()))
-                            .map_err(|_| {
-                                chs_error!(
-                                    "{} Cannot compare values of type {} and {}",
-                                    op.span.loc,
-                                    lhs_type,
-                                    rhs_type
-                                )
-                            })?;
-                        match lhs.infer() {
-                            CHSType::I32 => CHSType::I32,
-                            CHSType::U32 => CHSType::U32,
-                            CHSType::I64 => CHSType::I64,
-                            CHSType::U64 => CHSType::U64,
-                            _ => return_chs_error!(
-                                "{} Expected numeric type for arithmetic operation",
-                                op.span.loc
-                            ),
-                        }
-                    }
-                    // Comparison operators
-                    Operator::Le | Operator::Ge | Operator::Lt | Operator::Gt => {
-                        self.env
-                            .unify(&lhs_type, &rhs_type)
-                            .or_else(|_| lhs.cast(rhs_type.clone()))
-                            .or_else(|_| rhs.cast(lhs_type.clone()))
-                            .map_err(|_| {
-                                chs_error!(
-                                    "{} Cannot compare values of type {} and {}",
-                                    op.span.loc,
-                                    lhs_type,
-                                    rhs_type
-                                )
-                            })?;
-                        match lhs_type {
-                            CHSType::I32 | CHSType::U32 | CHSType::I64 | CHSType::U64 => {
-                                CHSType::Boolean
-                            }
-                            _ => return_chs_error!(
-                                "{} Expected numeric type for comparison",
-                                op.span.loc
-                            ),
-                        }
-                    }
-                    // Equality operators
-                    Operator::Eq | Operator::NEq => {
-                        self.env
-                            .unify(&lhs_type, &rhs_type)
-                            .or_else(|_| lhs.cast(rhs_type.clone()))
-                            .or_else(|_| rhs.cast(lhs_type.clone()))
-                            .map_err(|_| {
-                                chs_error!(
-                                    "{} Cannot compare values of type {} and {}",
-                                    op.span.loc,
-                                    lhs_type,
-                                    rhs_type
-                                )
-                            })?;
-                        CHSType::Boolean
-                    }
-                    // Logical operators
-                    Operator::LAnd | Operator::LOr => {
-                        self.env.unify(&lhs_type, &CHSType::Boolean)?;
-                        self.env.unify(&rhs_type, &CHSType::Boolean)?;
-                        CHSType::Boolean
-                    }
-                    // Bitwise operators
-                    Operator::BitAnd
-                    | Operator::BitXor
-                    | Operator::Shl
-                    | Operator::Shr
-                    | Operator::BitOr => {
-                        self.env.unify(&lhs_type, &rhs_type)?;
-                        match lhs_type {
-                            CHSType::I32 => CHSType::I32,
-                            CHSType::U32 => CHSType::U32,
-                            CHSType::I64 => CHSType::I64,
-                            CHSType::U64 => CHSType::U64,
-                            _ => return_chs_error!(
-                                "{} Expected numeric type for bitwise operation",
-                                op.span.loc
-                            ),
-                        }
-                    }
-                    Operator::Assign => {
-                        self.env.unify(&lhs_type, &rhs_type)?;
-                        lhs_type
-                    }
-                    // These operators should not appear in binary expressions
-                    _ => {
-                        unreachable!("Unary operator used in binary expression")
-                    }
-                };
-
-                *ty = Some(expr_ty.clone());
-                Ok(expr_ty)
-            }
-            HIRExpr::Unary { ty, op, operand } => {
-                let operand_type = self.check_expr(operand)?;
-                let expr_ty = match op.op {
-                    Operator::Negate => match operand_type {
-                        CHSType::I32 => CHSType::I32,
-                        CHSType::U32 => CHSType::I32,
-                        CHSType::I64 => CHSType::I64,
-                        CHSType::U64 => CHSType::I64,
-                        _ => {
-                            return_chs_error!("{} Expected numeric type for negation", op.span.loc)
-                        }
-                    },
-                    Operator::LNot => {
-                        self.env.unify(&operand_type, &CHSType::Boolean)?;
-                        CHSType::Boolean
-                    }
-                    Operator::Deref => match operand_type {
-                        CHSType::Pointer(inner) => *inner,
-                        _ => {
-                            return_chs_error!("{}:{} Can only dereference pointer types", &self.raw_module.file_path, op.span.loc)
-                        }
-                    },
-                    Operator::Refer => CHSType::Pointer(Box::new(operand_type)),
-                    _ => unreachable!("Invalid unary operator"),
-                };
-                *ty = Some(expr_ty.clone());
-                Ok(expr_ty)
-            }
-            HIRExpr::Call {
-                ty,
-                span,
-                callee,
-                args,
-            } => {
-                let callee_type = self.check_expr(callee)?;
-                match callee_type {
-                    CHSType::Function(param_types, return_type) => {
-                        if args.len() < param_types.len() {
-                            return_chs_error!("{} Wrong number of arguments", span.loc);
-                        }
-                        for (arg, expected_type) in args.iter_mut().zip(param_types.iter()) {
-                            let arg_type = self.check_expr(arg)?;
-                            self.env.unify(&arg_type, expected_type)?;
-                        }
-                        *ty = Some((*return_type).clone());
-                        Ok(ty.clone().unwrap())
-                    }
-                    CHSType::VariadicFunction(param_types, return_type) => {
-                        if args.len() < param_types.len() {
-                            return_chs_error!("{} Wrong number of arguments", span.loc);
-                        }
-                        for (arg, expected_type) in args.iter_mut().zip(param_types.iter()) {
-                            let arg_type = self.check_expr(arg)?;
-                            self.env.unify(&arg_type, expected_type)?;
-                        }
-                        for arg in args.iter_mut() {
-                            let arg_type = self.check_expr(arg)?;
-                            self.env.unify(&arg_type, &CHSType::Any)?;
-                        }
-                        *ty = Some((*return_type).clone());
-                        Ok(ty.clone().unwrap())
-                    }
-                    _ => return_chs_error!("{} Called expression is not a function", span.loc),
-                }
-            }
-            HIRExpr::Cast {
-                span,
-                expr,
-                to_type,
-            } => {
-                let expr_type = self.check_expr(expr)?;
-                // For now, only allow numeric casts
-                match (&expr_type, &to_type) {
-                    (a, b) if a == *b => Ok(to_type.clone()),
-                    (CHSType::I32, CHSType::U32) | (CHSType::U32, CHSType::I32) => {
-                        Ok(to_type.clone())
-                    }
-                    (CHSType::Pointer(_), CHSType::Pointer(any))
-                    | (CHSType::Pointer(any), CHSType::Pointer(_))
-                        if **any == CHSType::Any =>
-                    {
-                        Ok(to_type.clone())
-                    }
-                    _ => return_chs_error!(
-                        "{} Invalid cast between {:?} and {:?}",
-                        span.loc,
-                        expr_type,
-                        to_type
-                    ),
-                }
-            }
-            HIRExpr::Index { span, base, index } => {
-                let base_type = self.check_expr(base)?;
-                let index_type = self.check_expr(index)?;
-
-                // Check that index is numeric
-                match index_type {
-                    CHSType::U64 => {}
-                    _ => return_chs_error!("{} Array index must be u64", span.loc),
-                }
-
-                // Get element type from array type
-                match base_type {
-                    CHSType::Slice(elem_type) => Ok(*elem_type.clone()),
-                    CHSType::Pointer(elem_type) => Ok(*elem_type.clone()),
-                    _ => return_chs_error!("{} Cannot index into non-array type", span.loc),
-                }
-            }
-            HIRExpr::Syscall {
-                span: _,
-                arity: _,
-                args,
-            } => {
-                for arg in args {
-                    self.check_expr(arg)?;
-                }
-                Ok(CHSType::Int)
-            }
+            Expression::Nil => todo!(),
+            Expression::Bool(_) => todo!(),
+            Expression::Int(token) => todo!(),
+            Expression::Float(token) => todo!(),
+            Expression::String(token) => todo!(),
+            Expression::Char(token) => todo!(),
+            Expression::Identifier(token) => todo!(),
+            Expression::BinaryOp { left, operator, right } => todo!(),
+            Expression::UnaryOp { operator, operand } => todo!(),
+            Expression::FunctionCall { callee, args } => todo!(),
+            Expression::ArrayAccess { array, index } => todo!(),
+            Expression::MemberAccess { object, member } => todo!(),
+            Expression::ArrayLiteral(vec) => todo!(),
+            Expression::StructLiteral { name, fields } => todo!(),
+            Expression::TernaryOp { condition, true_expr, false_expr } => todo!(),
+            Expression::Parenthesized(expression) => todo!(),
+            Expression::Cast { expr, target_type } => todo!(),
         }
     }
 
-    fn check_stmt(&mut self, stmt: &mut HIRStmt) -> CHSResult<ReturnFlow> {
+    fn check_stmt(&mut self, stmt: & Statement) -> CHSResult<ReturnFlow> {
         match stmt {
-            HIRStmt::If {
-                span,
-                condition,
-                then_branch,
-                else_branch,
-            } => {
-                let cond_type = self.check_expr(condition)?;
-                self.env
-                    .unify(&cond_type, &CHSType::Boolean)
-                    .map_err(|_| chs_error!("{} Expected boolean condition", span.loc))?;
-
-                let then_flow = self.check_block(then_branch)?;
-                if let Some(else_branch) = else_branch {
-                    let flow = self.check_block(else_branch)?;
-                    Ok(ReturnFlow::combine(then_flow, flow))
-                } else {
-                    Ok(ReturnFlow::combine(then_flow, ReturnFlow::Never))
-                }
-            }
-            HIRStmt::While {
-                span,
-                condition,
-                body,
-            } => {
-                let cond_type = self.check_expr(condition)?;
-                self.env
-                    .unify(&cond_type, &CHSType::Boolean)
-                    .map_err(|_| chs_error!("{} Expected boolean condition", span.loc))?;
-                let flow = self.check_block(body)?;
-                Ok(flow)
-            }
-            HIRStmt::Return { span, expr } => {
-                if let Some(expr) = expr {
-                    let ty = self.check_expr(expr)?;
-                    self.env
-                        .unify(&self.curr_ret_type, &ty)
-                        .or_else(|_| expr.cast(self.curr_ret_type.clone()))
-                        .map_err(|_| {
-                            chs_error!(
-                                "{}:{} Expected return type {} found {}",
-                                self.raw_module.file_path,
-                                span.loc,
-                                self.curr_ret_type,
-                                ty
-                            )
-                        })?
-                } else {
-                    self.env
-                        .unify(&self.curr_ret_type, &CHSType::Void)
-                        .map_err(|_| {
-                            chs_error!(
-                                "{}:{} Expected return type {} found {}",
-                                self.raw_module.file_path,
-                                span.loc,
-                                self.curr_ret_type,
-                                CHSType::Void
-                            )
-                        })?
-                }
-                Ok(ReturnFlow::Always)
-            }
-            HIRStmt::Assign {
-                span,
-                target,
-                value,
-                ..
-            } => {
-                let target_type = self.check_expr(target)?;
-                let value_type = self.check_expr(value)?;
-                self.env
-                    .unify(&target_type, &value_type)
-                    .or_else(|_| value.cast(target_type.clone()))
-                    .map_err(|_| {
-                        chs_error!(
-                            "{} Cannot assign value of type {} to variable of type {}",
-                            span.loc,
-                            value_type,
-                            target_type
-                        )
-                    })?;
-                Ok(ReturnFlow::Never)
-            }
-            HIRStmt::VarDecl { name, ty, value } => {
-                let value_type = self.check_expr(value)?;
-                let var_type = if let Some(explicit_type) = ty {
-                    self.env
-                        .unify(&value_type, explicit_type)
-                        .or_else(|_| value.cast(explicit_type.clone()))
-                        .map_err(|err| {
-                            chs_error!(
-                                "{} Cannot assign value of type {} to variable of type {}\n\t{}",
-                                name.loc,
-                                value_type,
-                                explicit_type,
-                                err
-                            )
-                        })?;
-                    explicit_type.clone()
-                } else {
-                    value_type.clone()
-                };
-                let name_str = &name.source;
-                self.env.locals_insert(name_str, Rc::new(var_type.clone()));
-                Ok(ReturnFlow::Never)
-            }
-            HIRStmt::ExprStmt { value } => {
-                self.check_expr(value)?;
-                Ok(ReturnFlow::Never)
-            }
+            Statement::ReturnStatement(..) => Ok(ReturnFlow::Always),
+            Statement::BlockStatement(block) => self.check_block(block),
+            Statement::LetStatement(let_statement) => todo!(),
+            Statement::ExpressionStatement(expression) => todo!(),
+            Statement::IfStatement(if_statement) => todo!(),
+            Statement::WhileStatement(while_statement) => todo!(),
+            Statement::ForStatement(for_statement) => todo!(),
+            Statement::AssignmentStatement(assignment_statement) => todo!(),
+            Statement::Empty => todo!(),
         }
     }
 
-    fn check_block(&mut self, block: &mut HIRBlock) -> CHSResult<ReturnFlow> {
+    fn check_block(&mut self, block: &Vec<Statement>) -> CHSResult<ReturnFlow> {
         self.env.locals_new();
         let mut return_flow = ReturnFlow::Never;
-        for stmt in &mut block.statements {
+        for stmt in block {
             let flow = self.check_stmt(stmt)?;
             return_flow = ReturnFlow::combine(return_flow, flow);
             if flow == ReturnFlow::Always {
@@ -501,8 +174,6 @@ pub struct TypeEnv {
     /// Global types declarations
     pub globals: HashMap<String, Rc<CHSType>>,
     pub locals: Vec<HashMap<String, Rc<CHSType>>>,
-    pub type_vars: HashMap<TypeVar, Rc<CHSType>>,
-    pub constraints: Vec<TypeConstraint>,
 }
 
 impl Default for TypeEnv {
@@ -516,33 +187,12 @@ impl TypeEnv {
         Self {
             globals: HashMap::new(),
             locals: vec![HashMap::new()],
-            type_vars: HashMap::new(),
-            constraints: Vec::new(),
         }
-    }
-
-    /// Creates a new type variable
-    pub fn fresh_type_var(&mut self) -> TypeVar {
-        TypeVar::new(self.type_vars.len())
-    }
-
-    /// Adds a type constraint
-    pub fn add_constraint(&mut self, constraint: TypeConstraint) {
-        self.constraints.push(constraint);
     }
 
     /// Attempts to unify two types
     pub fn unify(&mut self, t1: &CHSType, t2: &CHSType) -> CHSResult<()> {
         match (t1, t2) {
-            (CHSType::Var(v1), CHSType::Var(v2)) if v1 == v2 => Ok(()),
-            (CHSType::Var(v), t) | (t, CHSType::Var(v)) => {
-                if let Some(bound) = self.type_vars.get(v).cloned() {
-                    self.unify(&bound, t)
-                } else {
-                    self.type_vars.insert(v.clone(), Rc::new(t.clone()));
-                    Ok(())
-                }
-            }
             (CHSType::Function(args1, ret1), CHSType::Function(args2, ret2)) => {
                 if args1.len() != args2.len() {
                     return_chs_error!("Function argument count mismatch");

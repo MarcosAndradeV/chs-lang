@@ -1,15 +1,7 @@
 use std::{fs, path::PathBuf, process::Command};
 
 use chsc::{
-    chs_ast::{
-        self, flow_checker::FlowChecker, hir::HIRModule, mir::MIRModule, new_parser, parser::Parser, typechecker::TypeChecker, RawModule
-    },
-    chs_codegen::Backend,
-    chs_error,
-    chs_util::{binary_exists, CHSError, CHSResult},
-    cli,
-    config::Config,
-    return_chs_error,
+    chs_ast::{self, hir::HIRModule, parser::Parser, typechecker::TypeChecker, RawModule}, chs_codegen::CodeGenerator, chs_error, chs_util::{binary_exists, CHSError, CHSResult}, cli, config::Config, return_chs_error
 };
 use clap::Parser as _;
 
@@ -71,6 +63,7 @@ macro_rules! log {
     }
 }
 
+#[allow(unused)]
 fn compile(
     input_path: String,
     outpath: Option<String>,
@@ -86,63 +79,53 @@ fn compile(
         .map(PathBuf::from)
         .unwrap_or_else(|| file_path.with_extension(""));
 
-
     log!(silent, "[INFO] Reading module from file: {}", input_path);
     let raw_module = RawModule::new(chs_ast::read_file(&input_path), input_path);
     let mut lexer = chslexer::PeekableLexer::new(&raw_module.source);
 
     log!(silent, "[INFO] Parsing module...");
 
-    let mut p = new_parser::Parser::new(&mut lexer);
-    let ast = p.parse().map_err(|err| chs_error!("{}",err))?;
-    println!("{ast:?}");
+    let module = Parser::new(&mut lexer)
+        .parse()
+        .map_err(|err| chs_error!("{}", err))?;
 
-    let module = Parser::new(&raw_module).parse()?;
+    // let module = Parser::new(&raw_module).parse()?;
 
     log!(silent, "[INFO] Converting to HIR...");
     let mut module = HIRModule::from_ast(module);
 
     log!(silent, "[INFO] Running type checker...");
-    let mut checker = TypeChecker::new(module.raw_module);
+    let mut checker = TypeChecker::new(&raw_module);
     checker.check_module(&mut module)?;
 
-    log!(silent, "[INFO] Converting to MIR...");
-    let tenv = checker.env();
-    let module = MIRModule::from_hir(module, tenv);
+    CodeGenerator::QBE.generate();
 
-    log!(silent, "[INFO] Running flow checker...");
-    let checker = FlowChecker::new(&module);
-    checker.check_module().map_err(|errors| {
-        CHSError(
-            errors
-                .iter()
-                .map(ToString::to_string)
-                .collect::<Vec<_>>()
-                .join("\n"),
-        )
-    })?;
+    Ok(())
+}
 
-    let backend = Backend::Qbe;
-    log!(silent, "[INFO] Generating code using {backend} backend...");
-    let gen_code = backend.generate_module(module)?;
-
-    fs::write(&ssa_path, gen_code.to_string())
-        .map_err(|e| chs_error!("Failed to write SSA file: {}", e))?;
-
+#[allow(dead_code)]
+fn generate_code_with_qbe(
+    compiler_flags: Vec<String>,
+    run: bool,
+    silent: bool,
+    keep: bool,
+    ssa_path: PathBuf,
+    asm_path: PathBuf,
+    out_path: PathBuf,
+) -> Result<(), CHSError> {
+    fs::write(&ssa_path, "").map_err(|e| chs_error!("Failed to write SSA file: {}", e))?;
     log!(
         silent,
         "[INFO] CMD: qbe -o {} {}",
         asm_path.display(),
         ssa_path.display()
     );
-
     let output = Command::new("qbe")
         .arg("-o")
         .arg(&asm_path)
         .arg(&ssa_path)
         .output()
         .map_err(|e| chs_error!("Failed to run qbe: {}", e))?;
-
     if !output.status.success() {
         return_chs_error!(
             "qbe failed to generate assembly\nstdout:\n{}\nstderr:\n{}",
@@ -150,7 +133,6 @@ fn compile(
             String::from_utf8_lossy(&output.stderr)
         );
     }
-
     log!(
         silent,
         "[INFO] CMD: cc -o {} {} {}",
@@ -160,11 +142,9 @@ fn compile(
     );
     let mut cc_command = Command::new("cc");
     cc_command.arg("-o").arg(&out_path).arg(&asm_path);
-
     if !compiler_flags.is_empty() {
         cc_command.args(&compiler_flags);
     }
-
     let output = cc_command
         .output()
         .map_err(|e| chs_error!("Failed to run cc: {}", e))?;
@@ -175,20 +155,15 @@ fn compile(
             String::from_utf8_lossy(&output.stderr)
         );
     }
-
     log!(silent, "[INFO] Compilation completed successfully!");
-
     if run {
         run_exe(out_path)?;
     }
-
-    if !keep {
+    Ok(if !keep {
         log!(silent, "[INFO] Cleaning up temporary files...");
         let paths = &[&ssa_path, &asm_path];
         cleanup_files(silent, paths);
-    }
-
-    Ok(())
+    })
 }
 
 fn cleanup_files(silent: bool, paths: &[&PathBuf]) {

@@ -1,14 +1,12 @@
 use std::{fs, path::Path, process::exit};
 
 
-pub mod flow_checker;
 pub mod hir;
 pub mod mir;
 pub mod nodes;
-pub mod parser;
 pub mod typechecker;
 pub mod ast;
-pub mod new_parser;
+pub mod parser;
 
 #[derive(Debug)]
 pub struct RawModule {

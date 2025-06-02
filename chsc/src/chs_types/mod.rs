@@ -1,30 +1,5 @@
 use std::{fmt, rc::Rc};
 
-/// Represents a type variable used in type inference
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct TypeVar {
-    id: usize,
-}
-
-impl TypeVar {
-    pub fn new(id: usize) -> Self {
-        Self { id }
-    }
-}
-
-impl fmt::Display for TypeVar {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "^{}", self.id)
-    }
-}
-
-/// Represents a type constraint in the type system
-#[derive(Debug, Clone)]
-pub enum TypeConstraint {
-    Equal(Rc<CHSType>, Rc<CHSType>),
-    Subtype(Rc<CHSType>, Rc<CHSType>),
-    Instance(Rc<CHSType>, Rc<CHSType>),
-}
 
 /// Represents the core types in the CHS type system
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -40,9 +15,7 @@ pub enum CHSType {
     Char,
     Boolean,
     String,
-
-    /// Type variables for inference
-    Var(TypeVar),
+    Nil,
 
     /// Composite types
     Pointer(Box<CHSType>),
@@ -72,7 +45,7 @@ impl fmt::Display for CHSType {
             CHSType::Char => write!(f, "char"),
             CHSType::Boolean => write!(f, "bool"),
             CHSType::String => write!(f, "string"),
-            CHSType::Var(tv) => write!(f, "{}", tv),
+            CHSType::Nil => write!(f, "nil"),
             CHSType::Any => write!(f, "any"),
             CHSType::Pointer(t) => write!(f, "*{}", t),
             CHSType::Function(args, ret) => write!(

@@ -4,7 +4,7 @@ use chslexer::Token;
 
 use crate::chs_types::CHSType;
 
-use super::typechecker::CHSInfer;
+use super::{parser::ParseError, typechecker::CHSInfer};
 
 pub type Ast = Vec<AstNode>;
 
@@ -112,20 +112,20 @@ pub struct LetStatement {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Precedence {
     Lowest = 0,
-    Assignment = 1,     // =, +=, -=, etc.
-    LogicalOr = 2,      // ||
-    LogicalAnd = 3,     // &&
-    BitwiseOr = 4,      // |
-    BitwiseXor = 5,     // ^
-    BitwiseAnd = 6,     // &
-    Equality = 7,       // ==, !=
-    Comparison = 8,     // <, >, <=, >=
-    Shift = 9,          // <<, >>
-    Addition = 10,      // +, -
+    Assignment = 1,      // =, +=, -=, etc.
+    LogicalOr = 2,       // ||
+    LogicalAnd = 3,      // &&
+    BitwiseOr = 4,       // |
+    BitwiseXor = 5,      // ^
+    BitwiseAnd = 6,      // &
+    Equality = 7,        // ==, !=
+    Comparison = 8,      // <, >, <=, >=
+    Shift = 9,           // <<, >>
+    Addition = 10,       // +, -
     Multiplication = 11, // *, /, %
-    Unary = 12,         // !, -, +, ~, &, *
-    Call = 13,          // function calls, array access, member access
-    Primary = 14,       // literals, identifiers, parentheses
+    Unary = 12,          // !, -, +, ~, &, *
+    Call = 13,           // function calls, array access, member access
+    Primary = 14,        // literals, identifiers, parentheses
 }
 
 impl Precedence {
@@ -138,11 +138,15 @@ impl Precedence {
             BinaryOperator::BitwiseXor => Precedence::BitwiseXor,
             BinaryOperator::BitwiseAnd => Precedence::BitwiseAnd,
             BinaryOperator::Equal | BinaryOperator::NotEqual => Precedence::Equality,
-            BinaryOperator::Less | BinaryOperator::Greater |
-            BinaryOperator::LessEqual | BinaryOperator::GreaterEqual => Precedence::Comparison,
+            BinaryOperator::Less
+            | BinaryOperator::Greater
+            | BinaryOperator::LessEqual
+            | BinaryOperator::GreaterEqual => Precedence::Comparison,
             BinaryOperator::LeftShift | BinaryOperator::RightShift => Precedence::Shift,
             BinaryOperator::Add | BinaryOperator::Subtract => Precedence::Addition,
-            BinaryOperator::Multiply | BinaryOperator::Divide | BinaryOperator::Modulo => Precedence::Multiplication,
+            BinaryOperator::Multiply | BinaryOperator::Divide | BinaryOperator::Modulo => {
+                Precedence::Multiplication
+            }
         }
     }
 
@@ -185,6 +189,16 @@ pub enum BinaryOperator {
 
     // Assignment
     Assign,
+}
+
+impl TryFrom<Token> for BinaryOperator {
+    type Error = ParseError;
+    fn try_from(value: Token) -> Result<Self, Self::Error> {
+        match &value.kind {
+            chslexer::TokenKind::Plus => Ok(Self::Add),
+            _ => Err(ParseError::InvalidOperator(value)),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -271,14 +285,22 @@ impl fmt::Display for Expression {
             Expression::String(token) => todo!(),
             Expression::Char(token) => todo!(),
             Expression::Identifier(token) => write!(f, "{}", token.source),
-            Expression::BinaryOp { left, operator, right } => todo!(),
+            Expression::BinaryOp {
+                left,
+                operator,
+                right,
+            } => todo!(),
             Expression::UnaryOp { operator, operand } => todo!(),
             Expression::FunctionCall { callee, args } => todo!(),
             Expression::ArrayAccess { array, index } => todo!(),
             Expression::MemberAccess { object, member } => write!(f, "{object}.{}", member.source),
             Expression::ArrayLiteral(vec) => todo!(),
             Expression::StructLiteral { name, fields } => todo!(),
-            Expression::TernaryOp { condition, true_expr, false_expr } => todo!(),
+            Expression::TernaryOp {
+                condition,
+                true_expr,
+                false_expr,
+            } => todo!(),
             Expression::Parenthesized(expression) => todo!(),
             Expression::Cast { expr, target_type } => todo!(),
         }
@@ -296,9 +318,9 @@ impl Expression {
         match self {
             Expression::BinaryOp { operator, .. } => Precedence::from_binary_op(operator),
             Expression::UnaryOp { operator, .. } => Precedence::from_unary_op(operator),
-            Expression::FunctionCall { .. } |
-            Expression::ArrayAccess { .. } |
-            Expression::MemberAccess { .. } => Precedence::Call,
+            Expression::FunctionCall { .. }
+            | Expression::ArrayAccess { .. }
+            | Expression::MemberAccess { .. } => Precedence::Call,
             Expression::TernaryOp { .. } => Precedence::Assignment, // Ternary has same precedence as assignment
             _ => Precedence::Primary,
         }
@@ -313,15 +335,16 @@ impl Expression {
     }
 
     pub fn is_literal(&self) -> bool {
-        matches!(self,
-            Expression::Nil |
-            Expression::Bool(_) |
-            Expression::Int(_) |
-            Expression::Float(_) |
-            Expression::String(_) |
-            Expression::Char(_) |
-            Expression::ArrayLiteral(_) |
-            Expression::StructLiteral { .. }
+        matches!(
+            self,
+            Expression::Nil
+                | Expression::Bool(_)
+                | Expression::Int(_)
+                | Expression::Float(_)
+                | Expression::String(_)
+                | Expression::Char(_)
+                | Expression::ArrayLiteral(_)
+                | Expression::StructLiteral { .. }
         )
     }
 }
@@ -333,18 +356,25 @@ impl BinaryOperator {
     }
 
     pub fn is_comparison_op(&self) -> bool {
-        matches!(self,
-            BinaryOperator::Equal | BinaryOperator::NotEqual |
-            BinaryOperator::Less | BinaryOperator::Greater |
-            BinaryOperator::LessEqual | BinaryOperator::GreaterEqual
+        matches!(
+            self,
+            BinaryOperator::Equal
+                | BinaryOperator::NotEqual
+                | BinaryOperator::Less
+                | BinaryOperator::Greater
+                | BinaryOperator::LessEqual
+                | BinaryOperator::GreaterEqual
         )
     }
 
     pub fn is_arithmetic_op(&self) -> bool {
-        matches!(self,
-            BinaryOperator::Add | BinaryOperator::Subtract |
-            BinaryOperator::Multiply | BinaryOperator::Divide |
-            BinaryOperator::Modulo
+        matches!(
+            self,
+            BinaryOperator::Add
+                | BinaryOperator::Subtract
+                | BinaryOperator::Multiply
+                | BinaryOperator::Divide
+                | BinaryOperator::Modulo
         )
     }
 }
@@ -352,15 +382,5 @@ impl BinaryOperator {
 impl UnaryOperator {
     pub fn is_prefix(&self) -> bool {
         true
-    }
-}
-
-impl CHSInfer for Expression {
-    fn infer(&self) -> CHSType {
-        todo!()
-    }
-
-    fn cast(&mut self, _ty: CHSType) -> crate::chs_util::CHSResult<()> {
-        todo!()
     }
 }

@@ -2,6 +2,7 @@ use crate::{chs_types::CHSType, chs_util::*, return_chs_error};
 
 use super::{
     RawModule,
+    ast::*,
     nodes::{self, Operator},
     typechecker::CHSInfer,
 };
@@ -25,28 +26,23 @@ impl HIROperator {
 }
 
 #[derive(Debug)]
-pub struct HIRModule<'src> {
-    pub raw_module: &'src RawModule,
+pub struct HIRModule {
     pub items: Vec<HIRModuleItem>,
 }
 
-impl<'src> HIRModule<'src> {
-    pub fn from_ast(ast: nodes::ASTModule<'src>) -> Self {
-        let raw_module = ast.raw_module;
+impl HIRModule {
+    pub fn from_ast(ast: Ast) -> Self {
         let items = ast
-            .items
             .into_iter()
             .map(|item| match item {
-                nodes::ModuleItem::Function(func) => {
+                AstNode::FunctionDecl(func) => {
                     HIRModuleItem::Function(HIRFunction::from_ast_function(func))
                 }
-                nodes::ModuleItem::ExternFunction(func) => {
-                    HIRModuleItem::ExternFunction(HIRExternFunction::from_ast_extern_function(func))
-                }
-                nodes::ModuleItem::MacroCall(..) => todo!(),
+                AstNode::StructDecl(struct_decl) => todo!(),
+                AstNode::EnumDecl(enum_decl) => todo!(),
             })
             .collect();
-        Self { raw_module, items }
+        Self { items }
     }
 }
 
@@ -59,24 +55,25 @@ pub enum HIRModuleItem {
 #[derive(Debug)]
 pub struct HIRFunction {
     pub name: Token,
-    pub fn_type: CHSType,
     pub params: Vec<HIRParam>,
-    pub return_type: CHSType,
-    pub body: HIRBlock,
+    pub return_type: Option<CHSType>,
+    pub body: Vec<Statement>,
 }
+
 impl HIRFunction {
-    fn from_ast_function(func: nodes::FunctionDecl) -> HIRFunction {
+    fn from_ast_function(func: FunctionDecl) -> HIRFunction {
         Self {
             name: func.name,
-            fn_type: func.fn_type,
             params: func
-                .params
+                .parameters
                 .into_iter()
                 .map(HIRParam::from_ast_param)
                 .collect(),
-            return_type: func.ret_type,
-            body: HIRBlock {
-                statements: func.body.into_iter().map(HIRStmt::from_ast_expr).collect(),
+            return_type: func.return_type,
+            body: if let Statement::Empty = func.body {
+                vec![]
+            } else {
+                vec![func.body]
             },
         }
     }
@@ -103,287 +100,45 @@ pub struct HIRParam {
 }
 
 impl HIRParam {
-    fn from_ast_param(param: nodes::Param) -> HIRParam {
+    fn from_ast_param(param: Param) -> HIRParam {
         Self {
             name: param.name,
-            param_type: param.ty,
+            param_type: param.type_,
         }
     }
 }
 
-#[derive(Debug)]
-pub struct HIRBlock {
-    pub statements: Vec<HIRStmt>,
-}
-
-impl IntoIterator for HIRBlock {
-    type Item = HIRStmt;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.statements.into_iter()
-    }
-
-    type IntoIter = std::vec::IntoIter<HIRStmt>;
-}
-
-#[derive(Debug)]
-pub enum HIRStmt {
-    Assign {
-        span: Token,
-        target: Box<HIRExpr>,
-        value: Box<HIRExpr>,
-    },
-    VarDecl {
-        name: Token,
-        ty: Option<CHSType>,
-        value: Box<HIRExpr>,
-    },
-    If {
-        span: Token,
-        condition: Box<HIRExpr>,
-        then_branch: HIRBlock,
-        else_branch: Option<HIRBlock>,
-    },
-    While {
-        span: Token,
-        condition: Box<HIRExpr>,
-        body: HIRBlock,
-    },
-    Return {
-        span: Token,
-        expr: Option<Box<HIRExpr>>,
-    },
-    ExprStmt {
-        // span: Span<()>, TODO: Implement span for ExprStmt
-        value: HIRExpr,
-    },
-}
-
-impl HIRStmt {
-    pub fn from_ast_expr(expr: nodes::Expression) -> Self {
-        match expr {
-            nodes::Expression::VarDecl(v) => Self::VarDecl {
-                name: v.token,
-                ty: v.ty,
-                value: HIRExpr::from_ast_expr(v.value).into(),
-            },
-            nodes::Expression::Assign(a) => Self::Assign {
-                span: a.token,
-                target: HIRExpr::from_ast_expr(a.target).into(),
-                value: HIRExpr::from_ast_expr(a.value).into(),
-            },
-            nodes::Expression::IfExpression(i) => Self::If {
-                span: i.token,
-                condition: HIRExpr::from_ast_expr(i.cond).into(),
-                then_branch: HIRBlock {
-                    statements: i.body.into_iter().map(Self::from_ast_expr).collect(),
-                },
-                else_branch: None,
-            },
-            nodes::Expression::IfElseExpression(i) => Self::If {
-                span: i.token,
-                condition: HIRExpr::from_ast_expr(i.cond).into(),
-                then_branch: HIRBlock {
-                    statements: i.body.into_iter().map(Self::from_ast_expr).collect(),
-                },
-                else_branch: Some(HIRBlock {
-                    statements: i.else_body.into_iter().map(Self::from_ast_expr).collect(),
-                }),
-            },
-            nodes::Expression::WhileExpression(w) => Self::While {
-                span: w.token,
-                condition: HIRExpr::from_ast_expr(w.cond).into(),
-                body: HIRBlock {
-                    statements: w.body.into_iter().map(Self::from_ast_expr).collect(),
-                },
-            },
-            nodes::Expression::ReturnExpression(r) => Self::Return {
-                span: r.token,
-                expr: r.expr.map(|e| HIRExpr::from_ast_expr(e).into()),
-            },
-            e => HIRStmt::ExprStmt {
-                value: HIRExpr::from_ast_expr(e).into(),
-            },
-        }
-    }
-}
-
-#[derive(Debug)]
-pub enum HIRExpr {
-    Literal(HIRLiteral, Option<CHSType>),
-    Identifier(Token, Option<CHSType>),
-    Binary {
-        ty: Option<CHSType>,
-        op: HIROperator,
-        lhs: Box<HIRExpr>,
-        rhs: Box<HIRExpr>,
-    },
-    Unary {
-        ty: Option<CHSType>,
-        op: HIROperator,
-        operand: Box<HIRExpr>,
-    },
-    Call {
-        ty: Option<CHSType>,
-        span: Token,
-        callee: Box<HIRExpr>,
-        args: Vec<HIRExpr>,
-    },
-    Cast {
-        span: Token,
-        expr: Box<HIRExpr>,
-        to_type: CHSType,
-    },
-    Index {
-        span: Token,
-        base: Box<HIRExpr>,
-        index: Box<HIRExpr>,
-    },
-    Syscall {
-        span: Token,
-        arity: usize,
-        args: Vec<HIRExpr>,
-    },
-}
-
-impl CHSInfer for HIRExpr {
+impl CHSInfer for Expression {
     fn cast(&mut self, ty: CHSType) -> CHSResult<()> {
-        let actual_ty = self.infer();
-        match self {
-            HIRExpr::Literal(_, lit_ty_opt @ None) => match (&actual_ty, &ty) {
-                (CHSType::Int, CHSType::I32)
-                | (CHSType::Int, CHSType::U32)
-                | (CHSType::Int, CHSType::I64)
-                | (CHSType::Int, CHSType::U64) => {
-                    *lit_ty_opt = Some(ty);
-                    Ok(())
-                }
-                (CHSType::I32, CHSType::Int)
-                | (CHSType::U32, CHSType::Int)
-                | (CHSType::I64, CHSType::Int)
-                | (CHSType::U64, CHSType::Int) => {
-                    *lit_ty_opt = Some(ty);
-                    Ok(())
-                }
-                _ => {
-                    return_chs_error!(
-                        "Automatic casting literal of type {} to incompatible type {}.",
-                        actual_ty,
-                        ty
-                    );
-                }
-            },
-            _ => {
-                return_chs_error!(
-                    "Automatic casting expression of type {} to incompatible type {}.",
-                    actual_ty,
-                    ty
-                );
-            }
-        }
+        todo!()
     }
     fn infer(&self) -> CHSType {
         match self {
-            HIRExpr::Literal(l, None) => match l {
-                HIRLiteral::Int(_) => CHSType::Int,
-                HIRLiteral::Bool(_) => CHSType::Boolean,
-                HIRLiteral::Str(_) => CHSType::String,
-                HIRLiteral::Char(_) => CHSType::Char,
-                HIRLiteral::Void => CHSType::Void,
-            },
-            HIRExpr::Literal(_, Some(ty)) => ty.clone(),
-            HIRExpr::Identifier(_, ty) => ty.clone().unwrap_or(CHSType::Never),
-            HIRExpr::Binary { ty, .. } => ty.clone().unwrap_or(CHSType::Never),
-            HIRExpr::Unary { ty, .. } => ty.clone().unwrap_or(CHSType::Never),
-            HIRExpr::Call { ty, .. } => ty.clone().unwrap_or(CHSType::Never),
-            HIRExpr::Cast { to_type, .. } => to_type.clone(),
-            HIRExpr::Index { .. } => todo!(),
-            HIRExpr::Syscall { .. } => todo!(),
+            Expression::Nil => CHSType::Nil,
+            Expression::Bool(_) => todo!(),
+            Expression::Int(token) => CHSType::I32,
+            Expression::Float(token) => todo!(),
+            Expression::String(token) => todo!(),
+            Expression::Char(token) => todo!(),
+            Expression::Identifier(token) => todo!(),
+            Expression::BinaryOp {
+                left,
+                operator,
+                right,
+            } => left.infer(),
+            Expression::UnaryOp { operator, operand } => todo!(),
+            Expression::FunctionCall { callee, args } => todo!(),
+            Expression::ArrayAccess { array, index } => todo!(),
+            Expression::MemberAccess { object, member } => todo!(),
+            Expression::ArrayLiteral(vec) => todo!(),
+            Expression::StructLiteral { name, fields } => todo!(),
+            Expression::TernaryOp {
+                condition,
+                true_expr,
+                false_expr,
+            } => todo!(),
+            Expression::Parenthesized(expression) => todo!(),
+            Expression::Cast { expr, target_type } => todo!(),
         }
     }
-}
-
-impl HIRExpr {
-    pub fn from_ast_expr(expr: nodes::Expression) -> Self {
-        match expr {
-            nodes::Expression::ConstExpression(cexp) => match cexp {
-                nodes::ConstExpression::IntegerDefault(s) => {
-                    HIRExpr::Literal(HIRLiteral::Int(s), None)
-                }
-                nodes::ConstExpression::IntegerLiteral(s) => {
-                    // HIRExpr::Literal(HIRLiteral::I32(s), None)
-                    HIRExpr::Literal(HIRLiteral::Int(s), Some(CHSType::I32))
-                }
-                nodes::ConstExpression::UnsignedIntegerLiteral(s) => {
-                    // HIRExpr::Literal(HIRLiteral::U32(s), None)
-                    HIRExpr::Literal(HIRLiteral::Int(s), Some(CHSType::U32))
-                }
-                nodes::ConstExpression::LongIntegerLiteral(s) => {
-                    // HIRExpr::Literal(HIRLiteral::I64(s), None)
-                    HIRExpr::Literal(HIRLiteral::Int(s), Some(CHSType::I64))
-                }
-                nodes::ConstExpression::LongUnsignedIntegerLiteral(s) => {
-                    // HIRExpr::Literal(HIRLiteral::U64(s), None)
-                    HIRExpr::Literal(HIRLiteral::Int(s), Some(CHSType::U64))
-                }
-                nodes::ConstExpression::BooleanLiteral(s) => {
-                    HIRExpr::Literal(HIRLiteral::Bool(s), None)
-                }
-                nodes::ConstExpression::Identifier(s) => HIRExpr::Identifier(s, None),
-                nodes::ConstExpression::StringLiteral(s) => {
-                    HIRExpr::Literal(HIRLiteral::Str(s), None)
-                }
-                nodes::ConstExpression::CharLiteral(s) => {
-                    HIRExpr::Literal(HIRLiteral::Char(s), None)
-                }
-            },
-            nodes::Expression::Binop(b) => HIRExpr::Binary {
-                ty: None,
-                op: HIROperator::from_ast_op(b.token, b.op),
-                lhs: HIRExpr::from_ast_expr(b.left).into(),
-                rhs: HIRExpr::from_ast_expr(b.right).into(),
-            },
-            nodes::Expression::Unop(u) => HIRExpr::Unary {
-                ty: None,
-                op: HIROperator::from_ast_op(u.token, u.op),
-                operand: HIRExpr::from_ast_expr(u.operand).into(),
-            },
-            nodes::Expression::Call(c) => HIRExpr::Call {
-                ty: None,
-                span: c.token,
-                callee: HIRExpr::from_ast_expr(c.callee).into(),
-                args: c.args.into_iter().map(HIRExpr::from_ast_expr).collect(),
-            },
-            nodes::Expression::Group(e) => HIRExpr::from_ast_expr(*e),
-            nodes::Expression::Cast(c) => HIRExpr::Cast {
-                span: c.token,
-                expr: HIRExpr::from_ast_expr(c.casted).into(),
-                to_type: c.to_type,
-            },
-            nodes::Expression::Index(i) => HIRExpr::Index {
-                span: i.token,
-                base: HIRExpr::from_ast_expr(i.base).into(),
-                index: HIRExpr::from_ast_expr(i.index).into(),
-            },
-            nodes::Expression::Syscall(s) => HIRExpr::Syscall {
-                span: s.token,
-                arity: s.arity,
-                args: s.args.into_iter().map(HIRExpr::from_ast_expr).collect(),
-            },
-            _ => todo!(),
-        }
-    }
-}
-
-#[derive(Debug)]
-pub enum HIRLiteral {
-    Int(Token),
-    // I32(Token),
-    // U32(Token),
-    // I64(Token),
-    // U64(Token),
-    Bool(Token),
-    Str(Token),
-    Char(Token),
-    Void,
 }

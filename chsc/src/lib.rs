@@ -1,3 +1,4 @@
+#![allow(unused)]
 pub mod chs_ast;
 pub mod chs_codegen;
 pub mod chs_lexer;
