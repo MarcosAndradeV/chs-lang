@@ -1,0 +1,4 @@
+export CHS_STDLIB_PATH="stdlib"
+export CHS_BACKEND="fasm"
+export CHS_ARCH="x86_64"
+export CHS_OS="linux"

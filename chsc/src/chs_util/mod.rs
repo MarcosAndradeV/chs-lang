@@ -1,5 +1,12 @@
 use core::fmt;
-use std::{ffi::OsStr, fmt::Debug, fs, path::Path, process::Command, time::SystemTime};
+use std::{
+    ffi::OsStr,
+    fmt::Debug,
+    fs,
+    path::Path,
+    process::{Command, ExitStatus},
+    time::SystemTime,
+};
 pub struct CHSError(pub String);
 pub type CHSResult<T> = Result<T, CHSError>;
 
@@ -100,17 +107,19 @@ pub fn cleanup_files<P: AsRef<Path> + Debug>(paths: &[P]) {
     }
 }
 
-pub fn run_exe<P: AsRef<OsStr> + Debug>(exe: P) -> CHSResult<()> {
-    println!("[INFO] Running executable...");
+pub fn run_exe<P: AsRef<OsStr> + Debug>(exe: P) -> CHSResult<ExitStatus> {
     let output = Command::new(exe)
-        .status()
-        .map_err(|e| chs_error!("Failed to execute binary: {}", e))?;
-
-    if output.success() {
-        Ok(())
-    } else {
-        Err(chs_error!("Execution failed"))
+        .output()
+        .map_err(|e| chs_error!("Failed to create child process: {}", e))?;
+    if !output.status.success() {
+        return_chs_error!(
+            "Failed to execute binary {:?}\nstdout:\n{}\nstderr:\n{}",
+            output,
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
+    Ok(output.status)
 }
 
 pub fn run_cc<P: AsRef<OsStr> + Debug>(

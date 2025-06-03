@@ -23,14 +23,6 @@ pub enum Commands {
         #[arg(short, long)]
         output: Option<String>,
 
-        /// Silences compiler output
-        #[arg(short, long)]
-        silent: bool,
-
-        /// Keep the intermediate files
-        #[arg(long)]
-        keep: bool,
-
         /// Pass flags to the CC compiler (can be specified multiple times)
         #[arg(short = 'C', long = "compiler-flag", num_args = 1)]
         compiler_flags: Vec<String>,
@@ -49,4 +41,7 @@ pub enum Commands {
         #[arg(short = 'C', long = "compiler-flag", num_args = 1)]
         compiler_flags: Vec<String>,
     },
+
+    /// Print chs version
+    Version,
 }

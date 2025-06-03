@@ -22,8 +22,6 @@ impl MIRModule {
                     for param in hir_f.params {
                         b.add_name_local(&mut module, param.param_type, param.name);
                     }
-                    let start_block = b.add_block(&mut module).unwrap();
-                    b.set_current_block(start_block);
                     lower_stmt(&mut module, &mut b, hir_f.body);
                 }
                 HIRModuleItem::ExternFunction(hirextern_function) => todo!(),
@@ -56,7 +54,9 @@ fn lower_stmt(module: &mut MIRModule, b: &mut MIRBuilder, stmt: Statement) {
             b.set_current_block(block);
             lower_block(module, b, statements);
         }
-        Statement::LetStatement(let_statement) => todo!(),
+        Statement::LetStatement(l) => {
+
+        }
         Statement::ExpressionStatement(expression) => todo!(),
         Statement::IfStatement(if_statement) => todo!(),
         Statement::WhileStatement(while_statement) => todo!(),

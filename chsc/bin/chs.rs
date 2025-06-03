@@ -4,19 +4,14 @@ use chsc::{
     chs_ast::{self, RawModule, hir::HIRModule, parser::Parser, typechecker::TypeChecker},
     chs_error,
     chs_mir::MIRModule,
-    chs_util::{CHSError, CHSResult, binary_exists},
+    chs_util::{CHSError, CHSResult, run_exe},
     cli,
     config::Config,
 };
 use clap::Parser as _;
 
 fn main() {
-    let _chs_config = Config::default();
-
-    if !binary_exists("cc") {
-        eprintln!("[ERROR] cc binary not found.");
-        std::process::exit(1);
-    }
+    let chs_config = Config::default();
 
     let cli = cli::Cli::parse();
 
@@ -25,79 +20,75 @@ fn main() {
             input,
             output,
             compiler_flags,
-            silent,
-            keep,
-        } => {
-            if !silent {
-                println!("[INFO] Compiling file: {}", input);
-                if let Some(ref out) = output {
-                    println!("[INFO] Output: {}", out);
-                }
+        } => match compile(chs_config, input, output, compiler_flags) {
+            Ok(out) => {
+                println!("Compiled to {}", out.display())
             }
-            let result = compile(input, output, compiler_flags, false, silent, keep);
-            if let Err(err) = result {
+            Err(err) => {
                 eprintln!("[ERROR] {}", err);
                 std::process::exit(1);
             }
-        }
+        },
 
         cli::Commands::CompileRun {
             input,
             output,
             compiler_flags,
-        } => {
-            let result = compile(input, output, compiler_flags, true, true, false);
-            if let Err(err) = result {
+        } => match compile(chs_config, input, output, compiler_flags) {
+            Ok(exe) => match run_exe(exe) {
+                Ok(e) => {
+                    std::process::exit(e.code().unwrap_or(0));
+                }
+                Err(err) => {
+                    eprintln!("[ERROR] {}", err);
+                    std::process::exit(1);
+                }
+            },
+            Err(err) => {
                 eprintln!("[ERROR] {}", err);
                 std::process::exit(1);
             }
-        }
-    }
-}
-
-macro_rules! log {
-    ($silent:expr, $($arg:tt)*) => {
-        if !$silent {
-            println!($($arg)*);
+        },
+        cli::Commands::Version => {
+            println!("chs version {} {}", chs_config.version, chs_config.target);
         }
     }
 }
 
 #[allow(unused)]
 fn compile(
+    chs_config: Config,
     input_path: String,
-    outpath: Option<String>,
+    output_path: Option<String>,
     compiler_flags: Vec<String>,
-    run: bool,
-    silent: bool,
-    keep: bool,
-) -> CHSResult<()> {
-    let file_path = PathBuf::from(&input_path);
-    let out_path = outpath
+) -> CHSResult<PathBuf> {
+    let input_path = PathBuf::from(&input_path);
+    let output_path = output_path
         .map(PathBuf::from)
-        .unwrap_or_else(|| file_path.with_extension(""));
+        .unwrap_or_else(|| input_path.with_extension(""));
 
-    log!(silent, "[INFO] Reading module from file: {}", input_path);
-    let raw_module = RawModule::new(chs_ast::read_file(&input_path), input_path);
+    println!("[INFO] Reading module from file: {}", input_path.display());
+    let raw_module = RawModule::new(
+        chs_ast::read_file(&input_path),
+        input_path.display().to_string(),
+    );
     let mut lexer = chslexer::PeekableLexer::new(&raw_module.source);
 
-    log!(silent, "[INFO] Parsing module...");
+    println!("[INFO] Parsing module...");
 
     let module = Parser::new(&mut lexer)
         .parse()
         .map_err(|err| chs_error!("{}", err))?;
 
-    log!(silent, "[INFO] Converting to HIR...");
+    println!("[INFO] Converting to HIR...");
     let mut module = HIRModule::from_ast(module);
 
-    log!(silent, "[INFO] Running type checker...");
+    println!("[INFO] Running type checker...");
     let mut checker = TypeChecker::new(&raw_module);
     checker.check_module(&mut module)?;
     let module = MIRModule::from_hir(module);
 
-    log!(silent, "[INFO] Code generation is not implemented...");
-    println!("{}", module.print());
     todo!();
 
-    Ok(())
+    Ok(output_path)
 }
