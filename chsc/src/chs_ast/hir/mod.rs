@@ -1,29 +1,13 @@
-use crate::{chs_types::CHSType, chs_util::*, return_chs_error};
+use crate::{chs_ast::ast, chs_types::CHSType, chs_util::*, return_chs_error};
 
 use super::{
     RawModule,
     ast::*,
-    nodes::{self, Operator},
     typechecker::CHSInfer,
 };
 
 use chslexer::*;
 
-#[derive(Debug)]
-pub struct HIROperator {
-    pub span: Token,
-    pub op: Operator,
-}
-
-impl HIROperator {
-    fn from_ast_op(token: Token, op: Operator) -> HIROperator {
-        Self { span: token, op }
-    }
-
-    pub fn get_type_of_op(&self, lty: &CHSType, rty: &CHSType) -> CHSResult<CHSType> {
-        self.op.get_type_of_op(lty, rty)
-    }
-}
 
 #[derive(Debug)]
 pub struct HIRModule {
@@ -57,7 +41,7 @@ pub struct HIRFunction {
     pub name: Token,
     pub params: Vec<HIRParam>,
     pub return_type: Option<CHSType>,
-    pub body: Vec<Statement>,
+    pub body: Statement,
 }
 
 impl HIRFunction {
@@ -70,11 +54,7 @@ impl HIRFunction {
                 .map(HIRParam::from_ast_param)
                 .collect(),
             return_type: func.return_type,
-            body: if let Statement::Empty = func.body {
-                vec![]
-            } else {
-                vec![func.body]
-            },
+            body: func.body,
         }
     }
 }
@@ -85,11 +65,8 @@ pub struct HIRExternFunction {
     pub fn_type: CHSType,
 }
 impl HIRExternFunction {
-    fn from_ast_extern_function(func: nodes::ExternFunctionDecl) -> HIRExternFunction {
-        Self {
-            name: func.name,
-            fn_type: func.fn_type,
-        }
+    fn from_ast_extern_function() -> HIRExternFunction {
+        todo!()
     }
 }
 

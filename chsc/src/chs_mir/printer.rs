@@ -65,12 +65,12 @@ impl MIRPrinter {
             } else {
                 write!(self.output, "{}: ", arg_id).unwrap();
             }
-            write!(self.output, "{:?}", local.ty).unwrap();
+            write!(self.output, "{}", local.ty).unwrap();
         }
         write!(self.output, ")").unwrap();
 
         if let Some(ret_type) = &func.return_type {
-            write!(self.output, " -> {:?}", ret_type).unwrap();
+            write!(self.output, " -> {}", ret_type).unwrap();
         }
 
         writeln!(self.output, " {{").unwrap();
@@ -85,7 +85,7 @@ impl MIRPrinter {
                     continue;
                 }
                 self.write_indent();
-                write!(self.output, "let _{}: {:?}", i, local.ty).unwrap();
+                write!(self.output, "let _{}: {}", i, local.ty).unwrap();
                 if let Some(name) = &local.name {
                     write!(self.output, " // {}", name.source).unwrap();
                 }
@@ -111,7 +111,7 @@ impl MIRPrinter {
             if i > 0 {
                 write!(self.output, ", ").unwrap();
             }
-            write!(self.output, "{:?}", arg_type).unwrap();
+            write!(self.output, "{}", arg_type).unwrap();
         }
 
         if extern_fn.is_variadic {
@@ -122,18 +122,18 @@ impl MIRPrinter {
         }
 
         write!(self.output, ")").unwrap();
-        writeln!(self.output, " -> {:?};", extern_fn.return_type).unwrap();
+        writeln!(self.output, " -> {};", extern_fn.return_type).unwrap();
     }
 
     fn print_global_variable(&mut self, global: &MIRGlobalVariable) {
-        write!(self.output, "static {}: {:?} = ",
+        write!(self.output, "static {}: {} = ",
                global.name.source, global.ty).unwrap();
         self.print_operand(&global.initializer);
         writeln!(self.output, ";").unwrap();
     }
 
     fn print_constant(&mut self, constant: &MIRConstant) {
-        write!(self.output, "const {}: {:?} = ",
+        write!(self.output, "const {}: {} = ",
                constant.name.source, constant.ty).unwrap();
         self.print_operand(&constant.value);
         writeln!(self.output, ";").unwrap();
@@ -229,14 +229,14 @@ impl MIRPrinter {
                 self.print_operand(operand);
             }
             RValue::BinaryOp { op, left, right } => {
-                write!(self.output, "(").unwrap();
+                write!(self.output, "{:?}(", op).unwrap();
                 self.print_operand(left);
-                write!(self.output, " {:?} ", op).unwrap();
+                write!(self.output, ", ").unwrap();
                 self.print_operand(right);
                 write!(self.output, ")").unwrap();
             }
             RValue::UnaryOp { op, operand } => {
-                write!(self.output, "({:?} ", op).unwrap();
+                write!(self.output, "{:?}(", op).unwrap();
                 self.print_operand(operand);
                 write!(self.output, ")").unwrap();
             }
@@ -251,7 +251,7 @@ impl MIRPrinter {
             RValue::Cast { operand, target_type } => {
                 write!(self.output, "(").unwrap();
                 self.print_operand(operand);
-                write!(self.output, " as {:?})", target_type).unwrap();
+                write!(self.output, " as {})", target_type).unwrap();
             }
             RValue::FieldAccess { base, field } => {
                 self.print_operand(base);
@@ -277,7 +277,7 @@ impl MIRPrinter {
             RValue::Aggregate { kind, fields } => {
                 match kind {
                     AggregateKind::Array(ty) => {
-                        write!(self.output, "[{:?}; ", ty).unwrap();
+                        write!(self.output, "[{}; ", ty).unwrap();
                     }
                     AggregateKind::Struct(name) => {
                         write!(self.output, "{} {{ ", name.source).unwrap();

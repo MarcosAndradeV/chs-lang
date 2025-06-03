@@ -2,7 +2,6 @@ use std::path::PathBuf;
 
 use chsc::{
     chs_ast::{self, RawModule, hir::HIRModule, parser::Parser, typechecker::TypeChecker},
-    chs_codegen::CodeGenerator,
     chs_error,
     chs_mir::MIRModule,
     chs_util::{CHSError, CHSResult, binary_exists},
@@ -88,8 +87,6 @@ fn compile(
         .parse()
         .map_err(|err| chs_error!("{}", err))?;
 
-    // let module = Parser::new(&raw_module).parse()?;
-
     log!(silent, "[INFO] Converting to HIR...");
     let mut module = HIRModule::from_ast(module);
 
@@ -98,9 +95,9 @@ fn compile(
     checker.check_module(&mut module)?;
     let module = MIRModule::from_hir(module);
 
-    let backend = CodeGenerator::Mir;
-    log!(silent, "[INFO] Code generation with {backend:?}...");
-    backend.generate(module, file_path, out_path)?;
+    log!(silent, "[INFO] Code generation is not implemented...");
+    println!("{}", module.print());
+    todo!();
 
     Ok(())
 }

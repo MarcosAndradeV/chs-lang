@@ -24,7 +24,7 @@ impl MIRModule {
                     }
                     let start_block = b.add_block(&mut module).unwrap();
                     b.set_current_block(start_block);
-                    lower_block(&mut module, &mut b, hir_f.body);
+                    lower_stmt(&mut module, &mut b, hir_f.body);
                 }
                 HIRModuleItem::ExternFunction(hirextern_function) => todo!(),
             }
@@ -35,30 +35,34 @@ impl MIRModule {
 
 fn lower_block(module: &mut MIRModule, b: &mut MIRBuilder, stmts: Vec<Statement>) {
     for stmt in stmts {
-        match stmt {
-            Statement::ReturnStatement(r) => match r {
-                ReturnStatement::Return => {
-                    b.set_terminator(module, Terminator::Return(None));
-                }
-                ReturnStatement::ReturnExpression(expression) => {
-                    let operand = b.lower_expression(module, expression);
-                    b.set_terminator(module, Terminator::Return(Some(operand)));
-                }
-            },
-            Statement::BlockStatement(statements) => {
-                let block = b.add_block(module).unwrap();
-                b.set_terminator(module, Terminator::Goto(block));
-                b.set_current_block(block);
-                lower_block(module, b, statements);
+        lower_stmt(module, b, stmt);
+    }
+}
+
+fn lower_stmt(module: &mut MIRModule, b: &mut MIRBuilder, stmt: Statement) {
+    match stmt {
+        Statement::ReturnStatement(r) => match r {
+            ReturnStatement::Return => {
+                b.set_terminator(module, Terminator::Return(None));
             }
-            Statement::LetStatement(let_statement) => todo!(),
-            Statement::ExpressionStatement(expression) => todo!(),
-            Statement::IfStatement(if_statement) => todo!(),
-            Statement::WhileStatement(while_statement) => todo!(),
-            Statement::ForStatement(for_statement) => todo!(),
-            Statement::AssignmentStatement(assignment_statement) => todo!(),
-            Statement::Empty => todo!(),
+            ReturnStatement::ReturnExpression(expression) => {
+                let operand = b.lower_expression(module, expression);
+                b.set_terminator(module, Terminator::Return(Some(operand)));
+            }
+        },
+        Statement::BlockStatement(statements) => {
+            let block = b.add_block(module).unwrap();
+            b.set_terminator(module, Terminator::Goto(block));
+            b.set_current_block(block);
+            lower_block(module, b, statements);
         }
+        Statement::LetStatement(let_statement) => todo!(),
+        Statement::ExpressionStatement(expression) => todo!(),
+        Statement::IfStatement(if_statement) => todo!(),
+        Statement::WhileStatement(while_statement) => todo!(),
+        Statement::ForStatement(for_statement) => todo!(),
+        Statement::AssignmentStatement(assignment_statement) => todo!(),
+        Statement::Empty => todo!(),
     }
 }
 

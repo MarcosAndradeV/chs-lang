@@ -1,0 +1,1 @@
+rg -N --no-filename '^(pub\s+)?(struct|enum)\s+\w+\s*(<[^>]+>)?\s*(where\s+.*?)?\s*\{' $1

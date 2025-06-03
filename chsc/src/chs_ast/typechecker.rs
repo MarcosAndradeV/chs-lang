@@ -84,7 +84,7 @@ impl<'src> TypeChecker<'src> {
 
         // Type check body
         self.curr_ret_type = func.return_type.clone().unwrap_or(CHSType::Void);
-        let return_flow = self.check_block(& func.body)?;
+        let return_flow = self.check_stmt(&func.body)?;
         self.curr_ret_type = CHSType::Never;
 
         if return_flow != ReturnFlow::Always {
@@ -161,10 +161,6 @@ impl<'src> TypeChecker<'src> {
         }
         self.env.locals.pop();
         Ok(return_flow)
-    }
-
-    pub fn env(&self) -> &TypeEnv {
-        &self.env
     }
 }
 
