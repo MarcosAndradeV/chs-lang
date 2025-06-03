@@ -1,17 +1,18 @@
 use std::path::PathBuf;
 
 use chsc::{
-    chs_ast::{self, hir::HIRModule, parser::Parser, typechecker::TypeChecker, RawModule}, chs_codegen::CodeGenerator, chs_error, chs_mir::MIRModule, chs_util::{binary_exists, CHSError, CHSResult}, cli, config::Config
+    chs_ast::{self, RawModule, hir::HIRModule, parser::Parser, typechecker::TypeChecker},
+    chs_codegen::CodeGenerator,
+    chs_error,
+    chs_mir::MIRModule,
+    chs_util::{CHSError, CHSResult, binary_exists},
+    cli,
+    config::Config,
 };
 use clap::Parser as _;
 
 fn main() {
     let _chs_config = Config::default();
-
-    if !binary_exists("qbe") {
-        eprintln!("[ERROR] qbe binary not found. Please install it.");
-        std::process::exit(1);
-    }
 
     if !binary_exists("cc") {
         eprintln!("[ERROR] cc binary not found.");
@@ -73,8 +74,6 @@ fn compile(
     keep: bool,
 ) -> CHSResult<()> {
     let file_path = PathBuf::from(&input_path);
-    let ssa_path = file_path.with_extension("ssa");
-    let asm_path = file_path.with_extension("s");
     let out_path = outpath
         .map(PathBuf::from)
         .unwrap_or_else(|| file_path.with_extension(""));
@@ -97,9 +96,11 @@ fn compile(
     log!(silent, "[INFO] Running type checker...");
     let mut checker = TypeChecker::new(&raw_module);
     checker.check_module(&mut module)?;
-    let m = MIRModule::new();
+    let module = MIRModule::from_hir(module);
 
-    CodeGenerator::Fasm.generate(m);
+    let backend = CodeGenerator::Mir;
+    log!(silent, "[INFO] Code generation with {backend:?}...");
+    backend.generate(module, file_path, out_path)?;
 
     Ok(())
 }

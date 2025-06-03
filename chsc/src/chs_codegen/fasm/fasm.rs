@@ -483,7 +483,7 @@ impl fmt::Display for Instr {
             Self::Set(cond, dst) => write!(f, "set{cond} {dst}"),
             Instr::J(cond, label) => write!(f, "j{cond} .{label}"), // local labels
             Instr::Jmp(label) => write!(f, "jmp .{label}"),         // local labels
-            Instr::Call(label) => write!(f, "call {label}"),
+            Instr::Call(label) => write!(f, "call _{label}"),
             Instr::Ret => write!(f, "ret"),
         }
     }
@@ -603,10 +603,7 @@ impl fmt::Display for Function {
             return Ok(());
         }
         writeln!(f, ";; function")?;
-        if self.public {
-            writeln!(f, "public {}", self.name)?;
-        }
-        writeln!(f, "{}:", self.name)?;
+        writeln!(f, "_{}:", self.name)?;
 
         if self.prologe {
             writeln!(f, "\tpush rbp")?;
@@ -665,8 +662,12 @@ impl Module {
         self.start.push_instr(Instr::Raw(instr.into()));
     }
 
-    pub fn link_with_c(&mut self, arg: bool) {
+    pub fn set_link_with_c(&mut self, arg: bool) {
         self.link_with_c = arg;
+    }
+
+    pub fn get_link_with_c(& self)-> bool {
+        self.link_with_c
     }
 
     pub fn push_extrn(&mut self, name: &str) {
@@ -684,23 +685,28 @@ impl fmt::Display for Module {
         }
 
         for e in &self.extrn {
-            let _ = writeln!(f, "extrn {e}");
+            let _ = writeln!(f, "extrn '{e}' as _{e}");
         }
 
-        if !self.functions.is_empty() {
-            if self.link_with_c {
-                writeln!(f, "section \".text\" executable")?;
-            } else {
-                writeln!(f, "segment executable")?;
-                writeln!(f, "_start:")?;
+        if self.link_with_c {
+            writeln!(f, "section \".text\" executable")?;
+        } else {
+            writeln!(f, "segment executable")?;
+            writeln!(f, "_start:")?;
+            if !self.functions.is_empty() {
                 writeln!(f, "\tcall _main")?;
-                writeln!(f, "\tmov rax, 60")?;
-                writeln!(f, "\tmov rdi, 0")?;
-                writeln!(f, "\tsyscall")?;
             }
+            writeln!(f, "\tmov rax, 60")?;
+            writeln!(f, "\tmov rdi, 0")?;
+            writeln!(f, "\tsyscall")?;
         }
 
         for func in self.functions.iter() {
+            if self.link_with_c {
+                if func.public {
+                    writeln!(f, "public _{}", func.name)?;
+                }
+            }
             writeln!(f, "{}", func)?;
         }
 

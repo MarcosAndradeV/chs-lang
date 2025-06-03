@@ -150,3 +150,18 @@ pub fn run_qbe<P: AsRef<OsStr> + Debug>(ssa_path: P, asm_path: P) -> Result<(), 
         );
     })
 }
+
+pub fn run_fasm<P: AsRef<OsStr> + Debug>(src_path: P, out_path: P) -> Result<(), CHSError> {
+    let output = Command::new("fasm")
+        .arg(&src_path)
+        .arg(out_path)
+        .output()
+        .map_err(|e| chs_error!("Failed to run fasm: {}", e))?;
+    Ok(if !output.status.success() {
+        return_chs_error!(
+            "fasm failed to generate\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    })
+}

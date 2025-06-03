@@ -1,7 +1,12 @@
 use chslexer::Token;
-use std::collections::HashMap;
 
-use crate::{chs_ast::ast::{BinaryOperator, UnaryOperator}, chs_types::CHSType};
+mod lowering;
+mod printer;
+
+use crate::{
+    chs_ast::ast::{BinaryOperator, UnaryOperator},
+    chs_types::CHSType,
+};
 
 #[derive(Debug)]
 pub struct MIRModule {
@@ -17,8 +22,10 @@ impl MIRModule {
         }
     }
 
-    pub fn add_function(&mut self, function: MIRFunction) {
+    pub fn add_function(&mut self, function: MIRFunction) -> usize {
+        let idx = self.items.len();
         self.items.push(MIRModuleItem::Function(function));
+        idx
     }
 
     pub fn add_extern_function(&mut self, extern_fn: MIRExternFunction) {
@@ -61,11 +68,11 @@ pub struct MIRFunction {
     pub args: Vec<LocalId>,
     pub locals: Vec<MIRLocal>,
     pub body: Vec<MIRBlock>,
-    pub return_type: CHSType,
+    pub return_type: Option<CHSType>,
 }
 
 impl MIRFunction {
-    pub fn new(name: Token, return_type: CHSType) -> Self {
+    pub fn new(name: Token, return_type: Option<CHSType>) -> Self {
         Self {
             name,
             args: vec![],
@@ -251,13 +258,7 @@ pub enum Operand {
 
     /// Function reference
     Function(Token),
-
-    /// Temporary value from an operation
-    Temporary(TempId),
 }
-
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct TempId(pub usize);
 
 #[derive(Debug, Clone)]
 pub enum Constant {
@@ -306,9 +307,7 @@ pub enum RValue {
     UnaryOp { op: UnaryOperator, operand: Operand },
 
     /// Take address of a place
-    AddressOf {
-        place: Operand,
-    },
+    AddressOf { place: Operand },
 
     /// Dereference a pointer
     Deref(Operand),
@@ -335,7 +334,6 @@ pub enum RValue {
     },
 }
 
-
 #[derive(Debug, Clone)]
 pub enum AggregateKind {
     Array(CHSType),
@@ -354,16 +352,9 @@ impl std::fmt::Display for LocalId {
     }
 }
 
-impl std::fmt::Display for TempId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "tmp{}", self.0)
-    }
-}
-
 pub struct MIRBuilder {
     current_function: Option<usize>,
     current_block: Option<BlockId>,
-    temp_counter: usize,
 }
 
 impl MIRBuilder {
@@ -371,14 +362,7 @@ impl MIRBuilder {
         Self {
             current_function: None,
             current_block: None,
-            temp_counter: 0,
         }
-    }
-
-    pub fn next_temp(&mut self) -> TempId {
-        let id = TempId(self.temp_counter);
-        self.temp_counter += 1;
-        id
     }
 
     pub fn set_current_function(&mut self, func_index: usize) {
@@ -393,6 +377,49 @@ impl MIRBuilder {
         if let (Some(func_idx), Some(block_id)) = (self.current_function, self.current_block) {
             if let MIRModuleItem::Function(func) = &mut module.items[func_idx] {
                 func.get_block_mut(block_id).add_operation(op);
+            }
+        }
+    }
+
+    pub fn add_arg(&mut self, module: &mut MIRModule, ty: CHSType, name: Option<Token>) {
+        if let Some(func_idx) = self.current_function {
+            if let MIRModuleItem::Function(func) = &mut module.items[func_idx] {
+                func.add_arg(ty, name);
+            }
+        }
+    }
+
+    pub fn add_block(&mut self, module: &mut MIRModule) -> Option<BlockId> {
+        if let Some(func_idx) = self.current_function {
+            if let MIRModuleItem::Function(func) = &mut module.items[func_idx] {
+                return Some(func.add_block());
+            }
+        }
+        None
+    }
+
+    pub fn add_local(
+        &mut self,
+        module: &mut MIRModule,
+        ty: CHSType,
+        name: Option<Token>,
+    ) -> Option<LocalId> {
+        if let Some(func_idx) = self.current_function {
+            if let MIRModuleItem::Function(func) = &mut module.items[func_idx] {
+                if let Some(name) = name {
+                    return Some(func.add_named_local(ty, name));
+                } else {
+                    return Some(func.add_local(ty));
+                }
+            }
+        }
+        None
+    }
+
+    pub fn add_name_local(&mut self, module: &mut MIRModule, ty: CHSType, name: Token) {
+        if let Some(func_idx) = self.current_function {
+            if let MIRModuleItem::Function(func) = &mut module.items[func_idx] {
+                func.add_named_local(ty, name);
             }
         }
     }

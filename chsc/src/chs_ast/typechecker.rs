@@ -1,9 +1,9 @@
 use std::{collections::HashMap, rc::Rc};
 
-use crate::{chs_error, chs_types::CHSType, chs_util::*, return_chs_error};
+use crate::{chs_types::CHSType, chs_util::*, return_chs_error};
 
 use super::{
-    ast::{Statement, Expression}, hir::{HIRFunction, HIRModule, HIRModuleItem}, nodes::Operator, RawModule
+    ast::{Statement, Expression}, hir::{HIRFunction, HIRModule, HIRModuleItem}, RawModule
 };
 
 pub struct TypeChecker<'src> {
