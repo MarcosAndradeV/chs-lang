@@ -3,7 +3,7 @@ use std::{collections::HashMap, rc::Rc};
 use crate::{chs_types::CHSType, chs_util::*, return_chs_error};
 
 use super::{
-    ast::{Statement, Expression}, hir::{HIRFunction, HIRModule, HIRModuleItem}, RawModule
+    ast::{Expression, ReturnStatement, Statement}, hir::{HIRFunction, HIRModule, HIRModuleItem}, RawModule
 };
 
 pub struct TypeChecker<'src> {
@@ -84,7 +84,7 @@ impl<'src> TypeChecker<'src> {
 
         // Type check body
         self.curr_ret_type = func.return_type.clone().unwrap_or(CHSType::Void);
-        let return_flow = self.check_stmt(&func.body)?;
+        let return_flow = self.check_stmt(&mut func.body)?;
         self.curr_ret_type = CHSType::Never;
 
         if return_flow != ReturnFlow::Always {
@@ -135,9 +135,24 @@ impl<'src> TypeChecker<'src> {
         }
     }
 
-    fn check_stmt(&mut self, stmt: & Statement) -> CHSResult<ReturnFlow> {
+    fn check_stmt(&mut self, stmt: &mut Statement) -> CHSResult<ReturnFlow> {
         match stmt {
-            Statement::ReturnStatement(..) => Ok(ReturnFlow::Always),
+            Statement::ReturnStatement(ReturnStatement::Return) => {
+                if self.curr_ret_type != CHSType::Void {
+                    return_chs_error!(
+                        "mismatch type in return"
+                    )
+                }
+                Ok(ReturnFlow::Always)
+            },
+            Statement::ReturnStatement(ReturnStatement::ReturnExpression(expr)) => {
+                if self.check_expr(expr)? != self.curr_ret_type {
+                    return_chs_error!(
+                        "mismatch type in return"
+                    )
+                }
+                Ok(ReturnFlow::Always)
+            }
             Statement::BlockStatement(block) => self.check_block(block),
             Statement::LetStatement(let_statement) => todo!(),
             Statement::ExpressionStatement(expression) => todo!(),
@@ -149,7 +164,7 @@ impl<'src> TypeChecker<'src> {
         }
     }
 
-    fn check_block(&mut self, block: &Vec<Statement>) -> CHSResult<ReturnFlow> {
+    fn check_block(&mut self, block: &mut Vec<Statement>) -> CHSResult<ReturnFlow> {
         self.env.locals_new();
         let mut return_flow = ReturnFlow::Never;
         for stmt in block {
