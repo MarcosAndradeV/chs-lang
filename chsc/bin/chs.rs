@@ -2,11 +2,11 @@ use std::path::PathBuf;
 
 use chsc::{
     chs_ast::{self, RawModule, hir::HIRModule, parser::Parser, typechecker::TypeChecker},
-    chs_error,
+    chs_codegen, chs_error,
     chs_mir::MIRModule,
-    chs_util::{CHSError, CHSResult, run_exe},
+    chs_util::{CHSError, CHSResult, run_cc, run_exe, run_fasm},
     cli,
-    config::Config,
+    config::{Arch, Backend, Config, Os, Target},
 };
 use clap::Parser as _;
 
@@ -22,7 +22,7 @@ fn main() {
             compiler_flags,
         } => match compile(chs_config, input, output, compiler_flags) {
             Ok(out) => {
-                println!("Compiled to {}", out.display())
+                println!("[INFO] Compiled to {}", out.display())
             }
             Err(err) => {
                 eprintln!("[ERROR] {}", err);
@@ -35,15 +35,20 @@ fn main() {
             output,
             compiler_flags,
         } => match compile(chs_config, input, output, compiler_flags) {
-            Ok(exe) => match run_exe(exe) {
-                Ok(e) => {
-                    std::process::exit(e.code().unwrap_or(0));
+            Ok(exe) => {
+                println!("[INFO] Compiled to {}", exe.display());
+                println!("[INFO] Running {}", exe.display());
+
+                match run_exe(exe) {
+                    Ok(e) => {
+                        std::process::exit(e.code().unwrap_or(0));
+                    }
+                    Err(err) => {
+                        eprintln!("[ERROR] {}", err);
+                        std::process::exit(1);
+                    }
                 }
-                Err(err) => {
-                    eprintln!("[ERROR] {}", err);
-                    std::process::exit(1);
-                }
-            },
+            }
             Err(err) => {
                 eprintln!("[ERROR] {}", err);
                 std::process::exit(1);
@@ -88,7 +93,15 @@ fn compile(
     checker.check_module(&mut module)?;
     let module = MIRModule::from_hir(module);
 
-    todo!();
+    match chs_config.target {
+        Target(Backend::FASM, Arch::X86_64, Os::LINUX) => {
+            let asm_path = output_path.with_extension("asm");
+            let o_path = output_path.with_extension("o");
+            chs_codegen::fasm_x86_64_linux::generate(&asm_path, module);
+            run_fasm(&asm_path, &o_path)?;
+            run_cc(compiler_flags, &o_path, &output_path)?;
+        }
+    }
 
     Ok(output_path)
 }
