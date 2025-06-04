@@ -20,7 +20,7 @@ fn main() {
             input,
             output,
             compiler_flags,
-        } => match compile(chs_config, input, output, compiler_flags) {
+        } => match compile(chs_config, input, output, compiler_flags, false) {
             Ok(out) => {
                 println!("[INFO] Compiled to {}", out.display())
             }
@@ -34,20 +34,10 @@ fn main() {
             input,
             output,
             compiler_flags,
-        } => match compile(chs_config, input, output, compiler_flags) {
+        } => match compile(chs_config, input, output, compiler_flags, true) {
             Ok(exe) => {
                 println!("[INFO] Compiled to {}", exe.display());
                 println!("[INFO] Running {}", exe.display());
-
-                match run_exe(exe) {
-                    Ok(e) => {
-                        std::process::exit(e.code().unwrap_or(0));
-                    }
-                    Err(err) => {
-                        eprintln!("[ERROR] {}", err);
-                        std::process::exit(1);
-                    }
-                }
             }
             Err(err) => {
                 eprintln!("[ERROR] {}", err);
@@ -63,9 +53,12 @@ fn main() {
 #[allow(unused)]
 fn compile(
     chs_config: Config,
+
     input_path: String,
     output_path: Option<String>,
     compiler_flags: Vec<String>,
+
+    run: bool,
 ) -> CHSResult<PathBuf> {
     let input_path = PathBuf::from(&input_path);
     let output_path = output_path
@@ -100,8 +93,19 @@ fn compile(
             chs_codegen::fasm_x86_64_linux::generate(&asm_path, module);
             run_fasm(&asm_path, &o_path)?;
             run_cc(compiler_flags, &o_path, &output_path)?;
+
+            if run {
+                match run_exe(output_path) {
+                    Ok(e) => {
+                        std::process::exit(e.code().unwrap_or(0));
+                    }
+                    Err(err) => {
+                        eprintln!("[ERROR] {}", err);
+                        std::process::exit(1);
+                    }
+                }
+            }
         }
     }
-
     Ok(output_path)
 }
