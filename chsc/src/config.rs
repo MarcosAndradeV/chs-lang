@@ -33,7 +33,7 @@ impl Default for Config {
 }
 
 #[derive(Debug, Default)]
-pub struct Target(Backend, Arch, Os);
+pub struct Target(pub Backend, pub Arch, pub Os);
 impl Target {
     pub fn from_env() -> Self {
         let backend = std::env::var("CHS_BACKEND").unwrap_or_default();
