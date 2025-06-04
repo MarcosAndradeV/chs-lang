@@ -214,14 +214,14 @@ impl fmt::Display for Addr {
             Addr::Base(reg) => write!(f, "{reg}"),
             Addr::BaseIndex(reg1, reg2) => write!(f, "{reg1}+{reg2}"),
             Addr::BaseDisplacement(reg, dis) => {
-                if *dis > 0 {
+                if *dis >= 0 {
                     write!(f, "{reg}+{dis}")
                 } else {
-                    write!(f, "{reg}")
+                    write!(f, "{reg}{dis}")
                 }
             }
             Addr::BaseIndexDisplacement(reg1, reg2, dis) => {
-                if *dis > 0 {
+                if *dis >= 0 {
                     write!(f, "{reg1}{reg2}+{dis}")
                 } else {
                     write!(f, "{reg1}{reg2}{dis}")
@@ -229,14 +229,14 @@ impl fmt::Display for Addr {
             }
             Addr::BaseIndexXScale(reg1, reg2, s) => write!(f, "{reg1}+{reg2}*{s}"),
             Addr::IndexXScaleDisplacement(reg1, s, dis) => {
-                if *dis > 0 {
+                if *dis >= 0 {
                     write!(f, "{reg1}*{s}+{dis}")
                 } else {
                     write!(f, "{reg1}*{s}{dis}")
                 }
             }
             Addr::BaseIndexXScaleDisplacement(reg1, reg2, s, dis) => {
-                if *dis > 0 {
+                if *dis >= 0 {
                     write!(f, "{reg1}+{reg2}*{s}+{dis}")
                 } else {
                     write!(f, "{reg1}+{reg2}*{s}{dis}")
@@ -497,7 +497,7 @@ pub struct Block {
 }
 
 impl Block {
-    pub fn new(label: &str) -> Self {
+    pub fn new(label: impl Into<String>) -> Self {
         Self {
             label: label.into(),
             instrs: vec![],
@@ -553,7 +553,7 @@ impl Function {
         self.stack_allocated
     }
 
-    pub fn push_block(&mut self, label: &str) -> &mut Block {
+    pub fn push_block(&mut self, label: impl Into<String>) -> &mut Block {
         self.blocks.push(Block::new(label));
         self.blocks.last_mut().unwrap()
     }
@@ -618,10 +618,6 @@ impl fmt::Display for Function {
         }
 
         if self.epiloge {
-            if self.stack_allocated > 0 {
-                writeln!(f, "\tadd rsp, {}", self.stack_allocated)?;
-            }
-
             writeln!(f, "\tpop rbp")?;
             writeln!(f, "\tret")?;
         }
@@ -704,7 +700,7 @@ impl fmt::Display for Module {
         for func in self.functions.iter() {
             if self.link_with_c {
                 if func.public {
-                    writeln!(f, "public _{}", func.name)?;
+                    writeln!(f, "public _{} as '{}'", func.name, func.name)?;
                 }
             }
             writeln!(f, "{}", func)?;
