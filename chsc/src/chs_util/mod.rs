@@ -113,8 +113,8 @@ pub fn run_exe<P: AsRef<OsStr> + Debug>(exe: P) -> CHSResult<ExitStatus> {
         .map_err(|e| chs_error!("Failed to create child process: {}", e))?;
     if !output.status.success() {
         return_chs_error!(
-            "Failed to execute binary {:?}\nstdout:\n{}\nstderr:\n{}",
-            output,
+            "Failed to execute binary {}\nstdout:\n{}\nstderr:\n{}",
+            output.status,
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
         );
