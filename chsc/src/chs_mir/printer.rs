@@ -33,8 +33,13 @@ impl MIRPrinter {
         }
 
         // Print module items
-        for item in &module.items {
-            self.print_module_item(item);
+        for item in &module.func {
+            self.print_function(item);
+            writeln!(self.output).unwrap();
+        }
+
+        for item in &module.extern_func {
+            self.print_extern_function(item);
             writeln!(self.output).unwrap();
         }
 
@@ -46,7 +51,6 @@ impl MIRPrinter {
             MIRModuleItem::Function(func) => self.print_function(func),
             MIRModuleItem::ExternFunction(extern_fn) => self.print_extern_function(extern_fn),
             MIRModuleItem::GlobalVariable(global) => self.print_global_variable(global),
-            MIRModuleItem::Constant(constant) => self.print_constant(constant),
         }
     }
 
@@ -129,13 +133,6 @@ impl MIRPrinter {
         write!(self.output, "static {}: {} = ",
                global.name.source, global.ty).unwrap();
         self.print_operand(&global.initializer);
-        writeln!(self.output, ";").unwrap();
-    }
-
-    fn print_constant(&mut self, constant: &MIRConstant) {
-        write!(self.output, "const {}: {} = ",
-               constant.name.source, constant.ty).unwrap();
-        self.print_operand(&constant.value);
         writeln!(self.output, ";").unwrap();
     }
 

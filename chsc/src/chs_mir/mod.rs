@@ -10,26 +10,30 @@ use crate::{
 
 #[derive(Debug)]
 pub struct MIRModule {
-    pub items: Vec<MIRModuleItem>,
+    pub func: Vec<MIRFunction>,
+    pub extern_func: Vec<MIRExternFunction>,
+    pub globals: Vec<MIRGlobalVariable>,
     pub string_literals: Vec<String>,
 }
 
 impl MIRModule {
     pub fn new() -> Self {
         Self {
-            items: Vec::new(),
             string_literals: Vec::new(),
+            func: Vec::new(),
+            extern_func: Vec::new(),
+            globals: Vec::new(),
         }
     }
 
     pub fn add_function(&mut self, function: MIRFunction) -> usize {
-        let idx = self.items.len();
-        self.items.push(MIRModuleItem::Function(function));
+        let idx = self.func.len();
+        self.func.push(function);
         idx
     }
 
     pub fn add_extern_function(&mut self, extern_fn: MIRExternFunction) {
-        self.items.push(MIRModuleItem::ExternFunction(extern_fn));
+        self.extern_func.push(extern_fn);
     }
 
     pub fn add_string_literal(&mut self, value: String) -> usize {
@@ -44,7 +48,6 @@ pub enum MIRModuleItem {
     Function(MIRFunction),
     ExternFunction(MIRExternFunction),
     GlobalVariable(MIRGlobalVariable),
-    Constant(MIRConstant),
 }
 
 #[derive(Debug)]
@@ -52,13 +55,6 @@ pub struct MIRGlobalVariable {
     pub name: Token,
     pub ty: CHSType,
     pub initializer: Operand,
-}
-
-#[derive(Debug)]
-pub struct MIRConstant {
-    pub name: Token,
-    pub ty: CHSType,
-    pub value: Operand,
 }
 
 /// Representation of a function in the MIR
@@ -375,7 +371,7 @@ impl MIRBuilder {
 
     pub fn add_operation(&mut self, module: &mut MIRModule, op: MIROperation) {
         if let (Some(func_idx), Some(block_id)) = (self.current_function, self.current_block) {
-            if let MIRModuleItem::Function(func) = &mut module.items[func_idx] {
+            if let Some(func) = &mut module.func.get_mut(func_idx) {
                 func.get_block_mut(block_id).add_operation(op);
             }
         }
@@ -383,7 +379,7 @@ impl MIRBuilder {
 
     pub fn add_arg(&mut self, module: &mut MIRModule, ty: CHSType, name: Option<Token>) {
         if let Some(func_idx) = self.current_function {
-            if let MIRModuleItem::Function(func) = &mut module.items[func_idx] {
+            if let Some(func) = &mut module.func.get_mut(func_idx) {
                 func.add_arg(ty, name);
             }
         }
@@ -391,7 +387,7 @@ impl MIRBuilder {
 
     pub fn add_block(&mut self, module: &mut MIRModule) -> Option<BlockId> {
         if let Some(func_idx) = self.current_function {
-            if let MIRModuleItem::Function(func) = &mut module.items[func_idx] {
+            if let Some(func) = &mut module.func.get_mut(func_idx) {
                 return Some(func.add_block());
             }
         }
@@ -405,7 +401,7 @@ impl MIRBuilder {
         name: Option<Token>,
     ) -> Option<LocalId> {
         if let Some(func_idx) = self.current_function {
-            if let MIRModuleItem::Function(func) = &mut module.items[func_idx] {
+            if let Some(func) = &mut module.func.get_mut(func_idx) {
                 if let Some(name) = name {
                     return Some(func.add_named_local(ty, name));
                 } else {
@@ -418,7 +414,7 @@ impl MIRBuilder {
 
     pub fn add_name_local(&mut self, module: &mut MIRModule, ty: CHSType, name: Token) {
         if let Some(func_idx) = self.current_function {
-            if let MIRModuleItem::Function(func) = &mut module.items[func_idx] {
+            if let Some(func) = &mut module.func.get_mut(func_idx) {
                 func.add_named_local(ty, name);
             }
         }
@@ -426,7 +422,7 @@ impl MIRBuilder {
 
     pub fn set_terminator(&mut self, module: &mut MIRModule, terminator: Terminator) {
         if let (Some(func_idx), Some(block_id)) = (self.current_function, self.current_block) {
-            if let MIRModuleItem::Function(func) = &mut module.items[func_idx] {
+            if let Some(func) = &mut module.func.get_mut(func_idx) {
                 func.get_block_mut(block_id).set_terminator(terminator);
             }
         }

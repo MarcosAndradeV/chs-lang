@@ -22,6 +22,9 @@ impl MIRModule {
                     for param in hir_f.params {
                         b.add_name_local(&mut module, param.param_type, param.name);
                     }
+                    let block = b.add_block(&mut module).unwrap();
+                    b.set_terminator(&mut module, Terminator::Goto(block));
+                    b.set_current_block(block);
                     lower_stmt(&mut module, &mut b, hir_f.body);
                 }
                 HIRModuleItem::ExternFunction(hirextern_function) => todo!(),
