@@ -163,9 +163,8 @@ impl<'a> Parser<'a> {
     fn parse_type(&mut self) -> ParseResult<CHSType> {
         let t = self.next();
         match t.kind {
-            TokenKind::Identifier if &t.source == "int" => {
-                Ok(CHSType::I32)
-            }
+            TokenKind::Identifier if &t.source == "int" => Ok(CHSType::I32),
+            TokenKind::Identifier if &t.source == "i32" => Ok(CHSType::I32),
             _ => {
                 return Err(ParseError::Expected(t.loc, format!("Type but got {}", t)));
             }

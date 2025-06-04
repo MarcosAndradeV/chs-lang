@@ -1,9 +1,13 @@
 use std::{collections::HashMap, rc::Rc};
 
-use crate::{chs_types::CHSType, chs_util::*, return_chs_error};
+use chslexer::TokenKind;
+
+use crate::{chs_error, chs_types::CHSType, chs_util::*, return_chs_error};
 
 use super::{
-    ast::{Expression, ReturnStatement, Statement}, hir::{HIRFunction, HIRModule, HIRModuleItem}, RawModule
+    RawModule,
+    ast::{Expression, ReturnStatement, Statement},
+    hir::{HIRFunction, HIRModule, HIRModuleItem},
 };
 
 pub struct TypeChecker<'src> {
@@ -117,19 +121,38 @@ impl<'src> TypeChecker<'src> {
         match expr {
             Expression::Nil => todo!(),
             Expression::Bool(_) => todo!(),
-            Expression::Int(token) => todo!(),
+            Expression::Int(token) => match token.kind {
+                TokenKind::I64Number => Ok(CHSType::I64),
+                TokenKind::U64Number => Ok(CHSType::U64),
+                TokenKind::I32Number => Ok(CHSType::I32),
+                TokenKind::U32Number => Ok(CHSType::U32),
+                _ => Ok(CHSType::I32),
+            },
             Expression::Float(token) => todo!(),
             Expression::String(token) => todo!(),
             Expression::Char(token) => todo!(),
             Expression::Identifier(token) => todo!(),
-            Expression::BinaryOp { left, operator, right } => todo!(),
+            Expression::BinaryOp {
+                left,
+                operator,
+                right,
+            } => {
+                let t1 = self.check_expr(left)?;
+                let t2 = self.check_expr(right)?;
+                self.env.unify(&t1, &t2)?;
+                return Ok(t1);
+            }
             Expression::UnaryOp { operator, operand } => todo!(),
             Expression::FunctionCall { callee, args } => todo!(),
             Expression::ArrayAccess { array, index } => todo!(),
             Expression::MemberAccess { object, member } => todo!(),
             Expression::ArrayLiteral(vec) => todo!(),
             Expression::StructLiteral { name, fields } => todo!(),
-            Expression::TernaryOp { condition, true_expr, false_expr } => todo!(),
+            Expression::TernaryOp {
+                condition,
+                true_expr,
+                false_expr,
+            } => todo!(),
             Expression::Parenthesized(expression) => todo!(),
             Expression::Cast { expr, target_type } => todo!(),
         }
@@ -139,18 +162,16 @@ impl<'src> TypeChecker<'src> {
         match stmt {
             Statement::ReturnStatement(ReturnStatement::Return) => {
                 if self.curr_ret_type != CHSType::Void {
-                    return_chs_error!(
-                        "mismatch type in return"
-                    )
+                    return_chs_error!("mismatch type in return")
                 }
                 Ok(ReturnFlow::Always)
-            },
+            }
             Statement::ReturnStatement(ReturnStatement::ReturnExpression(expr)) => {
-                if self.check_expr(expr)? != self.curr_ret_type {
-                    return_chs_error!(
-                        "mismatch type in return"
-                    )
-                }
+                let chstype = self.check_expr(expr)?;
+                self.env
+                    .unify(&chstype, &self.curr_ret_type)
+                    .map_err(|err| chs_error!("mismatch type in return. {}", err))
+                ?;
                 Ok(ReturnFlow::Always)
             }
             Statement::BlockStatement(block) => self.check_block(block),
